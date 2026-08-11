@@ -1,78 +1,79 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>G1과 ZGC는 왜 다르게 멈추는가 — 힙을 키우면 무슨 일이 일어나나</title>
-<meta name="description" content="힙 크기를 늘리면 G1의 STW는 길어지는데 ZGC는 왜 그대로인지, 그리고 ZGC가 공짜가 아닌 이유. Interactive G1 vs ZGC pause time visualization.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
-<link rel="stylesheet" href="../shared/base.css">
-<style>
-.lab{margin:32px 0 8px;border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);overflow:hidden}
-.lab section{border-bottom:1px solid var(--rule);padding:16px 18px}
-.lab section:last-child{border-bottom:none}
-.cap{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;display:block}
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>G1과 ZGC는 왜 다르게 멈추는가 — 힙을 키우면 무슨 일이 일어나나</title>
+  <meta name="description" content="힙 크기를 늘리면 G1의 STW는 길어지는데 ZGC는 왜 그대로인지, 그리고 ZGC가 공짜가 아닌 이유. Interactive G1 vs ZGC pause time visualization.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+  <link rel="stylesheet" href="../shared/base.css">
+  <script src="../shared/lang.js"></script>
+  <style>
+    .lab{margin:32px 0 8px;border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);overflow:hidden}
+    .lab section{border-bottom:1px solid var(--rule);padding:16px 18px}
+    .lab section:last-child{border-bottom:none}
+    .cap{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;display:block}
 
-/* --- 손잡이 --- */
-.dials{display:grid;grid-template-columns:1fr 1fr;gap:22px}
-@media (max-width:660px){ .dials{grid-template-columns:1fr;gap:16px} }
-.dial label{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
-.dial label b{font-size:15px;letter-spacing:0;text-transform:none;color:var(--ink);font-weight:500}
-.dial label b small{font-size:10px;color:var(--ink-3)}
-input[type=range]{width:100%;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer}
-input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--rule)}
-input[type=range]::-moz-range-track{height:2px;background:var(--rule)}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-6px;border-radius:50%;background:var(--ink);border:2px solid var(--paper-2)}
-input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--ink);border:2px solid var(--paper-2)}
-input[type=range]:focus-visible{outline:2px solid var(--horizon);outline-offset:4px}
-.hint{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:6px;min-height:14px}
-.hint.warn{color:var(--blocked)}
+    /* --- 손잡이 --- */
+    .dials{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+    @media (max-width:660px){ .dials{grid-template-columns:1fr;gap:16px} }
+    .dial label{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
+    .dial label b{font-size:15px;letter-spacing:0;text-transform:none;color:var(--ink);font-weight:500}
+    .dial label b small{font-size:10px;color:var(--ink-3)}
+    input[type=range]{width:100%;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer}
+    input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--rule)}
+    input[type=range]::-moz-range-track{height:2px;background:var(--rule)}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-6px;border-radius:50%;background:var(--ink);border:2px solid var(--paper-2)}
+    input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--ink);border:2px solid var(--paper-2)}
+    input[type=range]:focus-visible{outline:2px solid var(--horizon);outline-offset:4px}
+    .hint{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:6px;min-height:14px}
+    .hint.warn{color:var(--blocked)}
 
-/* --- 타임라인 --- */
-.lane{margin-bottom:16px}
-.lane:last-child{margin-bottom:0}
-.lane-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap}
-.lane-head h3{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;margin:0;color:var(--ink-2)}
-.lane-head .nums{font-family:var(--mono);font-size:11px;color:var(--ink-3);display:flex;gap:14px;flex-wrap:wrap}
-.lane-head .nums b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
-.lane-head .nums .bad b{color:var(--blocked)}
-.plot{width:100%;height:96px;display:block;background:var(--paper);border:1px solid var(--rule);border-radius:2px}
-.axis-note{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:4px}
+    /* --- 타임라인 --- */
+    .lane{margin-bottom:16px}
+    .lane:last-child{margin-bottom:0}
+    .lane-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap}
+    .lane-head h3{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;margin:0;color:var(--ink-2)}
+    .lane-head .nums{font-family:var(--mono);font-size:11px;color:var(--ink-3);display:flex;gap:14px;flex-wrap:wrap}
+    .lane-head .nums b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+    .lane-head .nums .bad b{color:var(--blocked)}
+    .plot{width:100%;height:96px;display:block;background:var(--paper);border:1px solid var(--rule);border-radius:2px}
+    .axis-note{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:4px}
 
-/* --- 단계 띠 --- */
-.phase{margin-bottom:14px}
-.phase:last-child{margin-bottom:0}
-.phase h4{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);margin:0 0 5px;font-weight:400}
-.strip{display:flex;height:26px;border:1px solid var(--rule);border-radius:2px;overflow:hidden;background:var(--paper)}
-.strip div{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;white-space:nowrap;overflow:hidden;min-width:2px}
-.strip .stw{background:color-mix(in srgb,var(--blocked) 78%,var(--paper));color:var(--paper)}
-.strip .conc{background:color-mix(in srgb,var(--live) 16%,var(--paper));color:var(--live);border-left:1px solid var(--rule);border-right:1px solid var(--rule)}
-.striplegend{display:flex;gap:16px;margin-top:9px;font-family:var(--mono);font-size:10px;color:var(--ink-3)}
-.striplegend span{display:flex;align-items:center;gap:6px}
-.striplegend i{width:10px;height:10px;border-radius:2px;display:inline-block}
-.striplegend .s i{background:color-mix(in srgb,var(--blocked) 78%,var(--paper))}
-.striplegend .c i{background:color-mix(in srgb,var(--live) 16%,var(--paper));border:1px solid var(--rule)}
+    /* --- 단계 띠 --- */
+    .phase{margin-bottom:14px}
+    .phase:last-child{margin-bottom:0}
+    .phase h4{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);margin:0 0 5px;font-weight:400}
+    .strip{display:flex;height:26px;border:1px solid var(--rule);border-radius:2px;overflow:hidden;background:var(--paper)}
+    .strip div{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;white-space:nowrap;overflow:hidden;min-width:2px}
+    .strip .stw{background:color-mix(in srgb,var(--blocked) 78%,var(--paper));color:var(--paper)}
+    .strip .conc{background:color-mix(in srgb,var(--live) 16%,var(--paper));color:var(--live);border-left:1px solid var(--rule);border-right:1px solid var(--rule)}
+    .striplegend{display:flex;gap:16px;margin-top:9px;font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+    .striplegend span{display:flex;align-items:center;gap:6px}
+    .striplegend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+    .striplegend .s i{background:color-mix(in srgb,var(--blocked) 78%,var(--paper))}
+    .striplegend .c i{background:color-mix(in srgb,var(--live) 16%,var(--paper));border:1px solid var(--rule)}
 
-/* --- 조작대 --- */
-.transport{background:var(--paper-3);display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
-.transport .keys{display:flex;gap:6px;flex-wrap:wrap}
-.narration{flex:1;min-width:240px;font-family:var(--serif);font-size:14.5px;line-height:1.65;color:var(--ink)}
-.narration .n{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-3);display:block;margin-bottom:3px}
+    /* --- 조작대 --- */
+    .transport{background:var(--paper-3);display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+    .transport .keys{display:flex;gap:6px;flex-wrap:wrap}
+    .narration{flex:1;min-width:240px;font-family:var(--serif);font-size:14.5px;line-height:1.65;color:var(--ink)}
+    .narration .n{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-3);display:block;margin-bottom:3px}
 
-/* --- 안내 --- */
-.recipe{border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);padding:14px 16px;margin:14px 0;max-width:68ch}
-.recipe h4{font-family:var(--sans);font-size:14px;font-weight:700;margin:0 0 4px}
-.recipe .seq{font-family:var(--mono);font-size:11px;line-height:1.9;background:var(--paper);border:1px solid var(--rule);border-radius:2px;padding:9px 11px;margin:9px 0;white-space:pre-wrap;color:var(--ink-2)}
-.recipe .seq em{font-style:normal;color:var(--horizon)}
-.recipe .why{font-size:13.5px;color:var(--ink-2);margin:0}
-.keytable{width:100%;border-collapse:collapse;margin:12px 0;max-width:68ch;font-size:13.5px}
-.keytable th,.keytable td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
-.keytable th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
-.keytable td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap;width:1%;padding-right:18px;color:var(--ink)}
-</style>
+    /* --- 안내 --- */
+    .recipe{border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);padding:14px 16px;margin:14px 0;max-width:68ch}
+    .recipe h4{font-family:var(--sans);font-size:14px;font-weight:700;margin:0 0 4px}
+    .recipe .seq{font-family:var(--mono);font-size:11px;line-height:1.9;background:var(--paper);border:1px solid var(--rule);border-radius:2px;padding:9px 11px;margin:9px 0;white-space:pre-wrap;color:var(--ink-2)}
+    .recipe .seq em{font-style:normal;color:var(--horizon)}
+    .recipe .why{font-size:13.5px;color:var(--ink-2);margin:0}
+    .keytable{width:100%;border-collapse:collapse;margin:12px 0;max-width:68ch;font-size:13.5px}
+    .keytable th,.keytable td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+    .keytable th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+    .keytable td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap;width:1%;padding-right:18px;color:var(--ink)}
+  </style>
 </head>
 <body>
 
@@ -169,313 +170,316 @@ input[type=range]:focus-visible{outline:2px solid var(--horizon);outline-offset:
 </main>
 
 <script>
-'use strict';
+  'use strict';
 
-/* ============================================================================
- * 0. 문안
- * ========================================================================== */
-const T = {
-ko:{
-  title:'G1과 ZGC는 왜 다르게 멈추는가',
-  lede:'힙을 4GB에서 128GB로 키우면 G1의 정지 시간은 함께 자랍니다. ZGC는 거의 그대로예요. 왜 그런지, 그리고 그 대가로 무엇을 내는지 직접 확인합니다.',
-  dHeap:'힙 크기', dAlloc:'할당 속도',
-  capTimeline:'60초 동안의 STW 정지', capPhase:'한 사이클의 구성',
-  phG1Note:'객체를 옮기는 동안 멈춘다', phZNote:'옮기는 일까지 동시에 한다',
-  lgStw:'STW — 애플리케이션 정지', lgConc:'concurrent — 애플리케이션과 동시 실행',
-  toLog:'로그 스케일로 보기', toLinear:'선형 스케일로 돌아가기',
-  scaleLin:'선형 스케일 · 두 그래프가 같은 기준', scaleLog:'로그 스케일 · ZGC 막대를 보려면 필요',
-  nMax:'최대 정지', nP99:'p99', nYoung:'young 정지', nMixed:'mixed 정지', nFull:'Full GC', nCount:'GC 횟수', nStw:'총 STW', nThru:'처리량', nStall:'할당 지연',
-  play:'시나리오 재생', pause:'일시정지', step:'다음 단계', reset:'초기화',
-  nIntro:'재생을 누르면 힙을 단계적으로 키우며 무슨 일이 일어나는지 보여줍니다. 슬라이더를 직접 움직여도 됩니다.',
-  hintHeapS:'작은 힙 — 컨테이너나 마이크로서비스',
-  hintHeapM:'중간 힙 — 일반적인 서버 애플리케이션',
-  hintHeapL:'큰 힙 — 캐시, 인메모리 저장소',
-  hintAllocS:'가벼운 부하',
-  hintAllocM:'일반적인 웹 애플리케이션',
-  hintAllocL:'ZGC 회수 능력을 넘어섰다 — 할당 지연 발생',
-  hintG1Full:'G1이 따라가지 못한다 — Full GC 발생',
-  foot:'JDK 25 기준 · 교육용 단순화 모델'
-},
-en:{
-  title:'Why G1 and ZGC stop differently',
-  lede:'Grow the heap from 4GB to 128GB and G1\u2019s pauses grow with it. ZGC barely moves. See why — and what it costs.',
-  dHeap:'heap size', dAlloc:'allocation rate',
-  capTimeline:'STW pauses over 60 seconds', capPhase:'Anatomy of one cycle',
-  phG1Note:'stops the world while moving objects', phZNote:'moves objects concurrently too',
-  lgStw:'STW — application stopped', lgConc:'concurrent — runs alongside the application',
-  toLog:'Switch to log scale', toLinear:'Back to linear scale',
-  scaleLin:'linear scale · both charts share one baseline', scaleLog:'log scale · needed to see ZGC at all',
-  nMax:'max pause', nP99:'p99', nYoung:'young pause', nMixed:'mixed pause', nFull:'Full GC', nCount:'GC count', nStw:'total STW', nThru:'throughput', nStall:'alloc stall',
-  play:'Play scenario', pause:'Pause', step:'Next step', reset:'Reset',
-  nIntro:'Press play to walk up the heap sizes and watch what happens. The sliders are yours at any time.',
-  hintHeapS:'small heap — containers, microservices',
-  hintHeapM:'mid heap — ordinary server applications',
-  hintHeapL:'large heap — caches, in-memory stores',
-  hintAllocS:'light load',
-  hintAllocM:'typical web application',
-  hintAllocL:'past ZGC\u2019s concurrent reclaim rate — allocation stalls appear',
-  hintG1Full:'G1 cannot keep up — Full GC fires',
-  foot:'JDK 25 · simplified teaching model'
-}};
-let L='ko';
-const t=(k,...a)=>{let s=T[L][k]??k;a.forEach((v,i)=>s=s.replaceAll('$'+(i+1),v));return s;};
+  /* ============================================================================
+   * 0. 문안
+   * ========================================================================== */
+  const T = {
+    ko:{
+      pageTitle:'G1과 ZGC는 왜 다르게 멈추는가 — 힙을 키우면 무슨 일이 일어나나',
+      title:'G1과 ZGC는 왜 다르게 멈추는가',
+      lede:'힙을 4GB에서 128GB로 키우면 G1의 정지 시간은 함께 자랍니다. ZGC는 거의 그대로예요. 왜 그런지, 그리고 그 대가로 무엇을 내는지 직접 확인합니다.',
+      dHeap:'힙 크기', dAlloc:'할당 속도',
+      capTimeline:'60초 동안의 STW 정지', capPhase:'한 사이클의 구성',
+      phG1Note:'객체를 옮기는 동안 멈춘다', phZNote:'옮기는 일까지 동시에 한다',
+      lgStw:'STW — 애플리케이션 정지', lgConc:'concurrent — 애플리케이션과 동시 실행',
+      toLog:'로그 스케일로 보기', toLinear:'선형 스케일로 돌아가기',
+      scaleLin:'선형 스케일 · 두 그래프가 같은 기준', scaleLog:'로그 스케일 · ZGC 막대를 보려면 필요',
+      nMax:'최대 정지', nP99:'p99', nYoung:'young 정지', nMixed:'mixed 정지', nFull:'Full GC', nCount:'GC 횟수', nStw:'총 STW', nThru:'처리량', nStall:'할당 지연',
+      play:'시나리오 재생', pause:'일시정지', step:'다음 단계', reset:'초기화',
+      nIntro:'재생을 누르면 힙을 단계적으로 키우며 무슨 일이 일어나는지 보여줍니다. 슬라이더를 직접 움직여도 됩니다.',
+      hintHeapS:'작은 힙 — 컨테이너나 마이크로서비스',
+      hintHeapM:'중간 힙 — 일반적인 서버 애플리케이션',
+      hintHeapL:'큰 힙 — 캐시, 인메모리 저장소',
+      hintAllocS:'가벼운 부하',
+      hintAllocM:'일반적인 웹 애플리케이션',
+      hintAllocL:'ZGC 회수 능력을 넘어섰다 — 할당 지연 발생',
+      hintG1Full:'G1이 따라가지 못한다 — Full GC 발생',
+      foot:'JDK 25 기준 · 교육용 단순화 모델'
+    },
+    en:{
+      pageTitle:'Why G1 and ZGC stop differently — what happens as the heap grows',
+      title:'Why G1 and ZGC stop differently',
+      lede:'Grow the heap from 4GB to 128GB and G1\u2019s pauses grow with it. ZGC barely moves. See why — and what it costs.',
+      dHeap:'heap size', dAlloc:'allocation rate',
+      capTimeline:'STW pauses over 60 seconds', capPhase:'Anatomy of one cycle',
+      phG1Note:'stops the world while moving objects', phZNote:'moves objects concurrently too',
+      lgStw:'STW — application stopped', lgConc:'concurrent — runs alongside the application',
+      toLog:'Switch to log scale', toLinear:'Back to linear scale',
+      scaleLin:'linear scale · both charts share one baseline', scaleLog:'log scale · needed to see ZGC at all',
+      nMax:'max pause', nP99:'p99', nYoung:'young pause', nMixed:'mixed pause', nFull:'Full GC', nCount:'GC count', nStw:'total STW', nThru:'throughput', nStall:'alloc stall',
+      play:'Play scenario', pause:'Pause', step:'Next step', reset:'Reset',
+      nIntro:'Press play to walk up the heap sizes and watch what happens. The sliders are yours at any time.',
+      hintHeapS:'small heap — containers, microservices',
+      hintHeapM:'mid heap — ordinary server applications',
+      hintHeapL:'large heap — caches, in-memory stores',
+      hintAllocS:'light load',
+      hintAllocM:'typical web application',
+      hintAllocL:'past ZGC\u2019s concurrent reclaim rate — allocation stalls appear',
+      hintG1Full:'G1 cannot keep up — Full GC fires',
+      foot:'JDK 25 · simplified teaching model'
+    }};
+  let L = Lang.get();
+  const t=(k,...a)=>{let s=T[L][k]??k;a.forEach((v,i)=>s=s.replaceAll('$'+(i+1),v));return s;};
 
-/* ============================================================================
- * 1. 모델
- *
- *    G1  — 살아 있는 객체를 STW 중에 복사한다. 옮길 양이 곧 정지 시간이다.
- *          MaxGCPauseMillis 를 맞추려 young 영역을 줄이지만, 하한(힙의 5%)이
- *          있어서 힙이 커지면 결국 정지 시간이 따라 커진다.
- *
- *    ZGC — 색깔 포인터와 load barrier 덕에 이동까지 동시에 한다. STW 는 루트를
- *          훑는 짧은 구간뿐이고, JDK 16 이후 스택 스캔도 동시 수행이라
- *          힙 크기와 사실상 무관하다. 대신 회수 속도를 넘겨 할당하면 멈춘다.
- * ========================================================================== */
+  /* ============================================================================
+   * 1. 모델
+   *
+   *    G1  — 살아 있는 객체를 STW 중에 복사한다. 옮길 양이 곧 정지 시간이다.
+   *          MaxGCPauseMillis 를 맞추려 young 영역을 줄이지만, 하한(힙의 5%)이
+   *          있어서 힙이 커지면 결국 정지 시간이 따라 커진다.
+   *
+   *    ZGC — 색깔 포인터와 load barrier 덕에 이동까지 동시에 한다. STW 는 루트를
+   *          훑는 짧은 구간뿐이고, JDK 16 이후 스택 스캔도 동시 수행이라
+   *          힙 크기와 사실상 무관하다. 대신 회수 속도를 넘겨 할당하면 멈춘다.
+   * ========================================================================== */
 
-const HEAPS = [2,4,8,16,32,64,96,128];        // GB
-const WINDOW = 60_000;                        // 관측 구간 (ms)
+  const HEAPS = [2,4,8,16,32,64,96,128];        // GB
+  const WINDOW = 60_000;                        // 관측 구간 (ms)
 
-const P = {
-  pauseTarget: 200,      // -XX:MaxGCPauseMillis 기본값
-  copyMBperMS: 2.0,      // 복사 처리량
-  survive: 0.15,         // young 중 살아남는 비율
-  g1Fixed: 2,            // 고정 비용
-  g1RootPerGB: 0.35,     // 힙에 비례하는 부분 (RSet, 리전 메타데이터)
-  g1MinYoung: 0.05,      // G1NewSizePercent
-  g1MaxYoung: 0.60,      // G1MaxNewSizePercent
-  mixedEvery: 4,         // mixed 수집 주기 (관측 구간에 반드시 들어오도록)
-  mixedFactor: 1.7,
-  g1FullThreshold: 0.35, // GC 점유율이 이걸 넘으면 따라가지 못한다
-  fullGCperGB: 42,       // Full GC 시간 (ms/GB)
+  const P = {
+    pauseTarget: 200,      // -XX:MaxGCPauseMillis 기본값
+    copyMBperMS: 2.0,      // 복사 처리량
+    survive: 0.15,         // young 중 살아남는 비율
+    g1Fixed: 2,            // 고정 비용
+    g1RootPerGB: 0.35,     // 힙에 비례하는 부분 (RSet, 리전 메타데이터)
+    g1MinYoung: 0.05,      // G1NewSizePercent
+    g1MaxYoung: 0.60,      // G1MaxNewSizePercent
+    mixedEvery: 4,         // mixed 수집 주기 (관측 구간에 반드시 들어오도록)
+    mixedFactor: 1.7,
+    g1FullThreshold: 0.35, // GC 점유율이 이걸 넘으면 따라가지 못한다
+    fullGCperGB: 42,       // Full GC 시간 (ms/GB)
 
-  zPause: 0.28,          // 사이클당 STW 하나 (힙과 무관)
-  zPausesPerCycle: 3,    // Mark Start / Mark End / Relocate Start
-  zTrigger: 0.30,        // 힙의 이 비율을 소비하면 사이클 시작
-  zReclaimMBs: 2000,     // 동시 회수 처리량
-};
-
-function simulate(heapGB, allocMBs){
-  const heapMB = heapGB*1024;
-  const ev = { g1:[], z:[] };
-
-  /* --- G1 --- */
-  const ideal = P.pauseTarget * P.copyMBperMS / P.survive;
-  const young = Math.min(Math.max(ideal, heapMB*P.g1MinYoung), heapMB*P.g1MaxYoung);
-  const youngPause = P.g1Fixed + (young*P.survive)/P.copyMBperMS + heapGB*P.g1RootPerGB;
-  const interval = young/allocMBs*1000;
-  const overhead = youngPause/interval;
-  const fullPause = heapGB*P.fullGCperGB;
-
-  let tms = interval, i = 0;
-  while (tms < WINDOW){
-    const mixed = (i % P.mixedEvery === P.mixedEvery-1);
-    ev.g1.push({ t:tms, ms: mixed ? youngPause*P.mixedFactor : youngPause, kind: mixed?'mixed':'young' });
-    tms += interval; i++;
-  }
-  if (overhead > P.g1FullThreshold){
-    const n = Math.max(1, Math.floor(overhead/P.g1FullThreshold));
-    for (let k=1;k<=n;k++) ev.g1.push({ t: WINDOW*k/(n+1), ms: fullPause, kind:'full' });
-    ev.g1.sort((a,b)=>a.t-b.t);
-  }
-
-  /* --- ZGC --- */
-  // ZGC 는 소비량 기준 외에 주기적으로도 사이클을 돈다(proactive). 상한을 둔다.
-  const zInterval = Math.min(20000, Math.max(500, heapMB*P.zTrigger/allocMBs*1000));
-  let zt = zInterval;
-  while (zt < WINDOW){
-    for (let k=0;k<P.zPausesPerCycle;k++)
-      ev.z.push({ t: zt + k*(zInterval*0.18), ms: P.zPause, kind:'z' });
-    zt += zInterval;
-  }
-  // 힙이 넓을수록 사이클을 끝낼 시간이 생긴다 → 흡수 가능한 할당량이 는다
-  const effReclaim = P.zReclaimMBs * (1 + Math.log2(Math.max(1, heapGB/8)) * 0.18);
-  const excess = Math.max(0, allocMBs - effReclaim);
-  const stallPerSec = excess > 0 ? (excess/allocMBs)*1000 : 0;
-
-  return { ev, heapGB, allocMBs, young, youngPause, mixedPause: youngPause*P.mixedFactor,
-           effReclaim, interval, overhead, stallPerSec,
-           g1Full: overhead > P.g1FullThreshold };
-}
-
-const stats = (list, extraStallMs=0) => {
-  if (!list.length) return { max:0, p99:0, n:0, stw:0, thru:100 };
-  const s = list.map(e=>e.ms).sort((a,b)=>a-b);
-  const stw = s.reduce((a,b)=>a+b,0) + extraStallMs;
-  return {
-    max: s[s.length-1],
-    p99: s[Math.min(s.length-1, Math.floor(s.length*0.99))],
-    n: list.length,
-    stw,
-    thru: Math.max(0, 100 - stw/WINDOW*100),
+    zPause: 0.28,          // 사이클당 STW 하나 (힙과 무관)
+    zPausesPerCycle: 3,    // Mark Start / Mark End / Relocate Start
+    zTrigger: 0.30,        // 힙의 이 비율을 소비하면 사이클 시작
+    zReclaimMBs: 2000,     // 동시 회수 처리량
   };
-};
 
-/* ============================================================================
- * 2. 그리기
- * ========================================================================== */
+  function simulate(heapGB, allocMBs){
+    const heapMB = heapGB*1024;
+    const ev = { g1:[], z:[] };
 
-const $ = s => document.querySelector(s);
-let logScale = false;
-let sim;
+    /* --- G1 --- */
+    const ideal = P.pauseTarget * P.copyMBperMS / P.survive;
+    const young = Math.min(Math.max(ideal, heapMB*P.g1MinYoung), heapMB*P.g1MaxYoung);
+    const youngPause = P.g1Fixed + (young*P.survive)/P.copyMBperMS + heapGB*P.g1RootPerGB;
+    const interval = young/allocMBs*1000;
+    const overhead = youngPause/interval;
+    const fullPause = heapGB*P.fullGCperGB;
 
-const fmt = ms => ms >= 1000 ? (ms/1000).toFixed(2)+'s' : ms >= 10 ? Math.round(ms)+'ms' : ms.toFixed(2)+'ms';
+    let tms = interval, i = 0;
+    while (tms < WINDOW){
+      const mixed = (i % P.mixedEvery === P.mixedEvery-1);
+      ev.g1.push({ t:tms, ms: mixed ? youngPause*P.mixedFactor : youngPause, kind: mixed?'mixed':'young' });
+      tms += interval; i++;
+    }
+    if (overhead > P.g1FullThreshold){
+      const n = Math.max(1, Math.floor(overhead/P.g1FullThreshold));
+      for (let k=1;k<=n;k++) ev.g1.push({ t: WINDOW*k/(n+1), ms: fullPause, kind:'full' });
+      ev.g1.sort((a,b)=>a.t-b.t);
+    }
 
-function plot(el, events, ceil){
-  const H = 96, W = 1000;
-  const y = ms => {
-    if (!logScale) return Math.max(1, ms/ceil*(H-8));
-    const lo = 0.05;
-    return Math.max(1, (Math.log10(Math.max(ms,lo))-Math.log10(lo)) / (Math.log10(ceil)-Math.log10(lo)) * (H-8));
+    /* --- ZGC --- */
+    // ZGC 는 소비량 기준 외에 주기적으로도 사이클을 돈다(proactive). 상한을 둔다.
+    const zInterval = Math.min(20000, Math.max(500, heapMB*P.zTrigger/allocMBs*1000));
+    let zt = zInterval;
+    while (zt < WINDOW){
+      for (let k=0;k<P.zPausesPerCycle;k++)
+        ev.z.push({ t: zt + k*(zInterval*0.18), ms: P.zPause, kind:'z' });
+      zt += zInterval;
+    }
+    // 힙이 넓을수록 사이클을 끝낼 시간이 생긴다 → 흡수 가능한 할당량이 는다
+    const effReclaim = P.zReclaimMBs * (1 + Math.log2(Math.max(1, heapGB/8)) * 0.18);
+    const excess = Math.max(0, allocMBs - effReclaim);
+    const stallPerSec = excess > 0 ? (excess/allocMBs)*1000 : 0;
+
+    return { ev, heapGB, allocMBs, young, youngPause, mixedPause: youngPause*P.mixedFactor,
+      effReclaim, interval, overhead, stallPerSec,
+      g1Full: overhead > P.g1FullThreshold };
+  }
+
+  const stats = (list, extraStallMs=0) => {
+    if (!list.length) return { max:0, p99:0, n:0, stw:0, thru:100 };
+    const s = list.map(e=>e.ms).sort((a,b)=>a-b);
+    const stw = s.reduce((a,b)=>a+b,0) + extraStallMs;
+    return {
+      max: s[s.length-1],
+      p99: s[Math.min(s.length-1, Math.floor(s.length*0.99))],
+      n: list.length,
+      stw,
+      thru: Math.max(0, 100 - stw/WINDOW*100),
+    };
   };
-  const bars = events.map(e => {
-    const h = Math.min(H-6, y(e.ms));
-    const x = e.t/WINDOW*W;
-    const w = e.kind==='full' ? 6 : e.kind==='z' ? 2.5 : 4;
-    const fill = e.kind==='full' ? 'var(--blocked)'
-               : e.kind==='mixed' ? 'var(--free)'
-               : e.kind==='z' ? 'var(--horizon)' : 'var(--ink-2)';
-    return `<rect x="${x.toFixed(1)}" y="${(H-h).toFixed(1)}" width="${w}" height="${h.toFixed(1)}" fill="${fill}"/>`;
-  }).join('');
-  el.innerHTML = `<line x1="0" y1="${H-0.5}" x2="${W}" y2="${H-0.5}" stroke="var(--rule)"/>${bars}`;
-}
 
-function phaseStrip(el, segs){
-  const total = segs.reduce((a,s)=>a+s.ms,0);
-  el.innerHTML = segs.map(s => {
-    const pct = Math.max(0.35, s.ms/total*100);
-    const label = pct > 9 ? s.name : '';
-    return `<div class="${s.stw?'stw':'conc'}" style="width:${pct}%" title="${s.name} · ${fmt(s.ms)}">${label}</div>`;
-  }).join('');
-}
+  /* ============================================================================
+   * 2. 그리기
+   * ========================================================================== */
 
-function render(){
-  const heapGB = HEAPS[+$('#sHeap').value];
-  const allocMBs = +$('#sAlloc').value;
-  sim = simulate(heapGB, allocMBs);
+  const $ = s => document.querySelector(s);
+  let logScale = false;
+  let sim;
 
-  $('#vHeap').innerHTML = `${heapGB}<small> GB</small>`;
-  $('#vAlloc').innerHTML = `${allocMBs}<small> MB/s</small>`;
-  $('#hHeap').textContent = heapGB<=8 ? t('hintHeapS') : heapGB<=32 ? t('hintHeapM') : t('hintHeapL');
-  const ha = $('#hAlloc');
-  if (sim.g1Full){ ha.textContent = t('hintG1Full'); ha.className='hint warn'; }
-  else if (sim.stallPerSec>0){ ha.textContent = t('hintAllocL'); ha.className='hint warn'; }
-  else { ha.textContent = allocMBs<=400 ? t('hintAllocS') : t('hintAllocM'); ha.className='hint'; }
+  const fmt = ms => ms >= 1000 ? (ms/1000).toFixed(2)+'s' : ms >= 10 ? Math.round(ms)+'ms' : ms.toFixed(2)+'ms';
 
-  const sG1 = stats(sim.ev.g1);
-  const sZ  = stats(sim.ev.z, sim.stallPerSec*60);
-  const ceil = logScale ? Math.max(sG1.max, 10) : Math.max(sG1.max, 1);
+  function plot(el, events, ceil){
+    const H = 96, W = 1000;
+    const y = ms => {
+      if (!logScale) return Math.max(1, ms/ceil*(H-8));
+      const lo = 0.05;
+      return Math.max(1, (Math.log10(Math.max(ms,lo))-Math.log10(lo)) / (Math.log10(ceil)-Math.log10(lo)) * (H-8));
+    };
+    const bars = events.map(e => {
+      const h = Math.min(H-6, y(e.ms));
+      const x = e.t/WINDOW*W;
+      const w = e.kind==='full' ? 6 : e.kind==='z' ? 2.5 : 4;
+      const fill = e.kind==='full' ? 'var(--blocked)'
+              : e.kind==='mixed' ? 'var(--free)'
+                      : e.kind==='z' ? 'var(--horizon)' : 'var(--ink-2)';
+      return `<rect x="${x.toFixed(1)}" y="${(H-h).toFixed(1)}" width="${w}" height="${h.toFixed(1)}" fill="${fill}"/>`;
+    }).join('');
+    el.innerHTML = `<line x1="0" y1="${H-0.5}" x2="${W}" y2="${H-0.5}" stroke="var(--rule)"/>${bars}`;
+  }
 
-  plot($('#pG1'), sim.ev.g1, ceil);
-  plot($('#pZ'),  sim.ev.z,  ceil);
-  $('#scaleNote').textContent = logScale ? t('scaleLog') : t('scaleLin');
-  $('#btnScale').textContent = logScale ? t('toLinear') : t('toLog');
+  function phaseStrip(el, segs){
+    const total = segs.reduce((a,s)=>a+s.ms,0);
+    el.innerHTML = segs.map(s => {
+      const pct = Math.max(0.35, s.ms/total*100);
+      const label = pct > 9 ? s.name : '';
+      return `<div class="${s.stw?'stw':'conc'}" style="width:${pct}%" title="${s.name} · ${fmt(s.ms)}">${label}</div>`;
+    }).join('');
+  }
 
-  const num = (k,v,bad) => `<span class="${bad?'bad':''}">${t(k)} <b>${v}</b></span>`;
-  $('#nG1').innerHTML =
-    num('nYoung', fmt(sim.youngPause), sim.youngPause > P.pauseTarget*1.1) +
-    num('nMixed', fmt(sim.mixedPause)) +
-    (sim.g1Full ? num('nFull', fmt(sG1.max), true) : '') +
-    num('nCount', sG1.n) +
-    num('nStw', fmt(sG1.stw)) +
-    num('nThru', sG1.thru.toFixed(1)+'%', sG1.thru<90);
-  $('#nZ').innerHTML =
-    num('nMax', fmt(sZ.max)) +
-    num('nCount', sZ.n) +
-    num('nStw', fmt(sim.ev.z.reduce((a,e)=>a+e.ms,0))) +
-    (sim.stallPerSec>0 ? num('nStall', Math.round(sim.stallPerSec)+'ms/s', true) : '') +
-    num('nThru', sZ.thru.toFixed(1)+'%', sZ.thru<90);
+  function render(){
+    const heapGB = HEAPS[+$('#sHeap').value];
+    const allocMBs = +$('#sAlloc').value;
+    sim = simulate(heapGB, allocMBs);
 
-  // 한 사이클의 구성 — 실제 비율대로
-  const yp = sim.youngPause;
-  phaseStrip($('#stripG1'), [
-    { name:'Young Evacuation', ms: yp, stw:true },
-    { name:'Concurrent Mark',  ms: yp*6, stw:false },
-    { name:'Remark',           ms: yp*0.18, stw:true },
-    { name:'Concurrent Cleanup', ms: yp*1.2, stw:false },
-    { name:'Mixed Evacuation', ms: yp*P.mixedFactor, stw:true },
-  ]);
-  const zp = P.zPause;
-  phaseStrip($('#stripZ'), [
-    { name:'Mark Start',            ms: zp, stw:true },
-    { name:'Concurrent Mark',       ms: zp*90, stw:false },
-    { name:'Mark End',              ms: zp, stw:true },
-    { name:'Concurrent Prepare',    ms: zp*24, stw:false },
-    { name:'Relocate Start',        ms: zp, stw:true },
-    { name:'Concurrent Relocate',   ms: zp*70, stw:false },
-  ]);
-}
+    $('#vHeap').innerHTML = `${heapGB}<small> GB</small>`;
+    $('#vAlloc').innerHTML = `${allocMBs}<small> MB/s</small>`;
+    $('#hHeap').textContent = heapGB<=8 ? t('hintHeapS') : heapGB<=32 ? t('hintHeapM') : t('hintHeapL');
+    const ha = $('#hAlloc');
+    if (sim.g1Full){ ha.textContent = t('hintG1Full'); ha.className='hint warn'; }
+    else if (sim.stallPerSec>0){ ha.textContent = t('hintAllocL'); ha.className='hint warn'; }
+    else { ha.textContent = allocMBs<=400 ? t('hintAllocS') : t('hintAllocM'); ha.className='hint'; }
 
-/* ============================================================================
- * 3. 시나리오
- * ========================================================================== */
+    const sG1 = stats(sim.ev.g1);
+    const sZ  = stats(sim.ev.z, sim.stallPerSec*60);
+    const ceil = logScale ? Math.max(sG1.max, 10) : Math.max(sG1.max, 1);
 
-const SCENE = [
-  { heap:1, alloc:500,
-    ko:'힙 4GB, 일반적인 웹 애플리케이션 부하입니다. G1의 young 정지가 188ms로 200ms 목표 안에 들어와 있고, ZGC 막대는 아예 보이지 않습니다.',
-    en:'4GB heap under an ordinary web workload. G1\u2019s young pause is 188ms, inside its 200ms target, and the ZGC bars are simply not visible.' },
-  { heap:3, alloc:500,
-    ko:'16GB로 올렸습니다. young 정지가 208ms — 목표를 거의 지키고 있어요. G1이 young 영역 크기를 스스로 줄여 맞추고 있기 때문입니다.',
-    en:'Now 16GB. The young pause is 208ms — still about on target, because G1 shrinks the young generation to get there.' },
-  { heap:5, alloc:500,
-    ko:'64GB. young 정지가 270ms — 여기서부터 목표가 무너집니다. young 영역을 아무리 줄여도 힙의 5% 아래로는 못 내려가는데, 64GB의 5%는 이미 3GB가 넘거든요.',
-    en:'64GB. The target starts slipping. G1 cannot shrink young below 5% of the heap, and 5% of 64GB is already over 3GB.' },
-  { heap:7, alloc:500,
-    ko:'128GB에서는 young 정지가 538ms, mixed는 0.9초를 넘습니다. ZGC 막대는 여전히 바닥에 붙어 있어요. 로그 스케일 버튼을 눌러야 겨우 보입니다.',
-    en:'At 128GB the pause passes half a second. The ZGC bars are still flat on the floor — you need the log scale button to see them at all.' },
-  { heap:3, alloc:2000,
-    ko:'이번엔 힙을 16GB로 되돌리고 할당 속도를 네 배로 올립니다. 정지 길이는 208ms 그대로인데 횟수가 11회에서 44회로 늘고, 처리량은 96%에서 82%로 떨어집니다. 짧은 정지도 자주 오면 비쌉니다.',
-    en:'Back to 16GB, allocating four times faster. The pause stays at 208ms but the count goes from 11 to 44, and throughput falls from 96% to 82%. Short pauses are expensive when they come often.' },
-  { heap:3, alloc:5000,
-    ko:'더 올리면 ZGC에도 대가가 나타납니다. 동시 회수 속도를 할당이 앞지르면 스레드가 메모리를 받지 못해 멈춥니다. 이게 allocation stall이에요. GC 로그에는 정지로 안 잡히지만 애플리케이션은 분명히 멈춥니다.',
-    en:'Push further and ZGC pays too. When allocation outruns concurrent reclamation, threads block waiting for memory — an allocation stall. It does not appear as a GC pause, yet the application is stopped all the same.' },
-  { heap:7, alloc:5000,
-    ko:'같은 부하에서 힙을 128GB로 키우면 ZGC의 지연은 줄어듭니다. 여유 공간이 회수 시간을 벌어주기 때문입니다. ZGC에서 힙을 넉넉히 주라는 조언이 여기서 나옵니다.',
-    en:'Widen the heap to 128GB under the same load and the stall shrinks: headroom buys time to collect. This is where the advice to over-provision heap for ZGC comes from.' },
-];
+    plot($('#pG1'), sim.ev.g1, ceil);
+    plot($('#pZ'),  sim.ev.z,  ceil);
+    $('#scaleNote').textContent = logScale ? t('scaleLog') : t('scaleLin');
+    $('#btnScale').textContent = logScale ? t('toLinear') : t('toLog');
 
-let step = 0, playing = false, timer = null;
+    const num = (k,v,bad) => `<span class="${bad?'bad':''}">${t(k)} <b>${v}</b></span>`;
+    $('#nG1').innerHTML =
+            num('nYoung', fmt(sim.youngPause), sim.youngPause > P.pauseTarget*1.1) +
+            num('nMixed', fmt(sim.mixedPause)) +
+            (sim.g1Full ? num('nFull', fmt(sG1.max), true) : '') +
+            num('nCount', sG1.n) +
+            num('nStw', fmt(sG1.stw)) +
+            num('nThru', sG1.thru.toFixed(1)+'%', sG1.thru<90);
+    $('#nZ').innerHTML =
+            num('nMax', fmt(sZ.max)) +
+            num('nCount', sZ.n) +
+            num('nStw', fmt(sim.ev.z.reduce((a,e)=>a+e.ms,0))) +
+            (sim.stallPerSec>0 ? num('nStall', Math.round(sim.stallPerSec)+'ms/s', true) : '') +
+            num('nThru', sZ.thru.toFixed(1)+'%', sZ.thru<90);
 
-function applyStep(){
-  const s = SCENE[step];
-  $('#sHeap').value = s.heap;
-  $('#sAlloc').value = s.alloc;
-  $('#nText').textContent = s[L];
-  $('#nStep').textContent = `${String(step+1).padStart(2,'0')} / ${String(SCENE.length).padStart(2,'0')}`;
-  $('#btnStep').disabled = step >= SCENE.length-1;
-  render();
-}
-function stepOnce(){
-  if (step >= SCENE.length-1){ stop(); return; }
-  step++; applyStep();
-  if (step >= SCENE.length-1) stop();
-}
-function play(){ playing=true; $('#btnPlay').textContent=t('pause'); timer=setInterval(stepOnce, 3400); }
-function stop(){ playing=false; clearInterval(timer); $('#btnPlay').textContent=t('play'); }
+    // 한 사이클의 구성 — 실제 비율대로
+    const yp = sim.youngPause;
+    phaseStrip($('#stripG1'), [
+      { name:'Young Evacuation', ms: yp, stw:true },
+      { name:'Concurrent Mark',  ms: yp*6, stw:false },
+      { name:'Remark',           ms: yp*0.18, stw:true },
+      { name:'Concurrent Cleanup', ms: yp*1.2, stw:false },
+      { name:'Mixed Evacuation', ms: yp*P.mixedFactor, stw:true },
+    ]);
+    const zp = P.zPause;
+    phaseStrip($('#stripZ'), [
+      { name:'Mark Start',            ms: zp, stw:true },
+      { name:'Concurrent Mark',       ms: zp*90, stw:false },
+      { name:'Mark End',              ms: zp, stw:true },
+      { name:'Concurrent Prepare',    ms: zp*24, stw:false },
+      { name:'Relocate Start',        ms: zp, stw:true },
+      { name:'Concurrent Relocate',   ms: zp*70, stw:false },
+    ]);
+  }
 
-$('#btnPlay').onclick = () => playing?stop():play();
-$('#btnStep').onclick = () => { stop(); stepOnce(); };
-$('#btnReset').onclick = () => { stop(); step=0; applyStep(); };
-$('#btnScale').onclick = () => { logScale=!logScale; render(); };
-$('#sHeap').oninput = () => { stop(); render(); };
-$('#sAlloc').oninput = () => { stop(); render(); };
-$('#lang').onclick = () => { L = L==='ko'?'en':'ko'; applyLang(); };
+  /* ============================================================================
+   * 3. 시나리오
+   * ========================================================================== */
 
-function applyLang(){
-  document.documentElement.lang = L;
-  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
-  $('#lang').textContent = L==='ko'?'EN':'KO';
-  $('#btnPlay').textContent = playing?t('pause'):t('play');
-  $('#guide').innerHTML = L==='ko'?GUIDE_KO:GUIDE_EN;
-  $('#prose').innerHTML = L==='ko'?PROSE_KO:PROSE_EN;
-  $('#nText').textContent = step===0 ? t('nIntro') : SCENE[step][L];
-  render();
-}
+  const SCENE = [
+    { heap:1, alloc:500,
+      ko:'힙 4GB, 일반적인 웹 애플리케이션 부하입니다. G1의 young 정지가 188ms로 200ms 목표 안에 들어와 있고, ZGC 막대는 아예 보이지 않습니다.',
+      en:'4GB heap under an ordinary web workload. G1\u2019s young pause is 188ms, inside its 200ms target, and the ZGC bars are simply not visible.' },
+    { heap:3, alloc:500,
+      ko:'16GB로 올렸습니다. young 정지가 208ms — 목표를 거의 지키고 있어요. G1이 young 영역 크기를 스스로 줄여 맞추고 있기 때문입니다.',
+      en:'Now 16GB. The young pause is 208ms — still about on target, because G1 shrinks the young generation to get there.' },
+    { heap:5, alloc:500,
+      ko:'64GB. young 정지가 270ms — 여기서부터 목표가 무너집니다. young 영역을 아무리 줄여도 힙의 5% 아래로는 못 내려가는데, 64GB의 5%는 이미 3GB가 넘거든요.',
+      en:'64GB. The target starts slipping. G1 cannot shrink young below 5% of the heap, and 5% of 64GB is already over 3GB.' },
+    { heap:7, alloc:500,
+      ko:'128GB에서는 young 정지가 538ms, mixed는 0.9초를 넘습니다. ZGC 막대는 여전히 바닥에 붙어 있어요. 로그 스케일 버튼을 눌러야 겨우 보입니다.',
+      en:'At 128GB the pause passes half a second. The ZGC bars are still flat on the floor — you need the log scale button to see them at all.' },
+    { heap:3, alloc:2000,
+      ko:'이번엔 힙을 16GB로 되돌리고 할당 속도를 네 배로 올립니다. 정지 길이는 208ms 그대로인데 횟수가 11회에서 44회로 늘고, 처리량은 96%에서 82%로 떨어집니다. 짧은 정지도 자주 오면 비쌉니다.',
+      en:'Back to 16GB, allocating four times faster. The pause stays at 208ms but the count goes from 11 to 44, and throughput falls from 96% to 82%. Short pauses are expensive when they come often.' },
+    { heap:3, alloc:5000,
+      ko:'더 올리면 ZGC에도 대가가 나타납니다. 동시 회수 속도를 할당이 앞지르면 스레드가 메모리를 받지 못해 멈춥니다. 이게 allocation stall이에요. GC 로그에는 정지로 안 잡히지만 애플리케이션은 분명히 멈춥니다.',
+      en:'Push further and ZGC pays too. When allocation outruns concurrent reclamation, threads block waiting for memory — an allocation stall. It does not appear as a GC pause, yet the application is stopped all the same.' },
+    { heap:7, alloc:5000,
+      ko:'같은 부하에서 힙을 128GB로 키우면 ZGC의 지연은 줄어듭니다. 여유 공간이 회수 시간을 벌어주기 때문입니다. ZGC에서 힙을 넉넉히 주라는 조언이 여기서 나옵니다.',
+      en:'Widen the heap to 128GB under the same load and the stall shrinks: headroom buys time to collect. This is where the advice to over-provision heap for ZGC comes from.' },
+  ];
 
-/* ============================================================================
- * 4. 본문
- * ========================================================================== */
+  let step = 0, playing = false, timer = null;
 
-const GUIDE_KO = `
+  function applyStep(){
+    const s = SCENE[step];
+    $('#sHeap').value = s.heap;
+    $('#sAlloc').value = s.alloc;
+    $('#nText').textContent = s[L];
+    $('#nStep').textContent = `${String(step+1).padStart(2,'0')} / ${String(SCENE.length).padStart(2,'0')}`;
+    $('#btnStep').disabled = step >= SCENE.length-1;
+    render();
+  }
+  function stepOnce(){
+    if (step >= SCENE.length-1){ stop(); return; }
+    step++; applyStep();
+    if (step >= SCENE.length-1) stop();
+  }
+  function play(){ playing=true; $('#btnPlay').textContent=t('pause'); timer=setInterval(stepOnce, 3400); }
+  function stop(){ playing=false; clearInterval(timer); $('#btnPlay').textContent=t('play'); }
+
+  $('#btnPlay').onclick = () => playing?stop():play();
+  $('#btnStep').onclick = () => { stop(); stepOnce(); };
+  $('#btnReset').onclick = () => { stop(); step=0; applyStep(); };
+  $('#btnScale').onclick = () => { logScale=!logScale; render(); };
+  $('#sHeap').oninput = () => { stop(); render(); };
+  $('#sAlloc').oninput = () => { stop(); render(); };
+  $('#lang').onclick = () => { L = Lang.toggle(L); applyLang(); };
+
+  function applyLang(){
+    document.documentElement.lang = L;
+    if (T[L].pageTitle) document.title = T[L].pageTitle;
+    for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+    $('#lang').textContent = L==='ko'?'EN':'KO';
+    $('#btnPlay').textContent = playing?t('pause'):t('play');
+    $('#guide').innerHTML = L==='ko'?GUIDE_KO:GUIDE_EN;
+    $('#prose').innerHTML = L==='ko'?PROSE_KO:PROSE_EN;
+    $('#nText').textContent = step===0 ? t('nIntro') : SCENE[step][L];
+    render();
+  }
+
+  /* ============================================================================
+   * 4. 본문
+   * ========================================================================== */
+
+  const GUIDE_KO = `
 <h2>직접 조작하기</h2>
 <p>손잡이는 두 개뿐입니다. 재생 버튼은 정해진 순서를 훑을 뿐이니, 슬라이더를 직접 움직이는 쪽이 훨씬 많은 걸 보여줍니다.</p>
 <table class="keytable">
@@ -538,7 +542,7 @@ ZGC 처리량      <em>떨어진다</em></div>
 </div>
 `;
 
-const GUIDE_EN = `
+  const GUIDE_EN = `
 <h2>Driving it yourself</h2>
 <p>There are only two dials. The play button walks a fixed tour; moving the sliders yourself shows far more.</p>
 <table class="keytable">
@@ -601,7 +605,7 @@ Heap 128GB  → stall 312ms/s</div>
 </div>
 `;
 
-const PROSE_KO = `
+  const PROSE_KO = `
 <h2>G1이 멈추는 지점</h2>
 <p>G1은 힙을 <strong>리전</strong>이라는 균일한 조각으로 나눕니다. 수집할 때는 리전 몇 개를 골라 collection set을 만들고, 그 안의 살아 있는 객체를 다른 리전으로 <strong>복사</strong>합니다. 복사가 끝나면 원래 리전은 통째로 비워요.</p>
 <p>문제는 복사하는 동안 객체의 주소가 바뀐다는 겁니다. 애플리케이션 스레드가 옛 주소를 들고 있으면 안 되니, <strong>복사하는 내내 세상을 멈춰야 합니다.</strong> 정지 시간이 곧 "옮긴 데이터의 양"이에요.</p>
@@ -668,7 +672,7 @@ jcmd &lt;pid&gt; VM.flags | tr ' ' '\\n' | grep -i gc
 <div class="callout">이 페이지의 수치는 개념을 보여주기 위한 단순 모델입니다. 실제 정지 시간은 객체 그래프 모양, 리전 크기, GC 스레드 수, 하드웨어에 따라 크게 달라집니다. <strong>본인 워크로드로 측정하는 것을 대신할 수 있는 건 없습니다.</strong></div>
 `;
 
-const PROSE_EN = `
+  const PROSE_EN = `
 <h2>Where G1 stops</h2>
 <p>G1 divides the heap into uniform <strong>regions</strong>. To collect, it picks a set of regions and <strong>copies</strong> the live objects out into fresh ones, then frees the originals wholesale.</p>
 <p>The catch is that copying changes addresses. Application threads must not be holding stale ones, so <strong>the world stays stopped for the entire copy.</strong> Pause time is simply "how much live data got moved".</p>
@@ -734,11 +738,11 @@ jcmd &lt;pid&gt; VM.flags | tr ' ' '\\n' | grep -i gc
 <div class="callout">The numbers here come from a simplified teaching model. Real pauses depend on object graph shape, region size, GC thread count and hardware. <strong>Nothing substitutes for measuring your own workload.</strong></div>
 `;
 
-/* ============================================================================
- * 5. 기동
- * ========================================================================== */
-applyLang();
-$('#nStep').textContent = `01 / ${String(SCENE.length).padStart(2,'0')}`;
+  /* ============================================================================
+   * 5. 기동
+   * ========================================================================== */
+  applyLang();
+  $('#nStep').textContent = `01 / ${String(SCENE.length).padStart(2,'0')}`;
 </script>
 </body>
 </html>

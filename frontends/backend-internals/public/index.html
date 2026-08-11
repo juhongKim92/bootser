@@ -10,10 +10,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
   <link rel="stylesheet" href="shared/base.css">
+  <script src="shared/lang.js"></script>
   <style>
     .cards{margin:36px 0 0;border-top:1px solid var(--rule)}
     .card{
-      display:block;text-decoration:none;color:inherit;
+      text-decoration:none;color:inherit;
       padding:22px 0;
       border-bottom:1px solid var(--rule);
       display:grid;grid-template-columns:46px 1fr auto;gap:18px;align-items:baseline;
@@ -22,10 +23,7 @@
     .card:hover{background:var(--paper-2)}
     .card[aria-disabled="true"]{opacity:.42;pointer-events:none}
     .card .no{font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.1em}
-    .card h2{
-      font-family:var(--serif);font-size:19px;font-weight:700;
-      margin:0;padding:0;border:none;line-height:1.35;
-    }
+    .card h2{font-family:var(--serif);font-size:19px;font-weight:700;margin:0;padding:0;border:none;line-height:1.35}
     .card p{font-size:14px;color:var(--ink-2);margin-top:5px;max-width:56ch}
     .card .tag{
       font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
@@ -42,55 +40,103 @@
 
 <div class="top"><div class="wrap">
   <a class="brand" href="./">Backend Internals</a>
+  <nav><button id="lang">EN</button></nav>
 </div></div>
 
 <main class="wrap">
-  <h1>직접 만져보는 백엔드 내부 동작</h1>
-  <p class="lede">글로 읽으면 알겠는데 막상 장애가 나면 손이 안 가는 개념들이 있습니다. 여기서는 직접 조작해보며 확인합니다.</p>
+  <h1 data-i18n="h1"></h1>
+  <p class="lede" data-i18n="lede"></p>
 
   <div class="cards">
 
     <a class="card" href="mvcc/">
       <span class="no">01</span>
       <span>
-        <h2>DELETE 했는데 테이블이 줄지 않는 이유</h2>
-        <p>PostgreSQL MVCC와 VACUUM. 열려 있는 트랜잭션 하나가 어떻게 데이터베이스 전체의 정리 작업을 멈춰 세우는지.</p>
+        <h2 data-i18n="t1"></h2>
+        <p data-i18n="d1"></p>
       </span>
-      <span class="tag live">공개</span>
+      <span class="tag live" data-i18n="tagLive"></span>
     </a>
 
     <a class="card" href="gc/">
       <span class="no">02</span>
       <span>
-        <h2>G1과 ZGC는 왜 다르게 멈추는가</h2>
-        <p>힙을 키우면 G1의 STW는 길어지는데 ZGC는 거의 그대로입니다. 그 차이가 어디서 나오는지, 그리고 ZGC가 공짜가 아닌 이유.</p>
+        <h2 data-i18n="t2"></h2>
+        <p data-i18n="d2"></p>
       </span>
-      <span class="tag live">공개</span>
+      <span class="tag live" data-i18n="tagLive"></span>
     </a>
 
     <a class="card" aria-disabled="true">
       <span class="no">03</span>
       <span>
-        <h2>노드 하나가 빠지면 캐시는 어떻게 무너지는가</h2>
-        <p>컨시스턴트 해싱. 가상 노드가 없을 때 분포가 얼마나 기우는지 링 위에서 직접 확인합니다.</p>
+        <h2 data-i18n="t3"></h2>
+        <p data-i18n="d3"></p>
       </span>
-      <span class="tag">준비 중</span>
+      <span class="tag" data-i18n="tagSoon"></span>
     </a>
 
     <a class="card" aria-disabled="true">
       <span class="no">04</span>
       <span>
-        <h2>네트워크가 갈라지면 누가 리더가 되는가</h2>
-        <p>Raft 리더 선출. 노드를 직접 죽여가며 스플릿브레인이 왜 생기지 않는지 봅니다.</p>
+        <h2 data-i18n="t4"></h2>
+        <p data-i18n="d4"></p>
       </span>
-      <span class="tag">준비 중</span>
+      <span class="tag" data-i18n="tagSoon"></span>
     </a>
 
   </div>
 
-  <footer>
-    Interactive visualizations of backend internals · KO / EN
-  </footer>
+  <footer><span data-i18n="foot"></span></footer>
 </main>
+
+<script>
+  'use strict';
+
+  const T = {
+    ko:{
+      pageTitle:'Backend Internals — 백엔드 개념 인터랙티브 시각화',
+      h1:'직접 만져보는 백엔드 내부 동작',
+      lede:'글로 읽으면 알겠는데 막상 장애가 나면 손이 안 가는 개념들이 있습니다. 여기서는 직접 조작해보며 확인합니다.',
+      t1:'DELETE 했는데 테이블이 줄지 않는 이유',
+      d1:'PostgreSQL MVCC와 VACUUM. 열려 있는 트랜잭션 하나가 어떻게 데이터베이스 전체의 정리 작업을 멈춰 세우는지.',
+      t2:'G1과 ZGC는 왜 다르게 멈추는가',
+      d2:'힙을 키우면 G1의 STW는 길어지는데 ZGC는 거의 그대로입니다. 그 차이가 어디서 나오는지, 그리고 ZGC가 공짜가 아닌 이유.',
+      t3:'노드 하나가 빠지면 캐시는 어떻게 무너지는가',
+      d3:'컨시스턴트 해싱. 가상 노드가 없을 때 분포가 얼마나 기우는지 링 위에서 직접 확인합니다.',
+      t4:'네트워크가 갈라지면 누가 리더가 되는가',
+      d4:'Raft 리더 선출. 노드를 직접 죽여가며 스플릿브레인이 왜 생기지 않는지 봅니다.',
+      tagLive:'공개', tagSoon:'준비 중',
+      foot:'백엔드 내부 동작 인터랙티브 시각화 · 한국어 / English'
+    },
+    en:{
+      pageTitle:'Backend Internals — interactive visualizations',
+      h1:'Backend internals you can actually touch',
+      lede:'Some concepts read fine on paper and desert you the moment production breaks. Here you drive them yourself.',
+      t1:'Why your table never shrinks after DELETE',
+      d1:'PostgreSQL MVCC and VACUUM. How a single open transaction stalls cleanup across the entire database.',
+      t2:'Why G1 and ZGC stop differently',
+      d2:'Grow the heap and G1\u2019s pauses grow with it, while ZGC barely moves. Where that difference comes from — and why ZGC is not free.',
+      t3:'How a cache falls apart when one node leaves',
+      d3:'Consistent hashing. Watch the distribution skew on the ring when virtual nodes are missing.',
+      t4:'Who becomes leader when the network splits',
+      d4:'Raft leader election. Kill nodes by hand and see why split brain does not happen.',
+      tagLive:'live', tagSoon:'soon',
+      foot:'Interactive visualizations of backend internals · 한국어 / English'
+    }};
+
+  let L = Lang.get();
+
+  function applyLang(){
+    const d = T[L];
+    document.documentElement.lang = L;
+    document.title = d.pageTitle;
+    for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = d[el.dataset.i18n] ?? '';
+    document.querySelector('#lang').textContent = L === 'ko' ? 'EN' : 'KO';
+  }
+
+  document.querySelector('#lang').onclick = () => { L = Lang.toggle(L); applyLang(); };
+  applyLang();
+</script>
 </body>
 </html>
