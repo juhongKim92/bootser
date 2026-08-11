@@ -1,0 +1,152 @@
+/* ============================================================
+   Backend Internals — 공통 토큰
+   기술 매뉴얼/실험 노트의 인상. 종이 바탕 + 잉크.
+   ============================================================ */
+:root{
+  --paper:#f5f2ec;
+  --paper-2:#ebe5d9;
+  --paper-3:#e0d9ca;
+  --ink:#1b1917;
+  --ink-2:#4e483f;
+  --ink-3:#8b8277;
+  --rule:#d5cdbe;
+
+  --live:#2f6b4f;      /* 살아 있는 튜플 */
+  --blocked:#b0392c;   /* 죽었지만 회수 불가 */
+  --free:#a8791a;      /* 죽었고 회수 가능 */
+  --pending:#6b6156;   /* 커밋 전 */
+  --horizon:#1b4f7a;   /* xmin horizon */
+
+  --serif:'Gowun Batang', 'Noto Serif KR', Georgia, serif;
+  --sans:'Pretendard Variable', Pretendard, -apple-system, system-ui, sans-serif;
+  --mono:'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#17161a; --paper-2:#1f1e23; --paper-3:#2a282f;
+    --ink:#ece7dd; --ink-2:#b3ab9f; --ink-3:#7d766c;
+    --rule:#35323a;
+    --live:#5fbf8c; --blocked:#e2695a; --free:#d9a83a;
+    --pending:#8b8277; --horizon:#6aa9dd;
+  }
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+html{scroll-behavior:smooth}
+
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:15px;
+  line-height:1.7;
+  -webkit-font-smoothing:antialiased;
+}
+
+.wrap{max-width:960px;margin:0 auto;padding:0 20px}
+
+/* --- 머리말 --- */
+.top{
+  border-bottom:1px solid var(--rule);
+  position:sticky;top:0;z-index:20;
+  background:color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter:blur(8px);
+}
+.top .wrap{display:flex;align-items:center;justify-content:space-between;height:52px;gap:16px}
+.brand{
+  font-family:var(--mono);
+  font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--ink-2);text-decoration:none;
+}
+.brand:hover{color:var(--ink)}
+.top nav{display:flex;gap:6px;align-items:center}
+
+button, .btn{
+  font-family:var(--mono);
+  font-size:11px;letter-spacing:.08em;
+  background:transparent;
+  border:1px solid var(--rule);
+  color:var(--ink-2);
+  padding:6px 10px;
+  border-radius:2px;
+  cursor:pointer;
+  transition:border-color .15s, color .15s, background .15s;
+}
+button:hover:not(:disabled), .btn:hover{border-color:var(--ink-3);color:var(--ink)}
+button:focus-visible{outline:2px solid var(--horizon);outline-offset:1px}
+button:disabled{opacity:.35;cursor:not-allowed}
+button.solid{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+button.solid:hover:not(:disabled){background:var(--ink-2);color:var(--paper)}
+
+/* --- 본문 --- */
+h1{
+  font-family:var(--serif);
+  font-size:clamp(28px,4.4vw,40px);
+  font-weight:700;
+  line-height:1.25;
+  letter-spacing:-.01em;
+  margin-top:44px;
+}
+h2{
+  font-family:var(--serif);
+  font-size:22px;font-weight:700;
+  margin:44px 0 12px;
+  padding-top:20px;
+  border-top:1px solid var(--rule);
+}
+h3{font-family:var(--sans);font-size:15px;font-weight:700;margin:24px 0 6px}
+
+.lede{
+  font-family:var(--serif);
+  font-size:18px;
+  color:var(--ink-2);
+  margin-top:14px;
+  max-width:62ch;
+}
+
+.prose p{margin:12px 0;max-width:68ch}
+.prose ul,.prose ol{margin:12px 0 12px 20px;max-width:66ch}
+.prose li{margin:5px 0}
+.prose code{
+  font-family:var(--mono);font-size:.86em;
+  background:var(--paper-2);
+  padding:1px 5px;border-radius:2px;
+}
+.prose pre{
+  font-family:var(--mono);font-size:12px;line-height:1.6;
+  background:var(--paper-2);
+  border:1px solid var(--rule);
+  border-radius:3px;
+  padding:12px 14px;
+  overflow-x:auto;
+  margin:14px 0;
+}
+.prose pre code{background:none;padding:0}
+.prose strong{font-weight:700}
+.prose a{color:var(--horizon);text-decoration:underline;text-underline-offset:2px}
+
+.callout{
+  border-left:2px solid var(--horizon);
+  padding:8px 0 8px 14px;
+  margin:18px 0;
+  color:var(--ink-2);
+  font-size:14px;
+  max-width:66ch;
+}
+
+footer{
+  margin-top:64px;
+  border-top:1px solid var(--rule);
+  padding:20px 0 60px;
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:.06em;
+  color:var(--ink-3);
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{transition-duration:.01ms !important;animation-duration:.01ms !important}
+  html{scroll-behavior:auto}
+}
