@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>컨시스턴트 해싱 — 노드 하나가 빠지면 캐시는 어떻게 무너지는가</title>
+<meta name="description" content="나머지 연산으로 샤딩하면 노드 하나가 빠질 때 거의 모든 키가 이동합니다. 링 위에 올리면 왜 달라지는지, 가상 노드가 왜 필요한지 직접 조작하며 확인합니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/hashring/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/hashring/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/hashring/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/hashring/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="컨시스턴트 해싱 — 노드 하나가 빠지면 캐시는 어떻게 무너지는가">
+<meta property="og:description" content="나머지 연산으로 샤딩하면 노드 하나가 빠질 때 거의 모든 키가 이동합니다. 링 위에 올리면 왜 달라지는지, 가상 노드가 왜 필요한지 직접 조작하며 확인합니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/hashring/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="컨시스턴트 해싱 — 노드 하나가 빠지면 캐시는 어떻게 무너지는가">
+<meta name="twitter:description" content="나머지 연산 샤딩의 문제와 가상 노드가 필요한 이유를 직접 조작하며 확인합니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/hashring-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/hashring/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>노드 하나가 빠지면 캐시는 어떻게 무너지는가</h1>
+  <p class="lede">캐시 서버 네 대 중 한 대가 죽었습니다. 나머지 연산으로 키를 나눠뒀다면 살아남은 세 대의 캐시도 대부분 쓸모없어집니다. 왜 그런지, 그리고 링이 그걸 어떻게 막는지 직접 확인합니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label><span>노드 수</span></label>
+          <div class="stepper">
+            <button id="btnDel" aria-label="노드 제거">−</button>
+            <span class="n" id="nNodes">4</span>
+            <button id="btnAdd" aria-label="노드 추가">+</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label><span>가상 노드</span><b id="vVnodes">1</b></label>
+          <input type="range" id="sVnodes" min="1" max="200" step="1" value="1">
+          <div class="hint" id="hVnodes"></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="split">
+        <div>
+          <span class="cap">해시 링</span>
+          <canvas id="ring" width="320" height="320" role="img"
+                  aria-label="해시 링 위의 노드 구간과 키 분포"></canvas>
+        </div>
+        <div>
+          <span class="cap">노드별 키 개수</span>
+          <div class="bars" id="bars"></div>
+          <div class="spread" id="spread"></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">마지막 변경으로 이동한 키</span>
+      <div class="moved" id="moved"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button class="solid" id="btnPlay">시나리오 재생</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>직접 조작하기</h2>
+    <p>손잡이는 두 개입니다. 재생 버튼은 정해진 순서를 훑을 뿐이니, 직접 움직이는 쪽이 훨씬 많은 걸 보여줍니다.</p>
+    <table class="keytable">
+      <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+      <tr><td>노드 수</td><td>추가·제거할 때마다 <strong>이동한 키 개수</strong>가 아래에 기록됩니다. 나머지 연산 방식과 나란히 비교됩니다</td></tr>
+      <tr><td>가상 노드</td><td>노드 하나가 링 위에 몇 개의 지점을 갖는지. <strong>분포의 균일도</strong>가 여기서 결정됩니다</td></tr>
+    </table>
+    <p>링에서 굵은 띠는 소유 구간이고, 띠를 가로지르는 가는 눈금이 가상 노드 지점입니다. 바깥의 점 1500개가 키이고, 색은 어느 노드가 가져갔는지를 뜻합니다. 12시 방향이 해시 공간의 0입니다.</p>
+    <p>분포 막대의 세로선은 이상적인 값(1500 ÷ 노드 수)입니다. 막대가 이 선에 가까울수록 고르게 나뉜 겁니다.</p>
+
+    <h2>이렇게 해보세요</h2>
+
+    <div class="recipe">
+      <h4>1. 가상 노드 없이 시작한다</h4>
+      <div class="seq">초기화 (노드 6, 가상 노드 1)
+분포 막대를 본다
+
+이상값        <em>250</em>
+실제          <em>424 … 101</em>
+편차(CV)      <em>46.9%</em>
+최대/최소     <em>4.20배</em></div>
+      <p class="why">여섯 노드가 고르게 나눠야 할 몫이 네 배 넘게 벌어집니다. 해시가 고르게 퍼져도 <strong>링 위의 여섯 지점이 균등하게 놓이지는 않기 때문</strong>이에요. 구간 길이가 제각각이면 몫도 제각각입니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. 노드를 하나 뺀다</h4>
+      <div class="seq">가상 노드 1 상태에서 − 버튼
+
+링 방식        <em>7% 이동</em>
+나머지 연산    <em>84% 이동</em>
+이웃 노드      <em>345 → 446 으로 급증</em></div>
+      <p class="why">여기가 컨시스턴트 해싱의 존재 이유입니다. 링에서는 <strong>사라진 노드가 맡던 구간만</strong> 다음 노드로 넘어갑니다. 나머지 연산은 제수가 바뀌므로 거의 모든 키의 목적지가 달라져요.</p>
+      <p class="why" style="margin-top:9px">다만 7%라는 숫자를 그대로 믿으면 안 됩니다. 이 값은 <strong>죽은 노드가 갖고 있던 몫과 정확히 같습니다.</strong> 가상 노드가 1이면 그 몫이 제각각이라 어떤 노드가 죽느냐에 따라 3%가 될 수도, 30%가 될 수도 있어요. 그리고 그 부담을 시계방향 이웃 <em>하나가</em> 통째로 받습니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. 가상 노드를 늘린다</h4>
+      <div class="seq">가상 노드를 1 → 20 → 160 → 200
+
+편차(CV)     <em>46.9% → 17.0% → 5.9% → 5.5%</em>
+최대/최소    <em>4.20배 → 1.54배 → 1.16배 → 1.16배</em>
+링 그림      <em>색이 잘게 섞인다</em></div>
+      <p class="why">노드 하나를 링 위 여러 지점에 흩어놓으면 <strong>큰 수의 법칙이 작동합니다.</strong> 지점이 많을수록 각 노드가 가져가는 구간 길이의 합이 평균에 수렴해요. 실무에서 150~160을 쓰는 관행이 여기서 나왔습니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. 가상 노드가 많을 때 노드를 뺀다</h4>
+      <div class="seq">가상 노드 160, 노드 5 상태에서 − 버튼
+
+이동량     <em>22%  (이론 1/5 = 20%)</em>
+분포       <em>387 / 371 / 379 / 363 — 고르게 흡수</em></div>
+      <p class="why">이제 이동량이 <code>1/N</code>에 수렴합니다. <strong>예측 가능해진 것</strong>이 진짜 소득이에요. 용량 계획을 세울 수 있게 됐다는 뜻이니까요.</p>
+      <p class="why" style="margin-top:9px">분포도 보세요. 사라진 노드의 몫이 남은 넷에게 거의 균등하게 나뉘었습니다. 가상 노드가 1일 때 이웃 하나가 101개를 통째로 받던 것과 대조적이죠. <strong>연쇄 장애를 막는 것</strong>이 가상 노드의 두 번째 역할입니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. 노드를 다시 넣어본다</h4>
+      <div class="seq">+ 버튼으로 노드를 추가
+
+이동량     <em>22%</em>
+나머지 연산 <em>81%</em></div>
+      <p class="why">추가할 때도 이동량은 <code>1/N</code> 수준입니다. 새 노드가 자기 구간만 가져올 뿐, 나머지 노드끼리는 아무 변화가 없어요. <strong>스케일 아웃이 싸다는 것</strong>이 이 방식의 두 번째 이점입니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>6. 가상 노드 개수는 나중에 못 바꾼다</h4>
+      <div class="seq">가상 노드 슬라이더를 크게 움직인다
+이동량 패널을 본다
+
+이동량     <em>70% 이상</em></div>
+      <p class="why">가상 노드 개수를 바꾸면 링 위 모든 지점의 위치가 달라지므로 <strong>사실상 전체 재배치</strong>가 일어납니다. 노드 구성이 바뀐 게 아닌데도 그래요. 운영 중인 캐시 클러스터에서 이걸 하면 전면 캐시 미스가 납니다. <strong>처음에 정하고 모든 클라이언트가 같은 값을 써야 합니다.</strong></p>
+    </div>
+
+    <h2>나머지 연산의 문제</h2>
+    <p>가장 단순한 샤딩은 이렇습니다.</p>
+    <pre><code>int shard = Math.abs(key.hashCode()) % serverCount;</code></pre>
+    <p>서버가 넷일 때는 잘 돕니다. 문제는 <strong>서버 수가 바뀌는 순간</strong>이에요.</p>
+    <pre><code>key.hashCode() = 1234
+
+servers = 4  →  1234 % 4 = 2   (3번 서버)
+servers = 3  →  1234 % 3 = 1   (2번 서버)  ← 옮겨감</code></pre>
+    <p>제수가 바뀌면 나머지가 통째로 재배치됩니다. 이론적으로 <code>1 - 1/N</code>, 즉 서버가 넷에서 셋이 되면 <strong>약 75%의 키가 다른 서버로 갑니다.</strong></p>
+    <div class="callout">캐시라면 이 75%가 전부 미스가 됩니다. 서버 한 대가 죽었을 뿐인데 살아남은 서버들의 캐시도 대부분 무효가 되고, 그 트래픽이 한꺼번에 원본 저장소로 쏟아집니다. 장애 한 건이 전면 장애로 번지는 전형적인 경로예요.</div>
+
+    <h2>링 위에 올리면</h2>
+    <p>해결의 발상은 <strong>서버 수를 계산식에서 빼는 것</strong>입니다.</p>
+    <ol>
+      <li>해시 공간(0 ~ 2<sup>32</sup>−1)을 원으로 잇는다</li>
+      <li>서버를 <code>hash(서버이름)</code> 위치에 놓는다</li>
+      <li>키를 <code>hash(키)</code> 위치에 놓는다</li>
+      <li>키에서 <strong>시계 방향으로 처음 만나는 서버</strong>가 주인이다</li>
+    </ol>
+    <p>키의 위치는 서버 수와 무관하게 고정입니다. 서버가 하나 사라지면 그 서버가 맡던 원호 구간만 다음 서버로 넘어가고, <strong>나머지 구간은 아무 영향이 없습니다.</strong> 그래서 이동량이 <code>1/N</code> 수준으로 떨어집니다.</p>
+    <p>조회는 정렬된 지점 배열에서 이진 탐색이라 <code>O(log(N × V))</code>입니다.</p>
+    <pre><code>// 실제 구현의 뼈대
+TreeMap&lt;Long, String&gt; ring = new TreeMap&lt;&gt;();
+
+void addNode(String node, int vnodes) {
+    for (int i = 0; i &lt; vnodes; i++)
+        ring.put(hash(node + "#" + i), node);
+}
+
+String lookup(String key) {
+    if (ring.isEmpty()) return null;
+    Map.Entry&lt;Long, String&gt; e = ring.ceilingEntry(hash(key));
+    return e != null ? e.getValue()          // 시계 방향 첫 지점
+                     : ring.firstEntry().getValue();  // 한 바퀴 돌아 처음으로
+}</code></pre>
+    <p><code>ceilingEntry</code>가 없을 때 <code>firstEntry</code>로 감는 부분이 핵심입니다. 이 한 줄을 빠뜨리면 해시 공간 끝자락의 키들이 전부 실패해요.</p>
+
+    <h2>가상 노드가 필요한 이유</h2>
+    <p>링만으로는 부족합니다. 노드가 넷이면 링 위에 지점이 넷뿐이고, 그 넷이 균등하게 놓일 이유가 없거든요. 실험대에서 가상 노드를 1로 두면 편차가 47%에 이르고 최대/최소가 4배 넘게 벌어지는 걸 볼 수 있습니다.</p>
+    <p>해법은 <strong>노드 하나를 여러 이름으로 여러 번 등록하는 것</strong>입니다. <code>node-A#0</code>, <code>node-A#1</code> … 이렇게요. 지점이 많아질수록 각 노드가 차지하는 구간 길이의 합이 평균에 수렴합니다.</p>
+    <table class="keytable">
+      <tr><th>가상 노드</th><th>편차(CV)</th><th>메모리</th></tr>
+      <tr><td>1</td><td>47% — 쓸 수 없음</td><td>무시할 수준</td></tr>
+      <tr><td>20</td><td>17%</td><td>작음</td></tr>
+      <tr><td>160</td><td>6%</td><td>노드당 항목 160개</td></tr>
+    </table>
+    <p>가상 노드는 <strong>가중치</strong>에도 쓰입니다. 메모리가 두 배인 서버에 가상 노드를 두 배로 주면 그만큼 더 받아요. 이기종 서버로 클러스터를 꾸릴 때 유용합니다.</p>
+    <div class="callout">가상 노드를 무한정 늘리면 좋은 건 아닙니다. 링 크기가 <code>노드 수 × 가상 노드 수</code>라서 조회 비용과 메모리가 함께 늘고, 노드 변경 시 갱신해야 할 항목도 그만큼 많아집니다. 수천 개 노드 규모에서는 이 비용이 실제로 문제가 됩니다.</div>
+
+    <h2>실제로 어디에 쓰이나</h2>
+    <ul>
+      <li><strong>memcached 클라이언트</strong> — libketama 계열. 노드당 가상 노드 160개가 사실상의 표준입니다. 실무의 "160"이라는 숫자가 여기서 왔어요</li>
+      <li><strong>Cassandra</strong> — 토큰 링. 초기에는 노드당 토큰 256개가 기본이었지만, 4.0부터 새 할당 알고리즘과 함께 16으로 줄었습니다. 토큰이 많으면 복제본 배치가 흩어져 <em>어느 한 노드가 죽어도 영향받는 조합</em>이 많아지기 때문입니다</li>
+      <li><strong>DynamoDB</strong> — Dynamo 논문이 이 방식을 대중화시켰습니다</li>
+      <li><strong>nginx</strong> — <code>hash $request_uri consistent;</code> 로 업스트림 선택에 사용</li>
+      <li><strong>Envoy</strong> — ring hash, Maglev 로드밸런서</li>
+    </ul>
+    <div class="callout"><strong>흔한 오해:</strong> Redis Cluster는 컨시스턴트 해싱을 쓰지 않습니다. 16384개의 고정 해시 슬롯을 노드에 나눠주는 방식이에요. <code>CRC16(key) % 16384</code>로 슬롯을 정하고, 슬롯–노드 대응은 별도로 관리합니다. 슬롯 단위로 옮기므로 재배치는 제어 가능하지만, 링 구조는 아닙니다.</div>
+
+    <h2>현장에서 주의할 것</h2>
+    <p><strong>핫스팟은 여전히 생깁니다.</strong> 컨시스턴트 해싱은 <em>키의 개수</em>를 고르게 나눌 뿐, <em>트래픽</em>을 고르게 나누지 않습니다. 인기 키 하나에 요청이 몰리면 그 노드만 터져요. 이 문제에는 bounded-load 변형이나 인기 키 복제 같은 별도 대응이 필요합니다.</p>
+    <p><strong>노드가 죽으면 부담은 이웃 하나에게 갑니다.</strong> 가상 노드가 충분하면 여러 노드로 분산되지만, 적으면 시계방향 이웃 하나가 통째로 받습니다. 그 노드마저 넘어지면 연쇄 장애가 시작돼요. 실험대에서 가상 노드 1로 두고 노드를 빼보면 이 쏠림이 보입니다.</p>
+    <p><strong>모든 클라이언트가 같은 링을 봐야 합니다.</strong> 해시 함수, 가상 노드 개수, 노드 이름 표기가 하나라도 다르면 클라이언트마다 다른 노드를 가리킵니다. 캐시 적중률이 설명 없이 떨어진다면 이걸 먼저 의심하세요. 특히 언어가 다른 클라이언트를 섞어 쓸 때 자주 발생합니다.</p>
+    <p><strong>더 단순한 대안도 있습니다.</strong> 랑데부 해싱(HRW)은 링도 가상 노드도 필요 없습니다. 모든 노드에 대해 <code>hash(키 + 노드)</code>를 계산해 가장 큰 값을 고르면 끝이고, 분포도 균일합니다. 대신 조회가 <code>O(N)</code>이라 노드 수가 적을 때 유리해요.</p>
+    <div class="callout">이 페이지의 모델은 교육용으로 단순화했습니다. 해시는 FNV-1a 32비트에 murmur3 의 최종 믹싱을 덧붙여 썼습니다. FNV-1a 만으로는 상위 비트가 확산되지 않아 링 지점들이 한 자리에 뭉치더군요. 실제 구현은 대개 MD5나 MurmurHash 를 씁니다. 다만 이동량이 <code>1/N</code>로 떨어지는 것과 가상 노드가 분포를 고르게 만드는 것은 실제와 같습니다.</div>
+
+  </article>
+
+  <footer>컨시스턴트 해싱 · 교육용 단순화 모델 · 한국어 / <a href="/en/hashring/" hreflang="en" lang="en">English</a> · <a href="mailto:contact@vermilion19.com">contact@vermilion19.com</a></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  play:'시나리오 재생', pause:'일시정지',
+  ideal:'이상값', perNode:'/ 노드',
+  sCv:'편차 (CV)', sRatio:'최대 / 최소', sMax:'최대', sMin:'최소',
+  hV1:'가상 노드 1개 — 구간 길이가 제각각이라 분포가 기운다',
+  hVmid:'나아지는 중',
+  hVok:'실무에서 쓰는 범위 (150~160)',
+  actAdd:'노드 $1 추가', actDel:'노드 $1 제거', actV:'가상 노드 $1개로 변경',
+  mIdle:'노드를 추가하거나 제거하면 이동한 키 개수가 여기에 기록됩니다.',
+  mRing:'링 (컨시스턴트)', mMod:'나머지 연산',
+  mNote:'$1 — 링에서는 $2%만 옮겨가면 되지만, 나머지 연산이었다면 $3%가 자리를 바꿉니다.',
+  mVnodeNote:'가상 노드 개수를 바꾸면 링 전체가 다시 만들어져 $1%의 키가 이동합니다. 노드 구성이 바뀐 게 아니므로 나머지 연산과 비교할 성질이 아니고, 무엇보다 <strong>운영 중인 클러스터에서는 할 수 없는 변경</strong>입니다. 처음에 정해야 합니다.',
+  scene:[
+    '노드 여섯, 가상 노드는 하나씩입니다. 링을 보면 색 구간의 길이가 눈에 띄게 다릅니다. 해시가 아무리 고르게 퍼져도 여섯 지점이 균등하게 놓이지는 않거든요.',
+    '분포 막대를 보세요. 이상값은 250인데 어떤 노드는 424개, 다른 노드는 101개입니다. 4.2배 차이예요. 이 상태로 운영하면 특정 서버만 먼저 죽습니다.',
+    '노드 F를 뺐습니다. 링에서는 7%만 이동했고 나머지 연산이었다면 84%가 움직였을 겁니다. 그런데 7%라는 숫자를 그대로 믿으면 안 됩니다. F가 원래 101개(6.7%)밖에 안 갖고 있어서 그런 거예요. 그리고 그 101개를 시계방향 이웃 D가 통째로 받아 345개에서 446개가 됐습니다.',
+    '가상 노드를 20개로 올렸습니다. 편차가 47%에서 17%로 떨어지고 링의 색이 잘게 섞이기 시작합니다. 다만 이 변경 자체는 링을 통째로 다시 만드는 일이라, 운영 중에는 할 수 없습니다.',
+    '160개까지 올리면 편차 5.9%, 최대/최소 1.16배까지 좁혀집니다. memcached 클라이언트들이 관행적으로 쓰는 값이 이 근처예요.',
+    '이 상태에서 다시 노드를 뺍니다. 이동량 22% — 이론값 1/5 = 20%에 거의 맞습니다. 아까와 달리 예측이 가능해졌어요. 남은 네 노드가 387/371/379/363으로 고르게 흡수한 것도 보세요. 가상 노드가 1이었다면 이웃 하나가 통째로 받았을 몫입니다.',
+    '노드를 추가할 때도 22%입니다. 새 노드가 자기 구간만 가져오고 나머지 노드끼리는 아무 변화가 없어요. 스케일 아웃이 싸다는 게 이 방식의 두 번째 이점입니다.'
+  ],
+};
+</script>
+<script src="/shared/hashring-lab.js"></script>
+</body>
+</html>

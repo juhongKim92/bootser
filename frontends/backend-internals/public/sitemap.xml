@@ -62,9 +62,6 @@
     <priority>0.8</priority>
   </url>
 
-  <!-- 시각화를 추가할 때마다 아래 두 블록(한국어/영어)을 복사해 넣고 lastmod 를 갱신합니다.
-       hreflang 세 줄은 양쪽 모두에 똑같이 들어가야 합니다 — 한쪽만 있으면 구글이 무시합니다.
-       예: 03. 컨시스턴트 해싱
   <url>
     <loc>https://lab.vermilion19.com/hashring/</loc>
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/hashring/"/>
@@ -74,12 +71,34 @@
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
+
   <url>
     <loc>https://lab.vermilion19.com/en/hashring/</loc>
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/hashring/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/hashring/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/hashring/"/>
     <lastmod>2026-08-11</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- 시각화를 추가할 때마다 아래 두 블록(한국어/영어)을 복사해 넣고 <slug> 와 lastmod 를 갱신합니다.
+       hreflang 세 줄은 양쪽 모두에 똑같이 들어가야 합니다 — 한쪽만 있으면 구글이 무시합니다.
+  <url>
+    <loc>https://lab.vermilion19.com/SLUG/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/SLUG/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/SLUG/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/SLUG/"/>
+    <lastmod>YYYY-MM-DD</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://lab.vermilion19.com/en/SLUG/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/SLUG/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/SLUG/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/SLUG/"/>
+    <lastmod>YYYY-MM-DD</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>

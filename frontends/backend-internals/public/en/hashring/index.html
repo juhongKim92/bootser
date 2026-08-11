@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Consistent hashing — how a cache falls apart when one node leaves</title>
+<meta name="description" content="Shard with modulo and almost every key moves the moment one node dies. See why the ring changes that, and why virtual nodes are not optional — drive it yourself.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/hashring/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/hashring/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/hashring/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/hashring/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="Consistent hashing — how a cache falls apart when one node leaves">
+<meta property="og:description" content="Shard with modulo and almost every key moves the moment one node dies. See why the ring changes that, and why virtual nodes are not optional.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/hashring/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Consistent hashing — how a cache falls apart when one node leaves">
+<meta name="twitter:description" content="Why modulo sharding breaks and why virtual nodes are necessary. Drive it yourself.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/hashring-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/hashring/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>How a cache falls apart when one node leaves</h1>
+  <p class="lede">One of your four cache servers just died. If you split the keys with a modulo, the caches on the three survivors are mostly worthless too. Here is why — and how the ring prevents it.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label><span>nodes</span></label>
+          <div class="stepper">
+            <button id="btnDel" aria-label="remove a node">−</button>
+            <span class="n" id="nNodes">4</span>
+            <button id="btnAdd" aria-label="add a node">+</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label><span>virtual nodes</span><b id="vVnodes">1</b></label>
+          <input type="range" id="sVnodes" min="1" max="200" step="1" value="1">
+          <div class="hint" id="hVnodes"></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="split">
+        <div>
+          <span class="cap">The hash ring</span>
+          <canvas id="ring" width="320" height="320" role="img"
+                  aria-label="Node ranges and key distribution on the hash ring"></canvas>
+        </div>
+        <div>
+          <span class="cap">Keys per node</span>
+          <div class="bars" id="bars"></div>
+          <div class="spread" id="spread"></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">Keys moved by the last change</span>
+      <div class="moved" id="moved"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button class="solid" id="btnPlay">Play scenario</button>
+        <button id="btnStep">Next step</button>
+        <button id="btnReset">Reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>Driving it yourself</h2>
+    <p>There are two dials. The play button only walks a fixed tour; moving things yourself shows far more.</p>
+    <table class="keytable">
+      <tr><th>dial</th><th>what moves</th></tr>
+      <tr><td>nodes</td><td>Every add and remove records <strong>how many keys moved</strong> in the panel below, side by side with what modulo sharding would have done</td></tr>
+      <tr><td>virtual nodes</td><td>How many points one node occupies on the ring. This is what decides <strong>how even the distribution is</strong></td></tr>
+    </table>
+    <p>On the ring, the thick band is owned range and the thin ticks crossing it are virtual node points. The 1500 dots outside are keys, coloured by the node that owns them. Twelve o'clock is 0 in the hash space.</p>
+    <p>The vertical line on each distribution bar is the ideal value (1500 ÷ node count). The closer a bar sits to that line, the more evenly the keys are split.</p>
+
+    <h2>Try these</h2>
+
+    <div class="recipe">
+      <h4>1. Start with no virtual nodes</h4>
+      <div class="seq">Reset (6 nodes, 1 virtual node)
+Look at the distribution bars
+
+ideal          <em>250</em>
+actual         <em>424 … 101</em>
+spread (CV)    <em>46.9%</em>
+max / min      <em>4.20×</em></div>
+      <p class="why">Six nodes that should split the work evenly are more than four times apart. Even with a perfectly uniform hash, <strong>six points do not land evenly around the ring</strong>. Uneven arc lengths mean uneven shares.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. Remove one node</h4>
+      <div class="seq">With 1 virtual node, press −
+
+ring       <em>7% moved</em>
+modulo     <em>84% moved</em>
+neighbour  <em>345 → 446, all at once</em></div>
+      <p class="why">This is the whole reason consistent hashing exists. On the ring <strong>only the range the departed node owned</strong> passes to the next node. Modulo changes its divisor, so nearly every key gets a new destination.</p>
+      <p class="why" style="margin-top:9px">Do not take that 7% at face value, though. It is <strong>exactly the share the dead node happened to hold.</strong> With one virtual node those shares vary wildly, so depending on which node dies it could be 3% or 30% — and a <em>single</em> clockwise neighbour absorbs all of it.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. Raise the virtual node count</h4>
+      <div class="seq">Move virtual nodes 1 → 20 → 160 → 200
+
+spread (CV)  <em>46.9% → 17.0% → 5.9% → 5.5%</em>
+max / min    <em>4.20× → 1.54× → 1.16× → 1.16×</em>
+the ring     <em>colours interleave finely</em></div>
+      <p class="why">Scatter one node across many points and <strong>the law of large numbers takes over.</strong> The more points, the closer each node's total arc length converges to the mean. This is where the industry habit of 150–160 comes from.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. Remove a node with many virtual nodes</h4>
+      <div class="seq">At 160 virtual nodes and 5 nodes, press −
+
+moved         <em>22%  (theory: 1/5 = 20%)</em>
+distribution  <em>387 / 371 / 379 / 363 — absorbed evenly</em></div>
+      <p class="why">Now the movement converges on <code>1/N</code>. The real win is that it became <strong>predictable</strong> — which is what makes capacity planning possible.</p>
+      <p class="why" style="margin-top:9px">Look at the distribution too. The departed node's share was split almost evenly across the remaining four, in contrast to a single neighbour swallowing 101 keys at one virtual node. <strong>Preventing cascading failure</strong> is the second job virtual nodes do.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. Add a node back</h4>
+      <div class="seq">Press + to add a node
+
+ring     <em>22%</em>
+modulo   <em>81%</em></div>
+      <p class="why">Adding costs about <code>1/N</code> as well. The new node takes only its own range; nothing changes between the existing nodes. <strong>Cheap scale-out</strong> is the second benefit of this scheme.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>6. You cannot change the virtual node count later</h4>
+      <div class="seq">Drag the virtual node slider a long way
+Watch the moved panel
+
+moved    <em>over 70%</em></div>
+      <p class="why">Changing the virtual node count relocates every point on the ring, so it triggers <strong>what is effectively a full reshuffle</strong> — even though the node set never changed. Do this on a live cache cluster and you get a total cache miss. <strong>Pick it up front and make every client use the same value.</strong></p>
+    </div>
+
+    <h2>What is wrong with modulo</h2>
+    <p>The simplest sharding looks like this.</p>
+    <pre><code>int shard = Math.abs(key.hashCode()) % serverCount;</code></pre>
+    <p>With four servers it works fine. The problem is <strong>the moment the server count changes</strong>.</p>
+    <pre><code>key.hashCode() = 1234
+
+servers = 4  →  1234 % 4 = 2   (server 3)
+servers = 3  →  1234 % 3 = 1   (server 2)  ← moved</code></pre>
+    <p>Change the divisor and the remainders are reshuffled wholesale. In theory <code>1 - 1/N</code> of the keys move, so going from four servers to three sends <strong>roughly 75% of your keys elsewhere.</strong></p>
+    <div class="callout">For a cache, that 75% is 75% misses. One server died, yet the caches on the survivors are mostly invalidated too, and all of that traffic lands on the origin store at once. It is the classic path from a single failure to a total outage.</div>
+
+    <h2>Putting it on a ring</h2>
+    <p>The idea behind the fix is <strong>to take the server count out of the equation</strong>.</p>
+    <ol>
+      <li>Join the hash space (0 … 2<sup>32</sup>−1) into a circle</li>
+      <li>Place each server at <code>hash(server name)</code></li>
+      <li>Place each key at <code>hash(key)</code></li>
+      <li>The key belongs to <strong>the first server clockwise from it</strong></li>
+    </ol>
+    <p>A key's position is fixed regardless of how many servers exist. When a server disappears, only the arc it owned passes to the next server and <strong>the rest of the ring is untouched.</strong> That is what drops the movement to around <code>1/N</code>.</p>
+    <p>Lookup is a binary search over a sorted array of points, so <code>O(log(N × V))</code>.</p>
+    <pre><code>// the skeleton of a real implementation
+TreeMap&lt;Long, String&gt; ring = new TreeMap&lt;&gt;();
+
+void addNode(String node, int vnodes) {
+    for (int i = 0; i &lt; vnodes; i++)
+        ring.put(hash(node + "#" + i), node);
+}
+
+String lookup(String key) {
+    if (ring.isEmpty()) return null;
+    Map.Entry&lt;Long, String&gt; e = ring.ceilingEntry(hash(key));
+    return e != null ? e.getValue()          // first point clockwise
+                     : ring.firstEntry().getValue();  // wrap around to the start
+}</code></pre>
+    <p>The wrap to <code>firstEntry</code> when <code>ceilingEntry</code> returns nothing is the part that matters. Drop that one line and every key at the top end of the hash space fails.</p>
+
+    <h2>Why virtual nodes are necessary</h2>
+    <p>The ring alone is not enough. Four nodes means four points on the ring, and there is no reason those four land evenly. Set virtual nodes to 1 in the lab and you can watch the spread reach 47% with a max/min gap over four times.</p>
+    <p>The fix is <strong>to register one node many times under different names</strong> — <code>node-A#0</code>, <code>node-A#1</code>, and so on. The more points, the closer each node's total arc length converges to the mean.</p>
+    <table class="keytable">
+      <tr><th>virtual nodes</th><th>spread (CV)</th><th>memory</th></tr>
+      <tr><td>1</td><td>47% — unusable</td><td>negligible</td></tr>
+      <tr><td>20</td><td>17%</td><td>small</td></tr>
+      <tr><td>160</td><td>6%</td><td>160 entries per node</td></tr>
+    </table>
+    <p>Virtual nodes also give you <strong>weighting</strong>. Give a server with twice the memory twice the virtual nodes and it takes twice the share — useful for clusters built from heterogeneous machines.</p>
+    <div class="callout">More is not always better. The ring holds <code>nodes × virtual nodes</code> entries, so lookup cost and memory grow together, and every node change touches proportionally more entries. At a scale of thousands of nodes this cost is a real constraint.</div>
+
+    <h2>Where this is actually used</h2>
+    <ul>
+      <li><strong>memcached clients</strong> — the libketama lineage, where 160 virtual nodes per node is the de facto standard. That "160" you see everywhere came from here</li>
+      <li><strong>Cassandra</strong> — the token ring. It defaulted to 256 tokens per node early on, but dropped to 16 in 4.0 along with a new allocation algorithm: more tokens scatter replica placement, which increases the number of <em>combinations affected when any single node dies</em></li>
+      <li><strong>DynamoDB</strong> — the Dynamo paper is what popularised the approach</li>
+      <li><strong>nginx</strong> — <code>hash $request_uri consistent;</code> for upstream selection</li>
+      <li><strong>Envoy</strong> — ring hash and Maglev load balancers</li>
+    </ul>
+    <div class="callout"><strong>A common misconception:</strong> Redis Cluster does not use consistent hashing. It divides 16384 fixed hash slots among the nodes — <code>CRC16(key) % 16384</code> picks the slot, and the slot-to-node mapping is maintained separately. Moving whole slots keeps resharding controllable, but it is not a ring.</div>
+
+    <h2>What to watch for in production</h2>
+    <p><strong>Hotspots still happen.</strong> Consistent hashing distributes the <em>number of keys</em> evenly, not the <em>traffic</em>. Pile requests onto one popular key and that node alone falls over. That problem needs its own answer — a bounded-load variant, or replicating hot keys.</p>
+    <p><strong>When a node dies, one neighbour takes the load.</strong> With enough virtual nodes it spreads across many, but with few, the single clockwise neighbour absorbs all of it. If that node goes down too, the cascade begins. Set virtual nodes to 1 in the lab, remove a node, and the skew is right there.</p>
+    <p><strong>Every client must see the same ring.</strong> One difference in hash function, virtual node count, or node naming and clients disagree about which node owns what. If cache hit rate drops for no visible reason, suspect this first — it is especially common when clients in different languages share a cluster.</p>
+    <p><strong>There is a simpler alternative.</strong> Rendezvous hashing (HRW) needs neither a ring nor virtual nodes: compute <code>hash(key + node)</code> for every node and take the highest, and the distribution is uniform by construction. Lookup is <code>O(N)</code>, so it wins when the node count is small.</p>
+    <div class="callout">This model is simplified for teaching. The hash is 32-bit FNV-1a with murmur3's final mixing bolted on — FNV-1a alone does not diffuse the high bits, so the ring points clumped together in one place. Real implementations usually use MD5 or MurmurHash. What is faithful is the part that matters: movement falling to <code>1/N</code>, and virtual nodes evening out the distribution.</div>
+
+  </article>
+
+  <footer>Consistent hashing · simplified teaching model · <a href="/hashring/" hreflang="ko" lang="ko">한국어</a> / English · <a href="mailto:contact@vermilion19.com">contact@vermilion19.com</a></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  play:'Play scenario', pause:'Pause',
+  ideal:'ideal', perNode:'/ node',
+  sCv:'spread (CV)', sRatio:'max / min', sMax:'max', sMin:'min',
+  hV1:'1 virtual node — arc lengths vary wildly, so the distribution skews',
+  hVmid:'getting better',
+  hVok:'the range used in practice (150–160)',
+  actAdd:'added node $1', actDel:'removed node $1', actV:'virtual nodes set to $1',
+  mIdle:'Add or remove a node and the number of keys that moved appears here.',
+  mRing:'ring (consistent)', mMod:'modulo',
+  mNote:'$1 — the ring only has to move $2%, where modulo would have relocated $3%.',
+  mVnodeNote:'Changing the virtual node count rebuilds the entire ring, moving $1% of the keys. The node set did not change, so this is not comparable to modulo — and more to the point, it is <strong>a change you cannot make on a live cluster</strong>. Decide it up front.',
+  scene:[
+    'Six nodes, one virtual node each. Look at the ring: the coloured arcs are visibly different lengths. However uniform the hash is, six points do not land evenly.',
+    'Look at the distribution bars. The ideal is 250, yet one node holds 424 and another 101 — a 4.2× gap. Run like this and one server dies well before the others.',
+    'Node F is gone. The ring moved 7% where modulo would have moved 84%. But do not take that 7% at face value: F only held 101 keys (6.7%) to begin with. And its clockwise neighbour D swallowed all 101, going from 345 to 446.',
+    'Virtual nodes raised to 20. The spread falls from 47% to 17% and the ring colours start to interleave. Note that this change itself rebuilds the whole ring, so it is not something you do in production.',
+    'At 160 the spread narrows to 5.9% and max/min to 1.16×. This is roughly the value memcached clients have settled on by convention.',
+    'Now remove a node again. 22% moved — close to the theoretical 1/5 = 20%. Unlike before, it is predictable. Notice too that the remaining four absorbed it evenly at 387/371/379/363; with one virtual node a single neighbour would have taken the whole share.',
+    'Adding a node costs 22% as well. The new node takes only its own range and nothing changes between the others. Cheap scale-out is the second benefit of this scheme.'
+  ],
+};
+</script>
+<script src="/shared/hashring-lab.js"></script>
+</body>
+</html>
