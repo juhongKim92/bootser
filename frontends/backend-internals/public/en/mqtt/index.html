@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MQTT QoS 0/1/2 — What "exactly once" actually costs</title>
+<meta name="description" content="Run QoS 0, 1 and 2 side by side while you raise the failure rate. See why QoS 1 produces duplicates, how many packets QoS 2 burns to remove them, and where the exactly-once promise stops.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/mqtt/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/mqtt/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mqtt/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mqtt/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="MQTT QoS 0/1/2 — What &quot;exactly once&quot; actually costs">
+<meta property="og:description" content="Why QoS 1 produces duplicates, and how many packets QoS 2 burns to remove them. Drag the dial and watch.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/mqtt/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="MQTT QoS 0/1/2 — What &quot;exactly once&quot; actually costs">
+<meta name="twitter:description" content="See where the exactly-once promise stops, by hand.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/mqtt-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/mqtt/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>What "exactly once" actually costs</h1>
+  <p class="lede">Use QoS 2 and your message arrives exactly once. That sentence is true, but where the promise ends and where you pay for it rarely come up. Let us run all three levels side by side.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>failure rate</label>
+          <span class="v" id="vLoss">0<small> %</small></span>
+          <input type="range" id="sLoss" min="0" max="40" step="5" value="0"
+                 aria-label="probability that a single packet is lost">
+          <div class="hint" id="hLoss"></div>
+        </div>
+        <div class="dial">
+          <label>simulation</label>
+          <button id="btnRun">pause</button>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">three levels, one set of conditions</span>
+      <div class="lanes">
+
+        <div class="lane" id="lane0">
+          <h4><b>QoS 0</b><span>at most once</span></h4>
+          <p class="sub">Fire and forget. No acknowledgement, no retransmission.</p>
+          <div class="track"></div>
+          <div class="strip"></div>
+          <div class="meters"></div>
+        </div>
+
+        <div class="lane" id="lane1">
+          <h4><b>QoS 1</b><span>at least once</span></h4>
+          <p class="sub">Resends until acknowledged — which is why it can arrive twice.</p>
+          <div class="track"></div>
+          <div class="strip"></div>
+          <div class="meters"></div>
+        </div>
+
+        <div class="lane" id="lane2">
+          <h4><b>QoS 2</b><span>exactly once</span></h4>
+          <p class="sub">Four exchanges to remove duplicates. Slower and more expensive.</p>
+          <div class="track"></div>
+          <div class="strip"></div>
+          <div class="meters"></div>
+        </div>
+
+      </div>
+      <p class="lanenote">All three lanes consume <strong>one packet per tick, at the same rate</strong>. So how many messages each finishes in the same time is exactly what that level costs. The chips above are packets just exchanged (red strikethrough is lost, dashed is a timeout wait); the cells below are per-message outcomes — an empty green cell is one delivery, × is lost, 2 is a duplicate. Grey numbers in the readouts are the expected values for these conditions.</p>
+    </section>
+
+    <section>
+      <span class="cap">event log</span>
+      <div class="events" id="events"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 05</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>Drive it yourself</h2>
+    <p>No need to wait for the walkthrough — drag the slider. The readouts reset whenever conditions change.</p>
+    <table class="keytable">
+      <tr><th>control</th><th>what happens</th></tr>
+      <tr><td>failure rate</td><td>Probability that a single packet disappears. It applies in both directions — a PUBLISH can be lost, and so can a PUBACK</td></tr>
+      <tr><td>next step</td><td>Walks through five prepared conditions</td></tr>
+      <tr><td>pause</td><td>Stops time, for when you want to read the chips one by one</td></tr>
+    </table>
+
+    <h2>Things to try</h2>
+
+    <div class="recipe">
+      <h4>1. At 0% failure, just count packets</h4>
+      <div class="seq">failure rate 0
+
+QoS 0  <em>1 packet</em> per message
+QoS 1  <em>2 packets</em> per message
+QoS 2  <em>4 packets</em> per message
+
+all three lanes: zero loss, zero duplicates</div>
+      <p class="why">On a network that loses nothing, all three levels produce the same result. The only difference is the bill. <strong>QoS 2 costs four times QoS 0 even when nothing goes wrong.</strong> Notice how differently fast the lanes advance.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. Raise it to 20% — this is the heart of the page</h4>
+      <div class="seq">failure rate 20
+
+QoS 0  lost <em>20%</em>          1.00 packets
+QoS 1  duplicated <em>25%</em>    2.81 packets
+QoS 2  no loss, no duplicates   <em>5.63</em> packets</div>
+      <p class="why">Each level pays in its own currency. QoS 0 <strong>loses messages</strong>, QoS 1 <strong>delivers them twice</strong>, QoS 2 <strong>burns twice the packets</strong>. None of the three options is free.</p>
+      <p class="why" style="margin-top:9px">Note that QoS 1's duplicate rate is higher than the failure rate: 25% duplicates at 20% failure. A retransmission fires when <em>either</em> leg of the round trip fails.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. Push it to 40%</h4>
+      <div class="seq">failure rate 40
+
+QoS 1  duplicated <em>66.7%</em>   4.44 packets
+QoS 2  no duplicates             <em>8.89</em> packets
+QoS 2  lost <em>0.8%</em>          hit the 12-retransmission cap
+
+QoS 2's outcome cells fill noticeably slower</div>
+      <p class="why">QoS 2 now spends close to nine packets per message. Duplicates are still zero, but <strong>throughput collapses</strong> and around 0.8% of messages are abandoned outright on hitting the retransmission cap. The price of exactly-once climbs steeply as the network degrades — and the awkward part is that a degraded network is precisely when you have to pay it.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. Read the QoS 1 chips one line at a time</h4>
+      <div class="seq">hit pause and look at the QoS 1 lane
+
+PUBLISH → subscriber → PUBACK(struck out) → timeout → PUBLISH → subscriber (duplicate)
+
+<em>the message had already arrived, and it was sent again</em></div>
+      <p class="why">The moment a duplicate is born is right there. <strong>The subscriber already has it; only the publisher does not know that.</strong> The acknowledgement vanished. From the publisher's side, "the PUBLISH was lost" and "the PUBACK was lost" look identical. With no way to tell them apart, resending is the only move available.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. Wait for a PUBCOMP to be lost in the QoS 2 lane</h4>
+      <div class="seq">watch QoS 2 at 30–40% failure
+
+PUBREL → subscriber → PUBCOMP(struck out) → timeout → PUBREL → <em>no delivery</em>
+
+the PUBREL went again, but no subscriber chip appears</div>
+      <p class="why">This is how QoS 2 removes duplicates. The broker <strong>discards the packet id as it processes the PUBREL</strong>. When the same PUBREL arrives again there is nothing left to match, so it replies PUBCOMP without delivering. The retransmission still happens — <strong>the duplicate delivery does not.</strong></p>
+    </div>
+
+    <h2>What each level promises</h2>
+    <p>The three levels are different promises about how many times a message arrives.</p>
+    <table class="keytable">
+      <tr><th>level</th><th>promise</th><th>on failure</th></tr>
+      <tr><td>QoS 0</td><td>at most once</td><td>it simply disappears</td></tr>
+      <tr><td>QoS 1</td><td>at least once</td><td>resend → it may arrive twice</td></tr>
+      <tr><td>QoS 2</td><td>exactly once</td><td>resend, but filter the duplicate</td></tr>
+    </table>
+    <p>The names are precise. QoS 1 is not "once" but <strong>"at least once"</strong>. Duplicates are not an exceptional condition — they are <strong>normal, designed-in behaviour</strong>. If you choose QoS 1, handling duplicates is not optional.</p>
+
+    <h2>Why QoS 1 produces duplicates</h2>
+    <p>The publisher sends a PUBLISH and waits for a PUBACK. If none arrives in time, it sends again. The problem is that <strong>"none arrived" has two possible causes.</strong></p>
+    <pre><code>① the PUBLISH was lost on the way out   → the subscriber never got it → resending is right
+② the PUBACK was lost on the way back   → the subscriber already has it → resending duplicates</code></pre>
+    <p>From the publisher's vantage point these two are <strong>indistinguishable</strong>. All it sees is silence. So it takes the safe option — resend — and pays for it in duplicates.</p>
+    <p>That is why the lab's expected duplicate rate is <code>p / (1-p)</code>: 25% at a 20% failure rate, 66.7% at 40%. <strong>The duplicate rate always exceeds the loss rate</strong>, because a break in either leg of the round trip triggers a retransmission.</p>
+
+    <h2>How QoS 2 removes them</h2>
+    <p>It adds one more round trip so that both sides can <strong>agree on when it is safe to forget</strong>.</p>
+    <pre><code>publisher                        broker
+   │──── PUBLISH (id=7) ────────▶│  remembers id 7
+   │◀─── PUBREC   (id=7) ────────│  "got it"
+   │──── PUBREL   (id=7) ───────▶│  delivers, then discards id 7
+   │◀─── PUBCOMP  (id=7) ────────│  "done"</code></pre>
+    <p>The key is <strong>the window in which the packet id is remembered</strong>. Inside that window, a repeat PUBLISH with the same id is recognised as a duplicate and dropped. After the PUBREL the id is gone, so a repeat gets a PUBCOMP and nothing else.</p>
+    <p>So exactly-once in QoS 2 is not magic — it is <strong>deduplication moved into the protocol</strong>. Retransmissions still happen exactly as in QoS 1. They just get filtered.</p>
+    <div class="callout">Whether delivery happens on PUBLISH or on PUBREL is left open by the spec — both implementations are allowed. This lab draws it at PUBREL. Either way the conclusion is the same: <strong>filtering repeats of an id while that id is remembered</strong> is the whole of the mechanism.</div>
+
+    <h2>Where the bill lands</h2>
+    <p>Writing the lab's expected values as a table. With <code>q = 1 − failure rate</code>, QoS 1 costs <code>(1+q)/q²</code> packets per message and QoS 2 costs twice that. A single attempt costs <code>1+q</code> rather than 2 because a lost PUBLISH never produces a PUBACK at all.</p>
+    <table class="keytable">
+      <tr><th>failure</th><th>QoS 0 lost</th><th>QoS 1 dup</th><th>QoS 1 packets</th><th>QoS 2 packets</th></tr>
+      <tr><td>0%</td><td>0%</td><td>0%</td><td>2.00</td><td>4.00</td></tr>
+      <tr><td>10%</td><td>10%</td><td>11.1%</td><td>2.35</td><td>4.69</td></tr>
+      <tr><td>20%</td><td>20%</td><td>25.0%</td><td>2.81</td><td>5.63</td></tr>
+      <tr><td>40%</td><td>40%</td><td>66.7%</td><td>4.44</td><td>8.89</td></tr>
+    </table>
+    <p>QoS 2 is <strong>always exactly twice</strong> QoS 1 in packets, because it is two round trips instead of one. Latency doubles too — the publisher must cross the network four times before it knows the message is done.</p>
+    <p>On battery-powered sensors or metered cellular links that difference is the bill, directly. Given that MQTT was designed for exactly those environments, reaching for QoS 2 as a default works against the grain of the protocol.</p>
+
+    <h2>The most common misconception — QoS is per hop</h2>
+    <p>This is the one people get wrong most often in production. <strong>QoS is not an agreement between publisher and subscriber.</strong> The publisher↔broker leg and the broker↔subscriber leg each carry <strong>their own QoS</strong>.</p>
+    <pre><code>publisher --QoS 2--▶ broker --QoS 0--▶ subscriber
+        (set when publishing)   (set when subscribing)
+
+effective delivery quality = the lower of the two</code></pre>
+    <p>If the subscriber subscribed at QoS 0, then no matter how carefully you published at QoS 2, the message can <strong>simply vanish on that last leg</strong>. Small comfort that it reached the broker exactly once.</p>
+    <div class="callout">A good share of "I published at QoS 2 and the message never arrived" reports land here. Do not read only the publishing code — <strong>check the subscription QoS first</strong>.</div>
+
+    <h2>The "loss" in this lab is not TCP packet loss</h2>
+    <p>One thing to be precise about. MQTT runs over TCP, and <strong>TCP already retransmits</strong>. A dropped IP packet does not make an MQTT message disappear — TCP resends it and MQTT never learns anything happened.</p>
+    <p>So when does a message actually go missing at the MQTT level? <strong>When the connection breaks.</strong> At that instant the messages still in flight, not yet acknowledged, are the ones at risk.</p>
+    <p>This lab's failure slider <strong>compresses that situation into a single probability</strong>. In reality losses are not sprinkled evenly like this; they cluster at the moment a connection drops.</p>
+    <p>Retransmission timing is simplified in the same way. The lab resends on every timeout, but MQTT 5.0 settled on <strong>not retransmitting while the connection is alive</strong>, sending unacknowledged packets when the session resumes instead. So real duplicates do not scatter finely like this screen — they <strong>arrive in a burst right after reconnection</strong>.</p>
+
+    <h2>Can't the DUP flag filter duplicates?</h2>
+    <p>A retransmitted PUBLISH carries <code>DUP</code> set to 1. It is tempting to use that to detect duplicates, and <strong>you should not.</strong></p>
+    <p><code>DUP</code> only records the sender's situation — "I sent this packet again". If the first attempt was lost, then to the subscriber the <code>DUP=1</code> copy is <strong>the first time it has ever seen the message</strong>. Dropping it loses perfectly good data. The same holds in the other direction: the <code>DUP</code> flag on a packet the broker sends to a subscriber reflects the broker's bookkeeping, not the publisher's.</p>
+    <p>Deduplication has to key on <strong>an application-level identifier</strong>: put a message id in the payload and have the receiver remember the ids it has seen recently. Which is also the conclusion of the next section.</p>
+
+    <h2>What to check in production</h2>
+    <p><strong>For most systems the answer is QoS 1 plus idempotent handling.</strong> Once receiving the same message twice produces the same result, there is very little reason left to buy QoS 2's second round trip.</p>
+    <pre><code>-- deduplicate by message id, on the receiving side
+INSERT INTO reading (msg_id, device_id, value, at)
+VALUES (:msgId, :deviceId, :value, :at)
+ON CONFLICT (msg_id) DO NOTHING;</code></pre>
+    <p>One constraint does what QoS 2 does in the protocol. And <strong>it covers more ground</strong> — including the case below that QoS 2 cannot reach.</p>
+
+    <p><strong>Exactly-once is a promise up to the broker.</strong> Suppose the subscriber receives a message, processes it, and dies before sending its acknowledgement. On reconnect, the message arrives again. The protocol kept its promise, but <strong>the application did the work twice.</strong> No QoS level closes that gap.</p>
+
+    <p><strong>QoS only means something if the session survives.</strong> Retransmission for QoS 1 and 2 requires the broker to hold session state.</p>
+    <ul>
+      <li>MQTT 3.1.1 — connect with <code>cleanSession=false</code>. With <code>true</code>, anything queued is discarded the moment the connection drops</li>
+      <li>MQTT 5.0 — <code>Clean Start=false</code> plus a <code>Session Expiry Interval</code> comfortably longer than your reconnect time. Once it expires you are back to <code>cleanSession=true</code> behaviour</li>
+      <li>A client id that changes on every start (a fresh UUID per restart) can never find its session. Losing messages this way, with QoS dialled up, is a common outcome</li>
+    </ul>
+
+    <p><strong>Check the subscription QoS.</strong> The per-hop problem above. The effective quality is the lower of the publish and subscribe values.</p>
+
+    <p><strong>The in-flight limit sets your throughput.</strong> QoS 1 and 2 cap how many messages may await acknowledgement (MQTT 5's <code>Receive Maximum</code>). If that cap is small and the round trip is long, throughput stalls with bandwidth to spare. QoS 2 needs two round trips, so at the same cap it delivers half the throughput.</p>
+
+    <p><strong>Always bound your retransmissions.</strong> This lab stops at 12. At a 40% failure rate that cap actually bites: roughly 0.8% of QoS 2 messages are abandoned undelivered — which is also why measured values fall slightly short of the table above, whose expectations assume unbounded retries. Unbounded retries hammer a failing peer while it is already failing, and a retry loop with no terminal state quietly burns resources until it surfaces as an incident somewhere else entirely.</p>
+
+    <p><strong>Roughly how to choose:</strong></p>
+    <table class="keytable">
+      <tr><th>situation</th><th>choice</th></tr>
+      <tr><td>Periodic sensor readings; another one is coming</td><td>QoS 0 — a lost sample is overwritten by the next</td></tr>
+      <tr><td>State changes, commands, notifications</td><td>QoS 1 with idempotent handling</td></tr>
+      <tr><td>Duplicates are genuinely fatal and cannot be made idempotent</td><td>QoS 2 — and the limits above still apply</td></tr>
+    </table>
+    <p>That third row is rarer than it sounds. Most of "this must not be duplicated" is solved more cheaply and more reliably in the application.</p>
+
+    <div class="callout">This model is simplified for teaching. Real MQTT moves session state, reconnect-time retransmission, in-flight limits and broker queueing policy all at once. In particular, <strong>the uniform failure rate here does not match how outages actually behave</strong> — real losses and duplicates cluster around the moment a connection drops and comes back.</div>
+
+  </article>
+
+  <footer>MQTT QoS · simplified teaching model · <a href="/mqtt/" hreflang="ko" lang="ko">한국어</a> / English · <a href="mailto:contact@vermilion19.com">contact@vermilion19.com</a></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  pause:'pause', resume:'resume',
+  cPUBLISH:'PUBLISH →', cPUBACK:'← PUBACK',
+  cPUBREC:'← PUBREC', cPUBREL:'PUBREL →', cPUBCOMP:'← PUBCOMP',
+  cTimeout:'timeout', cDeliver:'▶ subscriber', cDup:'▶ subscriber (dup)',
+  mDone:'done', mLost:'lost', mDup:'duplicated', mPkt:'packets / msg',
+  mExp:'exp $1',
+  s_ok:'delivered once', s_lost:'lost', s_dup:'delivered twice',
+  hint0:'a perfect network — the only difference is packet count',
+  hintLo:'mildly unstable — QoS 0 starts leaking',
+  hintMid:'QoS 1 duplicates climb noticeably',
+  hintHi:'QoS 2 packets explode — still correct, but throughput collapses',
+  lgLoss:'failure rate set to $1% — readouts reset',
+  lgLost:'QoS $1 · message #$2 lost — never reached the subscriber',
+  lgDup:'QoS $1 · message #$2 delivered twice — acknowledgement lost, so it was resent',
+  lgGiveUp:'QoS $1 · message #$2 abandoned — more than $3 retransmissions',
+  scene:[
+    'Failure rate is 0%. No losses, no duplicates in any lane. The only difference is the bill — one message costs QoS 0 one packet, QoS 1 two, QoS 2 four. Since all three lanes consume packets at the same rate, watch the QoS 2 lane fill its outcome cells the slowest.',
+    'Raised to 10%. QoS 0 starts leaking — a tenth of what you send simply disappears, and the publisher never finds out. QoS 1 still gets everything through, but around 11% of it arrives twice.',
+    'Now 20%. This is where the three currencies become obvious. QoS 0 loses 20%, QoS 1 delivers 25% of messages twice, and QoS 2 spends 5.63 packets per message. None of the options is free.',
+    'Pushed to 40%. QoS 2 still delivers without duplicates, but it now costs close to nine packets per message — and around 0.8% of messages hit the 12-retransmission cap and are abandoned. Compare how fast the outcome cells fill against the QoS 0 lane. The price of staying correct rises steeply as the network degrades.',
+    'Back to 20%. Now read the QoS 1 lane one chip at a time. When a PUBLISH arrives and is delivered to the subscriber but the PUBACK is lost, the publisher has no way to know it arrived, so it sends the whole thing again. The duplicate is not a bug — it is the behaviour this protocol promised.'
+  ],
+};
+</script>
+<script src="/shared/mqtt-lab.js"></script>
+</body>
+</html>

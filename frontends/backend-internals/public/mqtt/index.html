@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MQTT QoS 0/1/2 — 한 번만 전달한다는 약속의 값</title>
+<meta name="description" content="유실률을 올려가며 QoS 0·1·2 를 나란히 돌려봅니다. QoS 1 이 왜 중복을 만드는지, QoS 2 가 그 중복을 없애려 패킷을 몇 배로 쓰는지, 그리고 exactly-once 가 어디까지의 약속인지 확인합니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/mqtt/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/mqtt/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mqtt/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mqtt/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="MQTT QoS 0/1/2 — 한 번만 전달한다는 약속의 값">
+<meta property="og:description" content="QoS 1 이 왜 중복을 만드는지, QoS 2 가 그 중복을 없애려 패킷을 몇 배로 쓰는지 직접 조작하며 확인합니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/mqtt/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="MQTT QoS 0/1/2 — 한 번만 전달한다는 약속의 값">
+<meta name="twitter:description" content="exactly-once 가 어디까지의 약속인지 직접 조작하며 확인합니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/mqtt-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/mqtt/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>한 번만 전달한다는 약속의 값</h1>
+  <p class="lede">QoS 2 를 쓰면 메시지가 정확히 한 번 도착합니다. 그 문장은 사실이지만, 어디까지가 그 약속이고 값을 어디서 치르는지는 잘 이야기되지 않습니다. 세 레벨을 나란히 돌려보겠습니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>전송 실패율</label>
+          <span class="v" id="vLoss">0<small> %</small></span>
+          <input type="range" id="sLoss" min="0" max="40" step="5" value="0"
+                 aria-label="패킷 하나가 유실될 확률">
+          <div class="hint" id="hLoss"></div>
+        </div>
+        <div class="dial">
+          <label>시뮬레이션</label>
+          <button id="btnRun">일시정지</button>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">세 레벨을 같은 조건에서</span>
+      <div class="lanes">
+
+        <div class="lane" id="lane0">
+          <h4><b>QoS 0</b><span>최대 한 번</span></h4>
+          <p class="sub">보내고 잊습니다. 확인도, 재전송도 없습니다.</p>
+          <div class="track"></div>
+          <div class="strip"></div>
+          <div class="meters"></div>
+        </div>
+
+        <div class="lane" id="lane1">
+          <h4><b>QoS 1</b><span>최소 한 번</span></h4>
+          <p class="sub">확인을 받을 때까지 다시 보냅니다. 그래서 두 번 도착할 수 있습니다.</p>
+          <div class="track"></div>
+          <div class="strip"></div>
+          <div class="meters"></div>
+        </div>
+
+        <div class="lane" id="lane2">
+          <h4><b>QoS 2</b><span>정확히 한 번</span></h4>
+          <p class="sub">네 번의 왕복으로 중복을 없앱니다. 그만큼 느리고 비쌉니다.</p>
+          <div class="track"></div>
+          <div class="strip"></div>
+          <div class="meters"></div>
+        </div>
+
+      </div>
+      <p class="lanenote">세 레인은 <strong>같은 속도로 패킷을 하나씩</strong> 소비합니다. 그래서 같은 시간에 끝낸 메시지 수가 곧 그 레벨의 값입니다. 위쪽 칩은 방금 오간 패킷이고(빨간 취소선은 유실, 점선은 타임아웃 대기), 아래 칸들은 메시지별 결과입니다 — 초록 빈칸은 한 번 전달, × 는 유실, 2 는 중복. 계기의 회색 숫자는 이 조건에서의 기대값이에요.</p>
+    </section>
+
+    <section>
+      <span class="cap">사건 기록</span>
+      <div class="events" id="events"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 05</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>직접 조작하기</h2>
+    <p>기다릴 필요 없이 슬라이더를 바로 움직여보세요. 계기는 조건이 바뀔 때마다 새로 잡힙니다.</p>
+    <table class="keytable">
+      <tr><th>조작</th><th>무엇이 일어나나</th></tr>
+      <tr><td>전송 실패율</td><td>패킷 하나가 사라질 확률입니다. 양방향 모두에 똑같이 적용됩니다 — PUBLISH 도, PUBACK 도 사라질 수 있습니다</td></tr>
+      <tr><td>다음 단계</td><td>준비된 다섯 조건을 차례로 훑습니다</td></tr>
+      <tr><td>일시정지</td><td>시간을 멈춥니다. 칩 하나하나를 뜯어볼 때 쓰세요</td></tr>
+    </table>
+
+    <h2>이렇게 해보세요</h2>
+
+    <div class="recipe">
+      <h4>1. 실패율 0% 에서 패킷 수만 센다</h4>
+      <div class="seq">전송 실패율 0
+
+QoS 0  메시지당 <em>패킷 1개</em>
+QoS 1  메시지당 <em>패킷 2개</em>
+QoS 2  메시지당 <em>패킷 4개</em>
+
+세 레인 모두 유실 0 · 중복 0</div>
+      <p class="why">아무것도 잃지 않는 네트워크에서는 세 레벨의 결과가 똑같습니다. 다른 건 값뿐이에요. <strong>QoS 2 는 아무 문제가 없을 때조차 QoS 0 의 네 배를 씁니다.</strong> 레인의 진행 속도가 눈에 띄게 다른 것도 보세요.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. 20% 로 올린다 — 여기가 이 페이지의 핵심</h4>
+      <div class="seq">전송 실패율 20
+
+QoS 0  유실 <em>20%</em>       패킷 1.00
+QoS 1  중복 <em>25%</em>       패킷 2.81
+QoS 2  유실 0 · 중복 0        패킷 <em>5.63</em></div>
+      <p class="why">세 레벨이 각자 다른 방식으로 대가를 치릅니다. QoS 0 은 <strong>메시지를 잃고</strong>, QoS 1 은 <strong>메시지를 두 번 주고</strong>, QoS 2 는 <strong>패킷을 두 배로 씁니다.</strong> 공짜인 선택지는 없습니다.</p>
+      <p class="why" style="margin-top:9px">QoS 1 의 중복률이 유실률보다 크다는 점을 눈여겨보세요. 20% 실패에서 25% 중복입니다. 왕복 두 번 중 <em>어느 쪽이</em> 실패해도 재전송이 일어나기 때문이에요.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. 40% 까지 올린다</h4>
+      <div class="seq">전송 실패율 40
+
+QoS 1  중복 <em>66.7%</em>     패킷 4.44
+QoS 2  중복 0                패킷 <em>8.89</em>
+QoS 2  유실 <em>0.8%</em>      재전송 상한(12회)에 걸린 것
+
+QoS 2 레인의 결과 칸이 눈에 띄게 느리게 찬다</div>
+      <p class="why">QoS 2 의 패킷이 메시지당 9개에 육박합니다. 중복은 여전히 0 이지만 <strong>처리량이 무너지고</strong>, 재전송 상한에 걸려 아예 포기되는 메시지까지 0.8% 생깁니다. 네트워크가 나쁠수록 exactly-once 의 값이 가파르게 오르는데, 하필 네트워크가 나쁠 때 그 값을 치러야 한다는 게 곤란한 점이에요.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. QoS 1 레인의 칩을 한 줄씩 읽는다</h4>
+      <div class="seq">일시정지를 누르고 QoS 1 의 칩을 본다
+
+PUBLISH → 구독자 → PUBACK(취소선) → 타임아웃 → PUBLISH → 구독자(중복)
+
+<em>메시지는 이미 도착했는데 다시 보냈다</em></div>
+      <p class="why">중복이 생기는 순간이 여기 그대로 보입니다. <strong>구독자는 이미 받았고, 발행자만 그 사실을 모릅니다.</strong> 확인 응답이 사라졌으니까요. 발행자에게는 "PUBLISH 가 유실됐다" 와 "PUBACK 이 유실됐다" 가 완전히 똑같이 보입니다. 구별할 방법이 없으니 다시 보내는 것 말고는 할 수 있는 게 없습니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. QoS 2 레인에서 PUBCOMP 가 유실될 때를 기다린다</h4>
+      <div class="seq">실패율 30~40 에서 QoS 2 를 지켜본다
+
+PUBREL → 구독자 → PUBCOMP(취소선) → 타임아웃 → PUBREL → <em>전달 없음</em>
+
+PUBREL 은 다시 갔는데 구독자 칩이 안 붙는다</div>
+      <p class="why">QoS 2 가 중복을 없애는 방식이 여기 있습니다. 브로커는 <strong>PUBREL 을 처리하면서 그 패킷 id 를 버립니다.</strong> 같은 PUBREL 이 다시 와도 기억에 없으니 전달하지 않고 PUBCOMP 만 돌려줘요. 재전송은 일어나지만 <strong>중복 전달은 일어나지 않습니다.</strong></p>
+    </div>
+
+    <h2>QoS 는 무엇을 약속하는가</h2>
+    <p>세 레벨은 "몇 번 도착하는가"에 대한 서로 다른 약속입니다.</p>
+    <table class="keytable">
+      <tr><th>레벨</th><th>약속</th><th>실패했을 때</th></tr>
+      <tr><td>QoS 0</td><td>최대 한 번 (at most once)</td><td>그냥 사라진다</td></tr>
+      <tr><td>QoS 1</td><td>최소 한 번 (at least once)</td><td>다시 보낸다 → 두 번 도착할 수 있다</td></tr>
+      <tr><td>QoS 2</td><td>정확히 한 번 (exactly once)</td><td>다시 보내되 중복은 걸러낸다</td></tr>
+    </table>
+    <p>이름이 정확합니다. QoS 1 은 "한 번"이 아니라 <strong>"최소 한 번"</strong>입니다. 중복은 예외 상황이 아니라 <strong>설계에 포함된 정상 동작</strong>이에요. QoS 1 을 쓰기로 했다면 중복 처리는 선택이 아닙니다.</p>
+
+    <h2>왜 QoS 1 은 중복을 만드는가</h2>
+    <p>발행자가 PUBLISH 를 보내고 PUBACK 을 기다립니다. 시간이 지나도 안 오면 다시 보냅니다. 문제는 <strong>"안 왔다"의 원인이 두 가지</strong>라는 겁니다.</p>
+    <pre><code>① PUBLISH 가 가는 길에 사라졌다   → 구독자는 못 받았다 → 재전송이 맞다
+② PUBACK 이 오는 길에 사라졌다    → 구독자는 이미 받았다 → 재전송하면 중복</code></pre>
+    <p>발행자 입장에서 두 경우는 <strong>완전히 구별되지 않습니다.</strong> 보이는 건 "응답이 없다" 하나뿐이에요. 그래서 안전한 쪽(재전송)을 택하고, 그 대가로 중복이 생깁니다.</p>
+    <p>실험대의 기대 중복률이 <code>p / (1-p)</code> 인 이유가 이것입니다. 실패율 20% 면 25%, 40% 면 66.7% 예요. <strong>유실률보다 중복률이 항상 큽니다.</strong> 왕복 두 구간 중 어느 쪽이 끊겨도 재전송이 일어나니까요.</p>
+
+    <h2>QoS 2 는 어떻게 중복을 없애는가</h2>
+    <p>왕복을 한 번 더 놓아서 <strong>"이제 버려도 된다"는 시점을 양쪽이 합의</strong>합니다.</p>
+    <pre><code>발행자                          브로커
+   │──── PUBLISH (id=7) ────────▶│  id 7 을 기억해 둔다
+   │◀─── PUBREC   (id=7) ────────│  "받았다"
+   │──── PUBREL   (id=7) ───────▶│  전달하고 id 7 을 버린다
+   │◀─── PUBCOMP  (id=7) ────────│  "끝났다"</code></pre>
+    <p>핵심은 <strong>패킷 id 를 기억하는 구간</strong>입니다. 그 구간 안에서 같은 id 의 PUBLISH 가 다시 오면 브로커는 중복으로 판단해 버립니다. PUBREL 이후에 같은 id 가 다시 와도 이미 버렸으니 전달하지 않고 PUBCOMP 만 돌려줍니다.</p>
+    <p>즉 QoS 2 의 exactly-once 는 마법이 아니라 <strong>중복 제거(dedup)를 프로토콜에 넣은 것</strong>입니다. 재전송은 QoS 1 과 똑같이 일어나요. 다만 걸러낼 뿐입니다.</p>
+    <div class="callout">전달을 PUBLISH 시점에 할지 PUBREL 시점에 할지는 스펙이 두 방식을 모두 허용합니다. 이 실험대는 PUBREL 시점으로 그렸습니다. 어느 쪽이든 결론은 같아요 — <strong>패킷 id 를 기억하는 동안 같은 id 를 걸러낸다</strong>는 것이 중복 제거의 전부입니다.</div>
+
+    <h2>값을 치르는 곳</h2>
+    <p>실험대의 기대값을 표로 옮기면 이렇습니다. <code>q = 1 − 실패율</code> 이라 할 때 QoS 1 은 메시지당 <code>(1+q)/q²</code> 패킷, QoS 2 는 그 두 배입니다. 시도당 2패킷이 아니라 <code>1+q</code> 인 이유는, PUBLISH 가 유실되면 PUBACK 은 아예 생기지 않기 때문이에요.</p>
+    <table class="keytable">
+      <tr><th>실패율</th><th>QoS 0 유실</th><th>QoS 1 중복</th><th>QoS 1 패킷</th><th>QoS 2 패킷</th></tr>
+      <tr><td>0%</td><td>0%</td><td>0%</td><td>2.00</td><td>4.00</td></tr>
+      <tr><td>10%</td><td>10%</td><td>11.1%</td><td>2.35</td><td>4.69</td></tr>
+      <tr><td>20%</td><td>20%</td><td>25.0%</td><td>2.81</td><td>5.63</td></tr>
+      <tr><td>40%</td><td>40%</td><td>66.7%</td><td>4.44</td><td>8.89</td></tr>
+    </table>
+    <p>QoS 2 의 패킷은 <strong>언제나 QoS 1 의 정확히 두 배</strong>입니다. 왕복이 두 번이니까요. 그리고 지연도 두 배입니다 — 발행자가 "끝났다"를 확인하려면 네트워크를 네 번 건너야 합니다.</p>
+    <p>배터리로 도는 센서나 셀룰러 회선에서는 이 차이가 그대로 비용입니다. MQTT 가 애초에 그런 환경을 겨냥해 만들어진 프로토콜이라는 걸 생각하면, QoS 2 를 기본값처럼 쓰는 건 프로토콜의 설계 의도와 어긋나는 선택이에요.</p>
+
+    <h2>가장 흔한 오해 — QoS 는 홉 단위다</h2>
+    <p>이게 실무에서 가장 자주 틀리는 지점입니다. <strong>QoS 는 발행자와 구독자 사이의 약속이 아닙니다.</strong> 발행자↔브로커 구간과 브로커↔구독자 구간이 <strong>각각 별개의 QoS</strong>를 갖습니다.</p>
+    <pre><code>발행자 --QoS 2--▶ 브로커 --QoS 0--▶ 구독자
+       (발행할 때 지정)      (구독할 때 지정)
+
+실제 전달 품질 = 두 값 중 낮은 쪽</code></pre>
+    <p>구독자가 QoS 0 으로 구독하고 있으면, 발행을 QoS 2 로 아무리 정성껏 해도 <strong>구독자에게 가는 마지막 구간에서 그냥 사라집니다.</strong> 브로커까지는 정확히 한 번 도착했다는 게 위안이 되지 않죠.</p>
+    <div class="callout">"QoS 2 로 보냈는데 메시지가 안 왔다"는 문의의 상당수가 여기입니다. 발행 코드만 보지 말고 <strong>구독 쪽 QoS 를 먼저 확인</strong>하세요.</div>
+
+    <h2>이 실험대의 "유실"은 TCP 패킷 손실이 아니다</h2>
+    <p>정확히 짚고 넘어갈 것이 있습니다. MQTT 는 TCP 위에서 돕니다. 그리고 <strong>TCP 는 이미 재전송을 합니다.</strong> IP 패킷 하나가 빠졌다고 MQTT 메시지가 사라지지 않아요. TCP 가 알아서 다시 보내고, MQTT 는 그런 일이 있었는지도 모릅니다.</p>
+    <p>그러면 MQTT 수준에서 메시지는 언제 사라질까요. <strong>연결이 끊어질 때</strong>입니다. 그 순간 아직 확인받지 못한 채 떠 있던(in-flight) 메시지들이 문제가 됩니다.</p>
+    <p>이 실험대의 실패율 슬라이더는 그 상황을 <strong>한 번의 확률로 압축한 것</strong>입니다. 실제로는 이렇게 균일하게 흩뿌려지지 않고, 연결이 끊기는 순간에 몰려서 발생합니다.</p>
+    <p>재전송 시점도 마찬가지로 단순화했습니다. 실험대는 타임아웃마다 다시 보내지만, MQTT 5.0 은 <strong>연결이 살아 있는 동안의 재전송을 하지 않고</strong> 세션이 다시 이어질 때 미확인 패킷을 보내도록 정리했습니다. 그래서 실제 중복은 이 화면처럼 잘게 흩어지지 않고 <strong>재연결 직후에 몰려서</strong> 나타납니다.</p>
+
+    <h2>DUP 플래그로 중복을 거르면 되지 않나</h2>
+    <p>재전송된 PUBLISH 에는 <code>DUP</code> 플래그가 1 로 붙습니다. 이걸로 중복을 판정하고 싶어지는데, <strong>그러면 안 됩니다.</strong></p>
+    <p><code>DUP</code> 는 "이 패킷을 다시 보냈다"는 발행자 쪽 사정일 뿐입니다. 첫 전송이 유실됐다면 구독자에게는 <code>DUP=1</code> 인 그 메시지가 <strong>처음 보는 메시지</strong>예요. 그걸 버리면 멀쩡한 메시지를 잃습니다. 반대 방향도 마찬가지입니다 — 브로커가 구독자에게 보내는 패킷의 <code>DUP</code> 는 브로커의 사정이지 발행자의 사정이 아닙니다.</p>
+    <p>중복 판정은 <strong>애플리케이션 레벨의 식별자</strong>로 해야 합니다. 페이로드에 메시지 id 를 싣고 수신 쪽에서 최근에 본 id 를 기억하는 방식이죠. 결국 이게 다음 절의 결론이기도 합니다.</p>
+
+    <h2>현장에서 확인할 것</h2>
+    <p><strong>대부분의 경우 QoS 1 + 멱등 처리가 답입니다.</strong> 수신 쪽이 같은 메시지를 두 번 받아도 결과가 같도록 만들어두면, QoS 2 의 왕복 두 번을 살 이유가 거의 없어집니다.</p>
+    <pre><code>-- 메시지 id 로 중복을 막는다 (수신 쪽)
+INSERT INTO reading (msg_id, device_id, value, at)
+VALUES (:msgId, :deviceId, :value, :at)
+ON CONFLICT (msg_id) DO NOTHING;</code></pre>
+    <p>제약 조건 하나가 QoS 2 가 프로토콜로 하는 일을 애플리케이션에서 해줍니다. 게다가 <strong>이쪽이 더 넓게 막습니다</strong> — 아래에서 설명할, QoS 2 로도 못 막는 경우까지 함께 걸러지거든요.</p>
+
+    <p><strong>exactly-once 는 브로커까지의 약속입니다.</strong> 구독자가 메시지를 받아 처리한 뒤, 확인 응답을 보내기 전에 프로세스가 죽으면 어떻게 될까요. 재연결하면 그 메시지가 다시 옵니다. 프로토콜은 약속을 지켰지만 <strong>애플리케이션은 같은 일을 두 번 했습니다.</strong> 이 구간은 QoS 2 로 막을 수 없습니다.</p>
+
+    <p><strong>세션이 유지되어야 QoS 가 의미를 갖습니다.</strong> QoS 1·2 의 재전송은 브로커가 세션 상태를 기억하고 있어야 가능합니다.</p>
+    <ul>
+      <li>MQTT 3.1.1 — <code>cleanSession=false</code> 로 접속해야 합니다. <code>true</code> 면 끊기는 순간 대기 중이던 메시지가 전부 사라집니다</li>
+      <li>MQTT 5.0 — <code>Clean Start=false</code> + <code>Session Expiry Interval</code> 을 재접속에 걸리는 시간보다 넉넉히 잡습니다. 만료되면 3.1.1 의 <code>cleanSession=true</code> 와 같아집니다</li>
+      <li>클라이언트 id 가 매번 바뀌면(재시작마다 UUID 생성) 세션을 못 찾습니다. QoS 를 올려놓고 이것 때문에 메시지를 잃는 경우가 흔합니다</li>
+    </ul>
+
+    <p><strong>구독 쪽 QoS 를 확인하세요.</strong> 앞에서 다룬 홉 단위 문제입니다. 발행 QoS 와 구독 QoS 중 낮은 쪽이 실제 품질입니다.</p>
+
+    <p><strong>in-flight 개수가 처리량을 정합니다.</strong> QoS 1·2 는 확인을 기다리는 메시지 수에 상한이 있습니다(MQTT 5 의 <code>Receive Maximum</code>). 이 값이 작은데 왕복 지연이 크면 대역폭이 남아도 처리량이 안 나옵니다. QoS 2 는 왕복이 두 배라 같은 상한에서 처리량이 절반이 됩니다.</p>
+
+    <p><strong>재전송에는 반드시 상한을 두세요.</strong> 이 실험대도 12회에서 끊습니다. 실패율 40% 에서는 이 상한이 실제로 물려서, QoS 2 메시지의 0.8% 가량이 끝내 전달되지 못하고 포기됩니다 — 위 표의 기대값이 상한 없는 경우를 가정하고 있어 실측이 조금 낮게 나오는 이유이기도 합니다. 상한 없는 재시도는 상대가 계속 실패할 때 그 상대를 함께 두들깁니다. 끝나지 않는 재시도 루프는 조용히 자원을 태우다가 전혀 다른 곳에서 장애로 나타나요.</p>
+
+    <p><strong>고를 때의 기준은 대략 이렇습니다.</strong></p>
+    <table class="keytable">
+      <tr><th>상황</th><th>선택</th></tr>
+      <tr><td>주기적 센서 값, 다음 값이 곧 온다</td><td>QoS 0 — 하나쯤 잃어도 다음 값이 덮는다</td></tr>
+      <tr><td>상태 변화, 명령, 알림</td><td>QoS 1 + 멱등 처리</td></tr>
+      <tr><td>중복이 진짜로 치명적이고 멱등하게 만들 수 없다</td><td>QoS 2 — 그래도 앞 문단의 한계는 남는다</td></tr>
+    </table>
+    <p>세 번째 칸이 생각보다 드뭅니다. "중복되면 안 된다"의 대부분은 애플리케이션에서 더 싸고 확실하게 해결됩니다.</p>
+
+    <div class="callout">이 페이지의 모델은 개념을 보여주기 위해 단순화한 것입니다. 실제 MQTT 는 세션 상태, 재연결 시점의 재전송, in-flight 상한, 브로커의 큐잉 정책까지 함께 움직입니다. 특히 <strong>이 실험대의 균일한 실패율은 실제 장애 양상과 다릅니다</strong> — 실제 유실과 중복은 연결이 끊기고 다시 붙는 순간에 몰려서 발생합니다.</div>
+
+  </article>
+
+  <footer>MQTT QoS · 교육용 단순화 모델 · 한국어 / <a href="/en/mqtt/" hreflang="en" lang="en">English</a> · <a href="mailto:contact@vermilion19.com">contact@vermilion19.com</a></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  pause:'일시정지', resume:'다시 시작',
+  cPUBLISH:'PUBLISH →', cPUBACK:'← PUBACK',
+  cPUBREC:'← PUBREC', cPUBREL:'PUBREL →', cPUBCOMP:'← PUBCOMP',
+  cTimeout:'타임아웃', cDeliver:'▶ 구독자', cDup:'▶ 구독자 (중복)',
+  mDone:'완료', mLost:'유실', mDup:'중복', mPkt:'메시지당 패킷',
+  mExp:'기대 $1',
+  s_ok:'한 번 전달', s_lost:'유실', s_dup:'중복 전달',
+  hint0:'완벽한 네트워크 — 차이는 패킷 수뿐',
+  hintLo:'가벼운 불안정 — QoS 0 부터 새기 시작한다',
+  hintMid:'QoS 1 의 중복이 눈에 띄게 늘어난다',
+  hintHi:'QoS 2 의 패킷이 폭증한다 — 정확성은 지키지만 처리량이 무너진다',
+  lgLoss:'전송 실패율 $1% 로 설정 — 계기 초기화',
+  lgLost:'QoS $1 · 메시지 #$2 유실 — 구독자에게 닿지 못함',
+  lgDup:'QoS $1 · 메시지 #$2 중복 전달 — 확인 응답이 유실되어 재전송됨',
+  lgGiveUp:'QoS $1 · 메시지 #$2 포기 — 재전송 $3회 초과',
+  scene:[
+    '전송 실패율 0%입니다. 세 레인 모두 유실도 중복도 없어요. 다른 건 값뿐입니다 — 메시지 하나에 QoS 0 은 패킷 1개, QoS 1 은 2개, QoS 2 는 4개를 씁니다. 세 레인이 같은 속도로 패킷을 소비하니, QoS 2 레인의 결과 칸이 가장 느리게 차는 것을 보세요.',
+    '10%로 올렸습니다. QoS 0 부터 새기 시작합니다 — 보낸 것의 10분의 1이 그냥 사라지고, 발행자는 그 사실조차 모릅니다. QoS 1 은 전부 도착하지만 대신 11% 정도가 두 번 도착합니다.',
+    '20%입니다. 세 레벨이 각자 다른 방식으로 대가를 치르는 게 여기서 또렷해집니다. QoS 0 은 20%를 잃고, QoS 1 은 25%를 두 번 주고, QoS 2 는 메시지당 패킷 5.63개를 씁니다. 공짜인 선택지는 없어요.',
+    '40%까지 올렸습니다. QoS 2 는 중복 없이 한 번만 전달하지만 메시지당 패킷이 9개에 가깝고, 재전송 상한 12회에 걸려 포기되는 메시지도 0.8%쯤 생깁니다. 결과 칸이 채워지는 속도를 QoS 0 레인과 비교해보세요. 정확성을 지키는 값이 네트워크가 나빠질수록 가파르게 오릅니다.',
+    '다시 20%로 돌아왔습니다. 이제 QoS 1 레인의 칩을 한 줄씩 읽어보세요. PUBLISH 가 도착해 구독자에게 전달됐는데 PUBACK 이 유실되면, 발행자는 도착 여부를 알 방법이 없어 그대로 다시 보냅니다. 중복은 버그가 아니라 이 프로토콜이 약속한 동작입니다.'
+  ],
+};
+</script>
+<script src="/shared/mqtt-lab.js"></script>
+</body>
+</html>
