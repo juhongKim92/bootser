@@ -1,0 +1,74 @@
+/* ============================================================
+   04. Raft 리더 선출 — 실험대
+   ============================================================ */
+
+.lab{margin:32px 0 8px;border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);overflow:hidden}
+.lab section{border-bottom:1px solid var(--rule);padding:16px 18px}
+.lab section:last-child{border-bottom:none}
+.cap{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;display:block}
+
+/* --- 손잡이 --- */
+.dials{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-end}
+.dial label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
+.seg{display:flex;gap:0;border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+.seg button{border:none;border-right:1px solid var(--rule);border-radius:0;padding:6px 13px;font-size:11px}
+.seg button:last-child{border-right:none}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.dial .cut{display:flex;gap:6px;align-items:center}
+.dial .cut .n{font-family:var(--mono);font-size:15px;min-width:58px;color:var(--ink)}
+
+/* --- 무대 --- */
+.stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,300px);gap:24px;align-items:start}
+@media (max-width:760px){ .stage{grid-template-columns:1fr} }
+#board{width:100%;height:auto;display:block;cursor:pointer;touch-action:manipulation}
+.boardnote{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:8px;line-height:1.7}
+
+/* --- 진영 카드 --- */
+.camps{display:flex;flex-direction:column;gap:10px}
+.camp{border:1px solid var(--rule);border-radius:3px;background:var(--paper);padding:11px 13px}
+.camp.win{border-color:var(--live)}
+.camp.lose{border-color:var(--blocked)}
+.camp h4{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3);margin:0 0 7px;font-weight:400;display:flex;justify-content:space-between;gap:8px}
+.camp .quorum{font-family:var(--mono);font-size:19px;color:var(--ink);font-variant-numeric:tabular-nums}
+.camp .quorum small{font-size:11px;color:var(--ink-3)}
+.camp .verdict{font-family:var(--mono);font-size:11px;margin-top:5px}
+.camp.win .verdict{color:var(--live)}
+.camp.lose .verdict{color:var(--blocked)}
+.camp .who{font-family:var(--mono);font-size:11px;color:var(--ink-2);margin-top:6px}
+
+.readouts{display:flex;flex-wrap:wrap;gap:18px;margin-top:14px;padding-top:13px;border-top:1px solid var(--rule)}
+.readouts div{min-width:74px}
+.readouts .k{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);display:block}
+.readouts .v{font-family:var(--mono);font-size:18px;color:var(--ink);font-variant-numeric:tabular-nums}
+.readouts .bad .v{color:var(--blocked)}
+
+/* --- 상태 범례 --- */
+.legend{display:flex;flex-wrap:wrap;gap:15px;margin-top:12px}
+.legend span{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.legend i{width:10px;height:10px;border-radius:50%;display:inline-block;border:1.5px solid}
+
+/* --- 사건 기록 --- */
+.events{font-family:var(--mono);font-size:11px;line-height:1.8;color:var(--ink-2);max-height:132px;overflow-y:auto;scrollbar-width:thin}
+.events div{white-space:pre-wrap}
+.events .t{color:var(--ink-3)}
+.events .up{color:var(--live)}
+.events .down{color:var(--blocked)}
+
+/* --- 조작대 --- */
+.transport{background:var(--paper-3);display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.transport .keys{display:flex;gap:6px;flex-wrap:wrap}
+.narration{flex:1;min-width:240px;font-family:var(--serif);font-size:14.5px;line-height:1.65;color:var(--ink)}
+.narration .n{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-3);display:block;margin-bottom:3px}
+
+/* --- 안내 --- */
+.recipe{border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);padding:14px 16px;margin:14px 0;max-width:68ch}
+.recipe h4{font-family:var(--sans);font-size:14px;font-weight:700;margin:0 0 4px}
+.recipe .seq{font-family:var(--mono);font-size:11px;line-height:1.9;background:var(--paper);border:1px solid var(--rule);
+  border-radius:2px;padding:9px 11px;margin:9px 0;white-space:pre-wrap;color:var(--ink-2)}
+.recipe .seq em{font-style:normal;color:var(--horizon)}
+.recipe .why{font-size:13.5px;color:var(--ink-2);margin:0}
+.keytable{width:100%;border-collapse:collapse;margin:12px 0;max-width:68ch;font-size:13.5px}
+.keytable th,.keytable td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.keytable th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.keytable td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap;width:1%;padding-right:18px;color:var(--ink)}

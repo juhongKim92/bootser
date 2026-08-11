@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raft leader election — who becomes leader when the network splits</title>
+<meta name="description" content="Kill nodes and cut the network by hand to see how Raft elects a leader, why a minority can never elect one, and why split brain does not happen.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/raft/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/raft/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/raft/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/raft/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="Raft leader election — who becomes leader when the network splits">
+<meta property="og:description" content="Kill nodes and cut the network by hand to see why a minority can never elect a leader, and why split brain does not happen.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/raft/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Raft leader election — who becomes leader when the network splits">
+<meta name="twitter:description" content="Drive it yourself and see why a minority can never elect a leader.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/raft-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/raft/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>Who becomes leader when the network splits</h1>
+  <p class="lede">The link between your data centres just went down. Each side believes the other is dead. If both elect a leader the data diverges — so how does Raft stop that?</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>cluster size</label>
+          <div class="seg">
+            <button data-n="3" aria-pressed="false">3</button>
+            <button data-n="5" aria-pressed="true">5</button>
+            <button data-n="7" aria-pressed="false">7</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>network partition</label>
+          <div class="cut">
+            <button id="cutLess">−</button>
+            <span class="n" id="cutN">none</span>
+            <button id="cutMore">+</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>simulation</label>
+          <button id="btnRun">Pause</button>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="stage">
+        <div>
+          <canvas id="board" width="480" height="346" role="img"
+                  aria-label="Node states and message flow in a Raft cluster"></canvas>
+          <div class="legend">
+            <span><i style="border-color:#2f6b4f;background:#2f6b4f"></i>leader</span>
+            <span><i style="border-color:#a8791a"></i>candidate</span>
+            <span><i style="border-color:#5b6470"></i>follower</span>
+            <span><i style="border-color:#b9b2a6;border-style:dashed"></i>stopped</span>
+          </div>
+          <p class="boardnote">Click a node to stop or restart it. The arc around a node is its election timer — one full turn and it stands for election. Lines between nodes are connections, and a partition cuts them. The number underneath is the term that node knows about.</p>
+        </div>
+        <div>
+          <span class="cap">Camps</span>
+          <div class="camps" id="camps"></div>
+          <div class="readouts" id="readouts"></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">Event log</span>
+      <div class="events" id="events"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button class="solid" id="btnPlay">Play scenario</button>
+        <button id="btnStep">Next step</button>
+        <button id="btnReset">Reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 06</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>Driving it yourself</h2>
+    <p>This screen keeps running on its own. The play button only walks a fixed tour, so killing nodes and cutting links by hand shows far more.</p>
+    <table class="keytable">
+      <tr><th>control</th><th>what happens</th></tr>
+      <tr><td>click a node</td><td>Stop ↔ restart. Kill the leader and the survivors elect a new one</td></tr>
+      <tr><td>network partition</td><td>Splits the cluster into two camps. No message crosses between them</td></tr>
+      <tr><td>cluster size</td><td>3 / 5 / 7. The majority becomes 2 / 3 / 4 respectively</td></tr>
+      <tr><td>pause</td><td>Freezes time. Useful for picking apart a single moment</td></tr>
+    </table>
+
+    <h2>Try these</h2>
+
+    <div class="recipe">
+      <h4>1. Kill the leader</h4>
+      <div class="seq">Click the leader (the filled circle) to stop it
+
+follower timers expire one by one
+the first to expire becomes a candidate and bumps its term
+collect a majority of votes and it leads  <em>2–4 seconds, typically</em></div>
+      <p class="why">When the leader disappears the heartbeats stop, so follower election timers are no longer reset. Because those timers are <strong>randomised</strong>, one node usually steps forward first and the others vote for it.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. Split it 3 against 2</h4>
+      <div class="seq">Press the partition + button twice
+
+group A (3/5)  <em>has quorum · has a leader · term steady</em>
+group B (2/5)  <em>no quorum · no leader · term keeps climbing</em>
+
+Leave it and just watch the term numbers
+<em>the minority's term rises for as long as you wait</em></div>
+      <p class="why">This is the heart of the page. The minority nodes keep standing for election — timer expires, term goes up, votes requested. But <strong>two of them can never produce three votes.</strong> They stay candidates forever while their term climbs, and the majority side carries on as if nothing happened.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. Heal the partition</h4>
+      <div class="seq">Press the partition − button to reconnect
+
+the minority's high term reaches the majority leader
+the leader steps down immediately and a new election runs
+<em>all five terms converge on one value</em></div>
+      <p class="why">Raft has one blunt rule: <strong>on seeing a higher term, step down — no exceptions, even for a leader.</strong> So a node that did nothing but inflate its term drags down a leader that was working perfectly. The election was unnecessary, and preventing it is what Pre-Vote is for, explained below.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. Break the majority</h4>
+      <div class="seq">Click 3 of the 5 nodes to stop them
+
+the remaining 2 keep standing for election
+leave it ~20 seconds and the term climbs to around 13
+<em>a leader never appears</em></div>
+      <p class="why">With three of five nodes dead, the remaining two cannot reach three votes. The cluster stops <strong>serving reads and writes alike</strong>. A five-node cluster tolerates exactly two failures.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. See why even numbers are bad</h4>
+      <div class="seq">Switch to 3 nodes and stop 1  → 2/3, majority 2, still working
+Switch to 5 nodes and stop 2  → 3/5, majority 3, still working
+
+Now picture four nodes
+a majority of 4 is 3 — one failure leaves you at 3/4, right on the edge
+two failures leave 2/4 and it stops</div>
+      <p class="why">Three nodes and four nodes <strong>tolerate exactly the same single failure</strong>. Four nodes just spends an extra server while raising the odds that something breaks. That is why Raft clusters are sized odd.</p>
+    </div>
+
+    <h2>Why there must be exactly one leader</h2>
+    <p>Raft is an algorithm for making several servers hold <strong>the same log in the same order</strong>. Every write goes through the leader, and the leader decides the order before replicating to followers. Two things deciding order means the logs diverge, and divergent logs are inconsistent data.</p>
+    <p>So Raft's first job is guaranteeing <strong>at most one leader at any moment</strong>.</p>
+
+    <h2>Terms — logical time</h2>
+    <p>Raft has no physical clock. An integer called the <code>term</code> stands in for time: it increases by one per election, and <strong>each term has at most one leader</strong>.</p>
+    <p>Every message carries the sender's term, and the rules are two lines long.</p>
+    <ul>
+      <li>On seeing a higher term, <strong>step down to follower immediately</strong> — leaders included</li>
+      <li>Messages from a lower term are <strong>ignored</strong></li>
+    </ul>
+    <p>In the lab, the <code>t</code> number under each node is the term it knows. Watch only the partitioned minority's numbers climb.</p>
+
+    <h2>The majority is everything</h2>
+    <p>Becoming leader takes <code>⌊N/2⌋ + 1</code> votes: three for five nodes, four for seven.</p>
+    <p>That number is magic because <strong>any two majorities must overlap</strong>.</p>
+    <pre><code>5-node cluster
+  votes won by camp A: {N0, N1, N2}
+  votes won by camp B: {N2, N3, N4}
+                         ↑
+                 they cannot avoid overlapping</code></pre>
+    <p>A node casts exactly one vote per term. So two candidates each winning a majority in the same term is <strong>arithmetically impossible</strong>. That is the entire reason split brain does not occur — no elaborate machinery, just the pigeonhole principle.</p>
+    <div class="callout">Which is why a minority can <em>never</em> elect a leader. It does not matter when the link heals or how many times it tries: the votes are physically not there.</div>
+
+    <h2>When candidates collide</h2>
+    <p>If several nodes become candidates at the same instant the votes split and nobody reaches a majority. This is called a split vote.</p>
+    <p>Raft's answer is remarkably plain: <strong>randomise the election timeout.</strong> This lab draws a fresh value between 1200 and 2400ms every time.</p>
+    <p>With staggered timers one node usually steps forward noticeably first, and the rest receive its vote request before their own timers finish. Even when a split vote does happen, the next round redraws the timers and it resolves quickly.</p>
+    <p>The arc around each node is that timer. Notice the lengths differ from node to node.</p>
+
+    <h2>What happens to a partitioned old leader</h2>
+    <p>There is a subtlety here. If a partition leaves <strong>the old leader on the minority side</strong>, it does not know it has been deposed — it has never seen a higher term. It keeps sending heartbeats and considers itself the leader.</p>
+    <p>In the paper's basic Raft this is safe, because that leader <strong>cannot commit anything</strong>: committing needs a majority of responses, and the minority has no majority. From the client's point of view writes simply hang without a reply.</p>
+    <p>Reads are the dangerous part. If the leader answers reads from its local state it <strong>serves stale data as if it were current.</strong> That is why real implementations use <code>CheckQuorum</code> — a leader that fails to hear back from a majority within one election interval steps down on its own. This lab behaves that way too.</p>
+
+    <h2>After the partition heals</h2>
+    <p>Heal the partition in the lab and the minority's high term reaches the majority, deposing a perfectly healthy leader and forcing an election. All five terms converge shortly after. The data is safe, but the interruption was <strong>pointless</strong>.</p>
+    <p><strong>Pre-Vote</strong> is what prevents it. Before becoming a candidate, a node asks "would you vote for me if I stood?" without raising its term. If a majority says no it stays quietly a follower, term untouched. A returning partitioned node then disturbs nobody. Most real implementations, etcd among them, keep this switched on.</p>
+    <p>There is a second protection: a node that merely inflated its term in the minority <strong>still cannot win.</strong> Granting a vote requires not only the term but also that the candidate's <strong>log is at least as up to date</strong> as the voter's. The majority kept appending during the partition, so the lagging minority node gets no votes. This lab covers only the election half and omits the log comparison, but in real Raft that check is a load-bearing part of safety.</p>
+
+    <h2>What to watch for in production</h2>
+    <p><strong>Size the cluster odd.</strong> 3, 5, 7. Even numbers spend an extra server for the same fault tolerance.</p>
+    <table class="keytable">
+      <tr><th>nodes</th><th>majority</th><th>failures tolerated</th></tr>
+      <tr><td>3</td><td>2</td><td>1</td></tr>
+      <tr><td>4</td><td>3</td><td>1 — same as 3</td></tr>
+      <tr><td>5</td><td>3</td><td>2</td></tr>
+      <tr><td>7</td><td>4</td><td>3</td></tr>
+    </table>
+    <p><strong>Set timeouts against your round-trip latency.</strong> The election timeout must be far larger than a network round trip, and far larger than the heartbeat interval. The usual shorthand is <code>heartbeat ≪ election timeout ≪ mean time between failures</code>. etcd defaults to a 100ms heartbeat and a 1000ms election timeout.</p>
+    <p>Carry those defaults into a cluster spanning data centres and every latency spike changes your leader. If leadership churns, suspect these values first.</p>
+    <p><strong>Disk latency destabilises leadership too.</strong> Raft persists votes and log entries before replying, so a slow fsync delays heartbeat responses and triggers elections on a perfectly healthy network. This is where the advice to watch <code>wal_fsync_duration_seconds</code> in etcd comes from.</p>
+    <p><strong>Never restart two of three nodes at once.</strong> It is a common rolling-update accident. Go one at a time, confirming the previous node has fully caught up before moving on.</p>
+    <p><strong>Where it is used:</strong> etcd (the state store behind Kubernetes), Consul, TiKV, CockroachDB, and Kafka's KRaft mode after ZooKeeper was removed are all Raft-based.</p>
+    <div class="callout">This page covers <strong>leader election only</strong>. Raft's other half — log replication, commit rules, snapshots, membership changes — is left out. The log up-to-date check in particular is central to safety and missing here, so do read that part alongside any real implementation.</div>
+
+  </article>
+
+  <footer>Raft leader election · simplified teaching model · <a href="/raft/" hreflang="ko" lang="ko">한국어</a> / English · <a href="mailto:contact@vermilion19.com">contact@vermilion19.com</a></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  play:'Play scenario', scPause:'Pause',
+  pause:'Pause', resume:'Resume',
+  campAll:'cluster', campN:'group $1',
+  need:'majority', vQuorum:'has quorum — can elect a leader', vNoQuorum:'no quorum — cannot elect a leader',
+  wLeader:'leader $1', wNoLeader:'no leader', allDown:'no live nodes',
+  rLeaders:'leaders', rTerm:'highest term', rElections:'elections', rTime:'elapsed',
+  cutNone:'none',
+  logCut:'network partitioned $1 : $2', logHeal:'network healed',
+  logKill3:'N2 N3 N4 stopped — quorum lost',
+  evCand:'N$1 → candidate (term $2)',
+  evLead:'N$1 elected leader (term $2, $3 votes)',
+  evDownHigherTerm:'N$1 stepped down — saw a higher term (term $2 → $3)',
+  evDownHeartbeat:'N$1 stepped down — received a leader heartbeat (term $2 → $3)',
+  evDownQuorum:'N$1 stepped down — lost contact with the majority ($2/$3)',
+  evNodeDown:'N$1 stopped', evNodeUp:'N$1 restarted',
+  scene:[
+    'Five nodes, majority of three. In a moment one is elected leader and the rest become followers. The arc around each node is its election timer — notice the lengths differ. That randomness is what stops them all standing at once.',
+    'The leader has been stopped. With heartbeats gone, follower timers are no longer reset. The first to expire raises its term and goes looking for votes. A new leader usually appears within 2–4 seconds.',
+    'The network is cut 3 against 2. No message crosses between the camps — see how the lines between nodes are severed.',
+    'Now watch. The majority (3 nodes) holds quorum and carries on normally. The minority (2 nodes) keeps standing for election but cannot produce three votes, so only its term climbs. The majority term sits still while the minority term rises without pause — the longer you leave it, the wider the gap. No leader will ever emerge there.',
+    'The partition is healed. The instant the minority’s inflated term reaches the majority leader, that leader resigns and an election runs. The data is safe, but the interruption was unnecessary. Pre-Vote is what prevents this.',
+    'Reset, then three of the five stopped. The remaining two cannot reach a majority of three. They keep standing for election and the term climbs without pause, but no leader ever appears. The cluster has stopped.'
+  ],
+};
+</script>
+<script src="/shared/raft-lab.js"></script>
+</body>
+</html>

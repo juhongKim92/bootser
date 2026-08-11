@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raft 리더 선출 — 네트워크가 갈라지면 누가 리더가 되는가</title>
+<meta name="description" content="노드를 직접 죽이고 네트워크를 갈라보며 Raft가 어떻게 리더를 뽑는지, 소수파가 왜 영원히 리더를 못 뽑는지, 스플릿브레인이 왜 생기지 않는지 확인합니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/raft/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/raft/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/raft/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/raft/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="Raft 리더 선출 — 네트워크가 갈라지면 누가 리더가 되는가">
+<meta property="og:description" content="노드를 직접 죽이고 네트워크를 갈라보며 소수파가 왜 영원히 리더를 못 뽑는지, 스플릿브레인이 왜 생기지 않는지 확인합니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/raft/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Raft 리더 선출 — 네트워크가 갈라지면 누가 리더가 되는가">
+<meta name="twitter:description" content="소수파가 왜 영원히 리더를 못 뽑는지 직접 조작하며 확인합니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/raft-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/raft/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>네트워크가 갈라지면 누가 리더가 되는가</h1>
+  <p class="lede">데이터센터 사이의 회선이 끊겼습니다. 양쪽 모두 상대가 죽었다고 생각합니다. 둘 다 리더를 세우면 데이터가 갈라지는데, Raft는 어떻게 그걸 막을까요.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>클러스터 크기</label>
+          <div class="seg">
+            <button data-n="3" aria-pressed="false">3</button>
+            <button data-n="5" aria-pressed="true">5</button>
+            <button data-n="7" aria-pressed="false">7</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>네트워크 분단</label>
+          <div class="cut">
+            <button id="cutLess">−</button>
+            <span class="n" id="cutN">없음</span>
+            <button id="cutMore">+</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>시뮬레이션</label>
+          <button id="btnRun">일시정지</button>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="stage">
+        <div>
+          <canvas id="board" width="480" height="346" role="img"
+                  aria-label="Raft 클러스터의 노드 상태와 메시지 흐름"></canvas>
+          <div class="legend">
+            <span><i style="border-color:#2f6b4f;background:#2f6b4f"></i>리더</span>
+            <span><i style="border-color:#a8791a"></i>후보</span>
+            <span><i style="border-color:#5b6470"></i>팔로워</span>
+            <span><i style="border-color:#b9b2a6;border-style:dashed"></i>정지</span>
+          </div>
+          <p class="boardnote">노드를 클릭하면 정지·복구됩니다. 노드를 감싼 원호는 선거 타이머예요 — 한 바퀴 돌면 출마합니다. 노드 사이의 선은 연결이고, 분단되면 선이 끊깁니다. 아래 숫자는 그 노드가 아는 term입니다.</p>
+        </div>
+        <div>
+          <span class="cap">진영</span>
+          <div class="camps" id="camps"></div>
+          <div class="readouts" id="readouts"></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">사건 기록</span>
+      <div class="events" id="events"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button class="solid" id="btnPlay">시나리오 재생</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 06</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>직접 조작하기</h2>
+    <p>이 화면은 계속 살아 움직입니다. 재생 버튼은 정해진 순서를 훑을 뿐이니, 직접 노드를 죽이고 회선을 끊어보는 쪽이 훨씬 많은 걸 보여줍니다.</p>
+    <table class="keytable">
+      <tr><th>조작</th><th>무엇이 일어나나</th></tr>
+      <tr><td>노드 클릭</td><td>정지 ↔ 복구. 리더를 죽이면 남은 노드들이 새 리더를 뽑습니다</td></tr>
+      <tr><td>네트워크 분단</td><td>클러스터를 두 진영으로 가릅니다. 진영 사이에는 어떤 메시지도 오가지 않습니다</td></tr>
+      <tr><td>클러스터 크기</td><td>3 / 5 / 7. 과반이 각각 2 / 3 / 4로 바뀝니다</td></tr>
+      <tr><td>일시정지</td><td>시간을 멈춥니다. 한 순간의 상태를 뜯어볼 때 유용합니다</td></tr>
+    </table>
+
+    <h2>이렇게 해보세요</h2>
+
+    <div class="recipe">
+      <h4>1. 리더를 죽인다</h4>
+      <div class="seq">리더(진한 원)를 클릭해 정지
+
+팔로워들의 타이머가 하나씩 만료된다
+먼저 만료된 노드가 후보가 되고 term 을 올린다
+과반의 표를 모으면 리더 <em>2~4초면 끝난다</em></div>
+      <p class="why">리더가 사라지면 하트비트가 끊기고, 팔로워들의 선거 타이머가 더는 초기화되지 않습니다. 타이머가 <strong>무작위</strong>라서 대개 한 노드가 먼저 나서고 나머지는 그에게 투표합니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. 3 대 2로 가른다</h4>
+      <div class="seq">분단 + 버튼을 두 번
+
+그룹 A (3/5)  <em>과반 확보 · 리더 있음 · term 고정</em>
+그룹 B (2/5)  <em>과반 미달 · 리더 없음 · term 계속 상승</em>
+
+그대로 두고 term 숫자만 지켜본다
+<em>기다린 만큼 소수파 term 만 올라간다</em></div>
+      <p class="why">여기가 이 페이지의 핵심입니다. 소수파 노드들은 계속 출마합니다. 타이머가 만료되고, term을 올리고, 표를 구하죠. 하지만 <strong>둘이서는 세 표를 만들 수 없습니다.</strong> 영원히 후보로 남아 term만 올라갑니다. 그 사이 다수파는 아무 일 없다는 듯 굴러갑니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. 분단을 되돌린다</h4>
+      <div class="seq">분단 − 버튼으로 연결 복구
+
+소수파의 높은 term 이 다수파 리더에게 닿는다
+리더가 즉시 사임하고 재선거
+<em>다섯 노드의 term 이 하나로 맞춰진다</em></div>
+      <p class="why">Raft에는 단순한 규칙이 하나 있습니다. <strong>자기보다 높은 term을 보면 무조건 물러난다.</strong> 그래서 아무 일도 안 하고 term만 올려온 소수파 노드가 멀쩡히 일하던 리더를 끌어내립니다. 불필요한 재선거인데, 이 문제를 막는 것이 아래에 설명할 Pre-Vote입니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. 과반을 무너뜨린다</h4>
+      <div class="seq">5노드 중 3개를 클릭해 정지
+
+남은 2개는 계속 출마한다
+20초쯤 두면 term 이 13 부근까지 오른다
+<em>리더는 영원히 나오지 않는다</em></div>
+      <p class="why">노드 다섯 중 셋이 죽으면 남은 둘로는 과반 세 표를 못 만듭니다. 클러스터는 <strong>읽기도 쓰기도 받지 못하는 상태</strong>로 멈춥니다. 5노드 클러스터가 견딜 수 있는 장애는 두 대까지예요.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. 짝수가 왜 나쁜지 확인한다</h4>
+      <div class="seq">클러스터 3 으로 바꾸고 1개 정지  → 2/3, 과반 2, 동작
+클러스터 5 로 바꾸고 2개 정지  → 3/5, 과반 3, 동작
+
+머릿속으로 4노드를 생각해보면
+4노드의 과반은 3 — 한 대만 죽어도 3/4 로 아슬아슬
+두 대가 죽으면 2/4 로 멈춘다</div>
+      <p class="why">3노드와 4노드는 <strong>견딜 수 있는 장애 수가 똑같이 1대</strong>입니다. 4노드는 서버를 하나 더 쓰면서 고장날 확률만 높인 셈이죠. Raft 클러스터를 홀수로 구성하는 이유입니다.</p>
+    </div>
+
+    <h2>리더가 하나여야 하는 이유</h2>
+    <p>Raft는 여러 서버가 <strong>같은 순서의 로그</strong>를 갖도록 만드는 알고리즘입니다. 모든 쓰기는 리더를 거치고, 리더가 순서를 정해 팔로워들에게 복제합니다. 순서를 정하는 주체가 둘이면 로그가 갈라지고, 그게 곧 데이터 불일치예요.</p>
+    <p>그래서 Raft의 첫 번째 과제는 <strong>어떤 시점에도 리더가 최대 하나</strong>임을 보장하는 것입니다.</p>
+
+    <h2>term — 논리적 시간</h2>
+    <p>Raft에는 물리적 시계가 없습니다. 대신 <code>term</code>이라는 정수가 시간을 대신합니다. 선거가 한 번 일어날 때마다 1씩 오르고, <strong>한 term에는 리더가 최대 한 명</strong>입니다.</p>
+    <p>모든 메시지에 보낸 쪽의 term이 실려 있고, 규칙은 두 줄입니다.</p>
+    <ul>
+      <li>더 높은 term을 보면 <strong>즉시 팔로워로 물러난다.</strong> 리더였더라도 예외 없습니다</li>
+      <li>더 낮은 term의 메시지는 <strong>무시한다</strong></li>
+    </ul>
+    <p>실험대에서 노드 아래 붙은 <code>t</code> 숫자가 그 노드가 아는 term입니다. 분단된 소수파의 숫자만 계속 올라가는 걸 볼 수 있어요.</p>
+
+    <h2>과반이 전부다</h2>
+    <p>리더가 되려면 <code>⌊N/2⌋ + 1</code>표가 필요합니다. 5노드면 3표, 7노드면 4표죠.</p>
+    <p>이 숫자가 마법인 이유는 <strong>두 과반은 반드시 겹치기 때문</strong>입니다.</p>
+    <pre><code>5노드 클러스터
+  A 진영이 얻은 표: {N0, N1, N2}
+  B 진영이 얻은 표: {N2, N3, N4}
+                      ↑
+            겹칠 수밖에 없다</code></pre>
+    <p>노드 하나는 한 term에 한 표만 던집니다. 그러니 같은 term에 두 후보가 각각 과반을 얻는 건 <strong>산술적으로 불가능</strong>합니다. 스플릿브레인이 안 생기는 이유가 이것뿐이에요. 복잡한 장치가 아니라 비둘기집 원리입니다.</p>
+    <div class="callout">그래서 소수파는 <em>영원히</em> 리더를 못 뽑습니다. 회선이 언제 복구되든, 몇 번을 출마하든 상관없어요. 표가 물리적으로 모자랍니다.</div>
+
+    <h2>동시에 출마하면</h2>
+    <p>여러 노드가 같은 순간에 후보가 되면 표가 갈려 아무도 과반을 못 얻습니다. 이걸 split vote라고 합니다.</p>
+    <p>Raft의 해법은 놀랍도록 단순합니다. <strong>선거 타임아웃을 무작위로 정하는 것.</strong> 실험대에서는 1200~2400ms 사이에서 매번 새로 뽑습니다.</p>
+    <p>타이머가 제각각이면 대개 한 노드가 눈에 띄게 먼저 나서고, 나머지는 자기 타이머가 끝나기 전에 표 요청을 받아 투표하게 됩니다. 어쩌다 split vote가 나도 다음 라운드에서 다시 무작위로 뽑히니 금방 풀려요.</p>
+    <p>노드를 감싼 원호가 이 타이머입니다. 길이가 노드마다 다른 걸 보실 수 있습니다.</p>
+
+    <h2>분단된 옛 리더는 어떻게 되나</h2>
+    <p>여기에 미묘한 지점이 있습니다. 분단이 생겼을 때 <strong>옛 리더가 소수파 쪽에 있다면</strong>, 그는 자기가 물러났다는 걸 모릅니다. 더 높은 term을 본 적이 없으니까요. 계속 하트비트를 보내고 스스로를 리더라고 여깁니다.</p>
+    <p>논문의 기본 Raft에서는 이 상태가 안전합니다. 그 리더는 <strong>아무것도 커밋할 수 없기 때문</strong>이에요. 커밋하려면 과반의 응답이 필요한데 소수파에는 과반이 없습니다. 클라이언트 입장에서는 쓰기가 그냥 응답 없이 매달려 있게 됩니다.</p>
+    <p>다만 읽기는 위험합니다. 리더가 자기 로컬 상태로 읽기를 처리하면 <strong>이미 지난 데이터를 최신인 양 돌려줍니다.</strong> 그래서 실제 구현들은 <code>CheckQuorum</code>을 씁니다 — 리더가 한 선거 주기 동안 과반의 하트비트 응답을 못 받으면 스스로 물러나는 거죠. 이 실험대도 그렇게 동작합니다.</p>
+
+    <h2>분단이 풀린 뒤</h2>
+    <p>실험대에서 분단을 되돌리면 소수파의 높은 term이 다수파에 닿고, 멀쩡하던 리더가 물러나 재선거가 일어납니다. 다섯 노드의 term이 곧 하나로 맞춰집니다. 데이터는 안전하지만 <strong>쓸데없는 중단</strong>이에요.</p>
+    <p>이걸 막는 것이 <strong>Pre-Vote</strong>입니다. 후보가 되기 전에 term을 올리지 않은 채 "내가 나서면 표를 줄 건가"를 먼저 물어보는 단계를 넣습니다. 과반이 거절하면 term을 올리지 않고 조용히 팔로워로 남아요. 분단된 노드가 돌아와도 남을 방해하지 않습니다. etcd를 비롯한 대부분의 실제 구현이 켜두는 옵션입니다.</p>
+    <p>또 하나, 소수파에서 term만 잔뜩 올린 노드가 <strong>리더가 될 수는 없습니다.</strong> 표를 받으려면 term뿐 아니라 <strong>로그가 자기만큼 최신인지</strong>도 통과해야 하거든요. 분단 동안 다수파는 계속 로그를 쌓았으니, 뒤처진 소수파 노드는 표를 못 받습니다. 이 실험대는 선출 부분만 다루느라 로그 비교를 생략했지만, 실제 Raft에서는 이 검사가 안전성의 핵심 축입니다.</p>
+
+    <h2>현장에서 확인할 것</h2>
+    <p><strong>홀수로 구성하세요.</strong> 3, 5, 7. 짝수는 서버만 더 쓰고 내결함성은 그대로입니다.</p>
+    <table class="keytable">
+      <tr><th>노드</th><th>과반</th><th>견딜 수 있는 장애</th></tr>
+      <tr><td>3</td><td>2</td><td>1대</td></tr>
+      <tr><td>4</td><td>3</td><td>1대 — 3과 같다</td></tr>
+      <tr><td>5</td><td>3</td><td>2대</td></tr>
+      <tr><td>7</td><td>4</td><td>3대</td></tr>
+    </table>
+    <p><strong>타임아웃 설정은 왕복 지연에 맞춥니다.</strong> 선거 타임아웃은 네트워크 왕복 시간보다 한참 커야 하고, 하트비트 주기보다도 훨씬 커야 합니다. 통상 <code>하트비트 ≪ 선거 타임아웃 ≪ 평균 고장 간격</code>이라는 부등식으로 설명하죠. etcd 기본값은 하트비트 100ms, 선거 타임아웃 1000ms입니다.</p>
+    <p>데이터센터를 넘나드는 클러스터에서 이 값을 그대로 쓰면 지연이 튈 때마다 리더가 바뀝니다. 리더가 자주 교체된다면 먼저 이 값을 의심하세요.</p>
+    <p><strong>디스크 쓰기 지연도 리더를 흔듭니다.</strong> Raft는 투표와 로그를 디스크에 내려쓴 뒤에 응답합니다. fsync가 느려지면 하트비트 응답이 늦어지고, 네트워크가 멀쩡해도 선거가 일어나요. etcd에서 <code>wal_fsync_duration_seconds</code>를 보라는 조언이 여기서 나옵니다.</p>
+    <p><strong>3노드 중 2대를 동시에 재시작하지 마세요.</strong> 롤링 업데이트에서 흔한 사고입니다. 한 대씩, 앞 노드가 완전히 따라잡은 걸 확인하고 넘어가야 합니다.</p>
+    <p><strong>어디에 쓰이나:</strong> etcd(쿠버네티스의 상태 저장소), Consul, TiKV, CockroachDB, 그리고 ZooKeeper를 걷어낸 Kafka KRaft 모드가 모두 Raft 기반입니다.</p>
+    <div class="callout">이 페이지는 <strong>리더 선출만</strong> 다룹니다. Raft의 나머지 절반인 로그 복제, 커밋 규칙, 스냅샷, 멤버십 변경은 생략했어요. 특히 로그 최신성 검사는 안전성의 핵심인데 여기서는 빠져 있으니, 실제 구현을 읽으실 때 그 부분을 꼭 같이 보시기 바랍니다.</div>
+
+  </article>
+
+  <footer>Raft 리더 선출 · 교육용 단순화 모델 · 한국어 / <a href="/en/raft/" hreflang="en" lang="en">English</a> · <a href="mailto:contact@vermilion19.com">contact@vermilion19.com</a></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  play:'시나리오 재생', scPause:'일시정지',
+  pause:'일시정지', resume:'다시 시작',
+  campAll:'클러스터', campN:'그룹 $1',
+  need:'과반', vQuorum:'과반 확보 — 리더를 뽑을 수 있다', vNoQuorum:'과반 미달 — 리더를 뽑을 수 없다',
+  wLeader:'리더 $1', wNoLeader:'리더 없음', allDown:'살아 있는 노드 없음',
+  rLeaders:'리더 수', rTerm:'최고 term', rElections:'선거', rTime:'경과',
+  cutNone:'없음',
+  logCut:'네트워크 분단 $1 : $2', logHeal:'네트워크 복구',
+  logKill3:'N2 N3 N4 정지 — 과반 미달',
+  evCand:'N$1 → 후보 (term $2)',
+  evLead:'N$1 리더 당선 (term $2, $3표)',
+  evDownHigherTerm:'N$1 리더 사임 — 더 높은 term 을 봄 (term $2 → $3)',
+  evDownHeartbeat:'N$1 리더 사임 — 리더의 하트비트를 받음 (term $2 → $3)',
+  evDownQuorum:'N$1 리더 사임 — 과반과 연결이 끊김 ($2/$3)',
+  evNodeDown:'N$1 정지', evNodeUp:'N$1 복구',
+  scene:[
+    '노드 다섯, 과반은 셋입니다. 잠시 뒤 한 노드가 리더로 뽑히고 나머지는 팔로워가 됩니다. 노드를 감싼 원호가 선거 타이머인데, 길이가 제각각인 걸 보세요. 이 무작위성이 동시 출마를 막습니다.',
+    '리더를 정지시켰습니다. 하트비트가 끊기면 팔로워들의 타이머가 더는 초기화되지 않습니다. 먼저 만료된 노드가 term을 올리고 표를 구하러 나섭니다. 보통 2~4초면 새 리더가 섭니다.',
+    '3 대 2로 네트워크를 갈랐습니다. 두 진영 사이에는 어떤 메시지도 오가지 않습니다. 노드 사이의 선이 끊긴 걸 보세요.',
+    '이제 지켜보세요. 다수파(3노드)는 과반을 확보하고 있어 정상적으로 굴러갑니다. 소수파(2노드)는 계속 출마하지만 세 표를 만들 수 없어 term만 올라갑니다. 다수파의 term은 그대로 멈춰 있는데 소수파의 term만 쉬지 않고 올라갑니다. 오래 둘수록 격차가 벌어져요. 영원히 리더가 나오지 않습니다.',
+    '분단을 되돌렸습니다. 소수파가 올려둔 높은 term이 다수파 리더에게 닿는 순간 리더가 즉시 사임하고 재선거가 일어납니다. 데이터는 안전하지만 불필요한 중단이죠. 이 문제를 막는 것이 Pre-Vote입니다.',
+    '초기화하고 다섯 중 셋을 정지시켰습니다. 남은 둘로는 과반 셋을 만들 수 없습니다. 계속 출마하며 term은 쉬지 않고 올라가지만 리더는 끝내 나오지 않습니다. 클러스터가 멈춘 겁니다.'
+  ],
+};
+</script>
+<script src="/shared/raft-lab.js"></script>
+</body>
+</html>
