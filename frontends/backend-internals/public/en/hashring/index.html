@@ -257,7 +257,7 @@ window.LAB_I18N = {
     'Six nodes, one virtual node each. Look at the ring: the coloured arcs are visibly different lengths. However uniform the hash is, six points do not land evenly.',
     'Look at the distribution bars. The ideal is 250, yet one node holds 424 and another 101 — a 4.2× gap. Run like this and one server dies well before the others.',
     'Node F is gone. The ring moved 7% where modulo would have moved 84%. But do not take that 7% at face value: F only held 101 keys (6.7%) to begin with. And its clockwise neighbour D swallowed all 101, going from 345 to 446.',
-    'Virtual nodes raised to 20. The spread falls from 47% to 17% and the ring colours start to interleave. Note that this change itself rebuilds the whole ring, so it is not something you do in production.',
+    'Virtual nodes raised to 20. The spread falls from 41% to 17% and the ring colours start to interleave. Note that this change itself rebuilds the whole ring, so it is not something you do in production.',
     'At 160 the spread narrows to 5.9% and max/min to 1.16×. This is roughly the value memcached clients have settled on by convention.',
     'Now remove a node again. 22% moved — close to the theoretical 1/5 = 20%. Unlike before, it is predictable. Notice too that the remaining four absorbed it evenly at 387/371/379/363; with one virtual node a single neighbour would have taken the whole share.',
     'Adding a node costs 22% as well. The new node takes only its own range and nothing changes between the others. Cheap scale-out is the second benefit of this scheme.'
