@@ -238,7 +238,7 @@ B  COMMIT        <em>→ 3 old versions finally die</em>
     <h2>Why VACUUM cannot just delete</h2>
     <p>A dead tuple is not automatically removable. Some transaction may still be entitled to see that version.</p>
     <p>So PostgreSQL computes a boundary: <strong>the oldest snapshot held by any currently open transaction</strong>. That is the <code>xmin horizon</code>. Anything that died after that line is untouchable.</p>
-    <div class="callout">One long-lived open transaction pins cleanup for the entire database at that moment — even if it does nothing at all. The effect is global, not limited to the tables it touched.</div>
+    <div class="callout">One long-lived open transaction pins cleanup for the entire database at that moment — even if it does nothing at all. It is not limited to the tables it touched: <strong>the whole database is affected</strong>. Not the whole instance, though — ordinary tables in other databases keep getting cleaned (shared catalogs are a separate matter).</div>
     <p>In the lab above, session A runs a single <code>SELECT</code> and then idles. Yet every dead tuple session B produces stays stuck. This is the most common bloat scenario in production.</p>
 
     <h2>Reclaiming does not shrink the file</h2>
@@ -253,12 +253,15 @@ B  COMMIT        <em>→ 3 old versions finally die</em>
 
     <h2>What to check in production</h2>
     <p>If a table keeps growing and you cannot see why, look for old transactions first:</p>
-    <pre><code>SELECT pid, state, age(backend_xid) AS xid_age,
+    <pre><code>SELECT pid, state,
+       age(backend_xid)  AS xid_age,
+       age(backend_xmin) AS xmin_age,   -- long read-only transactions show up here
        now() - xact_start AS duration, query
 FROM pg_stat_activity
 WHERE state != 'idle' OR backend_xid IS NOT NULL
 ORDER BY xact_start
 LIMIT 10;</code></pre>
+    <p>Selecting <code>xmin_age</code> alongside matters. The long read-only transaction this page is about never writes, so <strong>its <code>backend_xid</code> is NULL</strong> — read <code>xid_age</code> alone and the culprit shows up blank.</p>
     <p>An <code>idle in transaction</code> session sitting for hours is very likely your culprit — a connection that opened a transaction and never committed.</p>
     <p>For the scale of the bloat:</p>
     <pre><code>SELECT relname,

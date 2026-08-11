@@ -253,7 +253,7 @@ B  COMMIT        <em>→ 구버전 3개가 그제서야 dead</em>
     <h2>VACUUM이 함부로 지우지 못하는 이유</h2>
     <p>죽은 튜플이라고 해서 즉시 지울 수 있는 게 아닙니다. 그 버전을 볼 자격이 있는 트랜잭션이 아직 살아 있을 수 있으니까요.</p>
     <p>그래서 PostgreSQL은 경계선을 하나 계산합니다. <strong>현재 열려 있는 트랜잭션들이 가진 가장 오래된 스냅샷</strong>, 이것이 <code>xmin horizon</code>입니다. 이 선보다 나중에 죽은 튜플은 건드릴 수 없습니다.</p>
-    <div class="callout">열린 트랜잭션이 하나라도 오래 살아 있으면, 그 트랜잭션이 아무 일도 하지 않더라도 데이터베이스 전체의 정리 작업이 그 시점에 묶입니다. 특정 테이블만이 아니라 전역입니다.</div>
+    <div class="callout">열린 트랜잭션이 하나라도 오래 살아 있으면, 그 트랜잭션이 아무 일도 하지 않더라도 데이터베이스 전체의 정리 작업이 그 시점에 묶입니다. 그 트랜잭션이 건드린 테이블만이 아니라 <strong>같은 데이터베이스 전체</strong>입니다. 다만 인스턴스 전역은 아니에요 — 다른 데이터베이스의 일반 테이블 정리까지 막지는 않습니다(공유 카탈로그는 별개).</div>
     <p>위 실험대에서 세션 A는 <code>SELECT</code> 한 번 하고 아무것도 하지 않습니다. 그런데 세션 B가 만들어내는 모든 쓰레기가 회수 불가 상태로 남죠. 이것이 운영 중 가장 흔한 블로트 시나리오입니다.</p>
 
     <h2>회수해도 파일은 줄지 않는다</h2>
@@ -268,12 +268,15 @@ B  COMMIT        <em>→ 구버전 3개가 그제서야 dead</em>
 
     <h2>현장에서 확인할 것</h2>
     <p>테이블이 계속 커지는데 원인을 모르겠다면, 먼저 오래된 트랜잭션부터 찾습니다.</p>
-    <pre><code>SELECT pid, state, age(backend_xid) AS xid_age,
+    <pre><code>SELECT pid, state,
+       age(backend_xid)  AS xid_age,
+       age(backend_xmin) AS xmin_age,   -- 읽기 전용 장기 트랜잭션은 이쪽에 잡힌다
        now() - xact_start AS duration, query
 FROM pg_stat_activity
 WHERE state != 'idle' OR backend_xid IS NOT NULL
 ORDER BY xact_start
 LIMIT 10;</code></pre>
+    <p><code>xmin_age</code>를 함께 뽑는 게 중요합니다. 이 페이지의 주인공인 <strong>읽기 전용 장기 트랜잭션은 쓰기를 하지 않아 <code>backend_xid</code>가 NULL</strong>이라, <code>xid_age</code>만 보면 빈 값으로 나와 범인을 놓칩니다.</p>
     <p><code>idle in transaction</code> 상태가 몇 시간씩 잡혀 있다면 그게 범인일 가능성이 높습니다. 애플리케이션에서 트랜잭션을 열어두고 커밋하지 않은 커넥션이죠.</p>
     <p>블로트 규모는 이렇게 봅니다.</p>
     <pre><code>SELECT relname,

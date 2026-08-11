@@ -178,7 +178,7 @@ Heap 128GB  → stall 312ms/s</div>
     <p>G1 divides the heap into uniform <strong>regions</strong>. To collect, it picks a set of regions and <strong>copies</strong> the live objects out into fresh ones, then frees the originals wholesale.</p>
     <p>The catch is that copying changes addresses. Application threads must not be holding stale ones, so <strong>the world stays stopped for the entire copy.</strong> Pause time is simply "how much live data got moved".</p>
     <pre><code>pause ≈ fixed cost + (live bytes to copy) / copy throughput</code></pre>
-    <p>G1 resizes the young generation to hit <code>-XX:MaxGCPauseMillis</code> (200ms by default), shrinking it when it overshoots. That adaptation is why the target holds up to 16GB in the lab above.</p>
+    <p>G1 resizes the young generation to hit <code>-XX:MaxGCPauseMillis</code> (200ms by default), shrinking it when it overshoots. That adaptation is why the lab above <strong>stays near the target</strong> up to a 16GB heap, at 208ms. Not exactly 200ms — it is a target, not a guarantee.</p>
     <div class="callout">But the young generation has a floor. <code>G1NewSizePercent</code> defaults to 5%, and 5% of a 128GB heap is already 6.4GB. Copying even the 15% that survives is close to a gigabyte. That is how <strong>the target becomes unreachable</strong>.</div>
 
     <h2>How ZGC avoids stopping</h2>
@@ -226,7 +226,7 @@ jcmd &lt;pid&gt; VM.flags | tr ' ' '\n' | grep -i gc
 
 // safepoints too — STW is not only GC
 -Xlog:safepoint:file=safepoint.log</code></pre>
-    <p>That second one matters. Thread dumps, biased lock revocation and JIT deoptimisation all stop the world. Concluding "no pauses" from the GC log alone leaves things out.</p>
+    <p>That second one matters. Thread dumps, heap dumps, class redefinition, monitor deflation and JIT deoptimisation all stop the world. Concluding "no pauses" from the GC log alone leaves things out.</p>
     <p>On ZGC, watch stalls separately:</p>
     <pre><code>-Xlog:gc+alloc=debug   // Allocation Stall entries</code></pre>
     <p>Rules of thumb for switching:</p>

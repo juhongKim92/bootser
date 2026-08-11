@@ -126,15 +126,16 @@ ring       <em>7% moved</em>
 modulo     <em>84% moved</em>
 neighbour  <em>345 → 446, all at once</em></div>
       <p class="why">This is the whole reason consistent hashing exists. On the ring <strong>only the range the departed node owned</strong> passes to the next node. Modulo changes its divisor, so nearly every key gets a new destination.</p>
-      <p class="why" style="margin-top:9px">Do not take that 7% at face value, though. It is <strong>exactly the share the dead node happened to hold.</strong> With one virtual node those shares vary wildly, so depending on which node dies it could be 3% or 30% — and a <em>single</em> clockwise neighbour absorbs all of it.</p>
+      <p class="why" style="margin-top:9px">Do not take that 7% at face value, though. It is <strong>exactly the share the dead node happened to hold.</strong> With one virtual node those shares vary wildly, so it depends entirely on which node dies — in this configuration the range runs from <strong>6.7% to 28.3%</strong>. And a <em>single</em> clockwise neighbour absorbs all of it.</p>
+      <p class="why" style="margin-top:9px">Note that the − button <strong>always removes the last node</strong>. You cannot walk that range in the lab; the screen will keep showing the same 7%.</p>
     </div>
 
     <div class="recipe">
       <h4>3. Raise the virtual node count</h4>
-      <div class="seq">Move virtual nodes 1 → 20 → 160 → 200
+      <div class="seq">From the initial state (6 nodes), move virtual nodes 1 → 20 → 160 → 200
 
-spread (CV)  <em>46.9% → 17.0% → 5.9% → 5.5%</em>
-max / min    <em>4.20× → 1.54× → 1.16× → 1.16×</em>
+spread (CV)  <em>46.9% → 20.4% → 8.3% → 5.5%</em>
+max / min    <em>4.20× → 1.85× → 1.27× → 1.16×</em>
 the ring     <em>colours interleave finely</em></div>
       <p class="why">Scatter one node across many points and <strong>the law of large numbers takes over.</strong> The more points, the closer each node's total arc length converges to the mean. This is where the industry habit of 150–160 comes from.</p>
     </div>
@@ -164,7 +165,7 @@ modulo   <em>81%</em></div>
 Watch the moved panel
 
 moved    <em>over 70%</em></div>
-      <p class="why">Changing the virtual node count relocates every point on the ring, so it triggers <strong>what is effectively a full reshuffle</strong> — even though the node set never changed. Do this on a live cache cluster and you get a total cache miss. <strong>Pick it up front and make every client use the same value.</strong></p>
+      <p class="why">Each point sits at <code>hash('node-A#' + i)</code>, so the existing points stay exactly where they were. The reason so many keys still move is that <strong>points are added and removed in bulk, and almost every arc boundary gets redrawn</strong> — even though the node set never changed. Go the other way and nudge 160 up to 200: the original 160 points survive and only about 16% of keys move. It is the large jumps that hurt. Do this on a live cache cluster and you get a total cache miss. <strong>Pick it up front and make every client use the same value.</strong></p>
     </div>
 
     <h2>What is wrong with modulo</h2>
@@ -208,19 +209,20 @@ String lookup(String key) {
     <p>The ring alone is not enough. Four nodes means four points on the ring, and there is no reason those four land evenly. Set virtual nodes to 1 in the lab and you can watch the spread reach 47% with a max/min gap over four times.</p>
     <p>The fix is <strong>to register one node many times under different names</strong> — <code>node-A#0</code>, <code>node-A#1</code>, and so on. The more points, the closer each node's total arc length converges to the mean.</p>
     <table class="keytable">
-      <tr><th>virtual nodes</th><th>spread (CV)</th><th>memory</th></tr>
+      <tr><th>virtual nodes</th><th>spread (CV) — at 6 nodes</th><th>memory</th></tr>
       <tr><td>1</td><td>47% — unusable</td><td>negligible</td></tr>
-      <tr><td>20</td><td>17%</td><td>small</td></tr>
-      <tr><td>160</td><td>6%</td><td>160 entries per node</td></tr>
+      <tr><td>20</td><td>20%</td><td>small</td></tr>
+      <tr><td>160</td><td>8%</td><td>160 entries per node</td></tr>
     </table>
     <p>Virtual nodes also give you <strong>weighting</strong>. Give a server with twice the memory twice the virtual nodes and it takes twice the share — useful for clusters built from heterogeneous machines.</p>
+    <div class="callout"><strong>Do not read those absolute numbers too literally.</strong> The lab hashes only 1500 keys, so even a perfectly even ring lands around CV 5.8% from sampling noise alone (<code>√(1500 × 1/6 × 5/6) ÷ 250</code>). At 160 virtual nodes and above, the single-digit figures are measuring that noise floor rather than any imbalance in the ring — which is why they can even move the wrong way as you change the node count. <strong>Trust the direction, not the digits.</strong></div>
     <div class="callout">More is not always better. The ring holds <code>nodes × virtual nodes</code> entries, so lookup cost and memory grow together, and every node change touches proportionally more entries. At a scale of thousands of nodes this cost is a real constraint.</div>
 
     <h2>Where this is actually used</h2>
     <ul>
       <li><strong>memcached clients</strong> — the libketama lineage, where 160 virtual nodes per node is the de facto standard. That "160" you see everywhere came from here</li>
       <li><strong>Cassandra</strong> — the token ring. It defaulted to 256 tokens per node early on, but dropped to 16 in 4.0 along with a new allocation algorithm: more tokens scatter replica placement, which increases the number of <em>combinations affected when any single node dies</em></li>
-      <li><strong>DynamoDB</strong> — the Dynamo paper is what popularised the approach</li>
+      <li><strong>Dynamo (the paper)</strong> — the 2007 Dynamo paper is what popularised the approach. Not the same system as the similarly named DynamoDB service</li>
       <li><strong>nginx</strong> — <code>hash $request_uri consistent;</code> for upstream selection</li>
       <li><strong>Envoy</strong> — ring hash and Maglev load balancers</li>
     </ul>

@@ -178,7 +178,7 @@ ZGC 처리량      <em>떨어진다</em></div>
     <p>G1은 힙을 <strong>리전</strong>이라는 균일한 조각으로 나눕니다. 수집할 때는 리전 몇 개를 골라 collection set을 만들고, 그 안의 살아 있는 객체를 다른 리전으로 <strong>복사</strong>합니다. 복사가 끝나면 원래 리전은 통째로 비워요.</p>
     <p>문제는 복사하는 동안 객체의 주소가 바뀐다는 겁니다. 애플리케이션 스레드가 옛 주소를 들고 있으면 안 되니, <strong>복사하는 내내 세상을 멈춰야 합니다.</strong> 정지 시간이 곧 "옮긴 데이터의 양"이에요.</p>
     <pre><code>정지 시간 ≈ 고정 비용 + (옮길 살아있는 객체 양) / 복사 처리량</code></pre>
-    <p>G1은 <code>-XX:MaxGCPauseMillis</code>(기본 200ms)를 맞추려고 young 영역 크기를 스스로 조절합니다. 예측이 빗나가면 다음 번에 young을 줄이는 식이죠. 실험대에서 힙 16GB까지 목표가 지켜지는 게 이 덕분입니다.</p>
+    <p>G1은 <code>-XX:MaxGCPauseMillis</code>(기본 200ms)를 맞추려고 young 영역 크기를 스스로 조절합니다. 예측이 빗나가면 다음 번에 young을 줄이는 식이죠. 실험대에서 힙 16GB까지 208ms로 <strong>목표 근처에서 버티는</strong> 게 이 덕분입니다. 정확히 200ms를 지키는 건 아니고, 목표는 어디까지나 목표입니다.</p>
     <div class="callout">하지만 young 영역에는 하한이 있습니다. <code>G1NewSizePercent</code> 기본값이 5%인데, 힙이 128GB면 그 5%가 이미 6.4GB예요. 여기서 살아남는 15%만 복사해도 1GB에 가깝습니다. <strong>목표를 지킬 방법이 사라지는 지점</strong>이 이렇게 생깁니다.</div>
 
     <h2>ZGC가 멈추지 않는 방법</h2>
@@ -227,7 +227,7 @@ jcmd &lt;pid&gt; VM.flags | tr ' ' '\n' | grep -i gc
 
 // 안전점(safepoint) 까지 보려면 — STW 는 GC 만의 것이 아니다
 -Xlog:safepoint:file=safepoint.log</code></pre>
-    <p>두 번째 로그가 중요합니다. 스레드 덤프, 바이어스드 락 해제, JIT 디옵티마이제이션도 STW를 만듭니다. GC 로그만 보고 "정지가 없다"고 결론 내리면 놓치는 게 생겨요.</p>
+    <p>두 번째 로그가 중요합니다. 스레드 덤프, 힙 덤프, 클래스 재정의, 모니터 디플레이션, JIT 디옵티마이제이션도 STW를 만듭니다. GC 로그만 보고 "정지가 없다"고 결론 내리면 놓치는 게 생겨요.</p>
     <p>ZGC를 쓰신다면 할당 지연을 따로 봐야 합니다.</p>
     <pre><code>-Xlog:gc+alloc=debug   // Allocation Stall 항목이 찍힌다</code></pre>
     <p>바꿀지 판단하는 기준은 대략 이렇습니다.</p>

@@ -125,7 +125,7 @@
 
 follower timers expire one by one
 the first to expire becomes a candidate and bumps its term
-collect a majority of votes and it leads  <em>2–4 seconds, typically</em></div>
+collect a majority of votes and it leads  <em>1–2 seconds, typically</em></div>
       <p class="why">When the leader disappears the heartbeats stop, so follower election timers are no longer reset. Because those timers are <strong>randomised</strong>, one node usually steps forward first and the others vote for it.</p>
     </div>
 
@@ -223,7 +223,7 @@ two failures leave 2/4 and it stops</div>
     </table>
     <p><strong>Set timeouts against your round-trip latency.</strong> The election timeout must be far larger than a network round trip, and far larger than the heartbeat interval. The usual shorthand is <code>heartbeat ≪ election timeout ≪ mean time between failures</code>. etcd defaults to a 100ms heartbeat and a 1000ms election timeout.</p>
     <p>Carry those defaults into a cluster spanning data centres and every latency spike changes your leader. If leadership churns, suspect these values first.</p>
-    <p><strong>Disk latency destabilises leadership too.</strong> Raft persists votes and log entries before replying, so a slow fsync delays heartbeat responses and triggers elections on a perfectly healthy network. This is where the advice to watch <code>wal_fsync_duration_seconds</code> in etcd comes from.</p>
+    <p><strong>Disk latency destabilises leadership too.</strong> Raft persists votes and log entries before replying, so a slow fsync delays heartbeat responses and triggers elections on a perfectly healthy network. This is where the advice to watch <code>etcd_disk_wal_fsync_duration_seconds</code> in etcd comes from.</p>
     <p><strong>Never restart two of three nodes at once.</strong> It is a common rolling-update accident. Go one at a time, confirming the previous node has fully caught up before moving on.</p>
     <p><strong>Where it is used:</strong> etcd (the state store behind Kubernetes), Consul, TiKV, CockroachDB, and Kafka's KRaft mode after ZooKeeper was removed are all Raft-based.</p>
     <div class="callout">This page covers <strong>leader election only</strong>. Raft's other half — log replication, commit rules, snapshots, membership changes — is left out. The log up-to-date check in particular is central to safety and missing here, so do read that part alongside any real implementation.</div>
@@ -252,7 +252,7 @@ window.LAB_I18N = {
   evNodeDown:'N$1 stopped', evNodeUp:'N$1 restarted',
   scene:[
     'Five nodes, majority of three. In a moment one is elected leader and the rest become followers. The arc around each node is its election timer — notice the lengths differ. That randomness is what stops them all standing at once.',
-    'The leader has been stopped. With heartbeats gone, follower timers are no longer reset. The first to expire raises its term and goes looking for votes. A new leader usually appears within 2–4 seconds.',
+    'The leader has been stopped. With heartbeats gone, follower timers are no longer reset. The first to expire raises its term and goes looking for votes. A new leader usually appears within 1–2 seconds.',
     'The network is cut 3 against 2. No message crosses between the camps — see how the lines between nodes are severed.',
     'Now watch. The majority (3 nodes) holds quorum and carries on normally. The minority (2 nodes) keeps standing for election but cannot produce three votes, so only its term climbs. The majority term sits still while the minority term rises without pause — the longer you leave it, the wider the gap. No leader will ever emerge there.',
     'The partition is healed. The instant the minority’s inflated term reaches the majority leader, that leader resigns and an election runs. The data is safe, but the interruption was unnecessary. Pre-Vote is what prevents this.',
