@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PostgreSQL MVCC and VACUUM — why your table never shrinks</title>
+  <meta name="description" content="Drive it yourself and watch how a single open transaction stalls VACUUM and inflates a PostgreSQL table: xmin horizon, dead tuples, VACUUM FULL and pg_repack.">
+  <link rel="canonical" href="https://lab.vermilion19.com/en/mvcc/">
+  <link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/mvcc/">
+  <link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mvcc/">
+  <link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mvcc/">
+  <meta property="og:type" content="article">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="ko_KR">
+  <meta property="og:title" content="PostgreSQL MVCC and VACUUM — why your table never shrinks">
+  <meta property="og:description" content="How a single open transaction stalls VACUUM and inflates a PostgreSQL table. Drive it yourself and watch it happen.">
+  <meta property="og:url" content="https://lab.vermilion19.com/en/mvcc/">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+  <link rel="stylesheet" href="/shared/base.css">
+  <link rel="stylesheet" href="/shared/mvcc-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/mvcc/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>Why your table never shrinks after DELETE</h1>
+  <p class="lede">How a single open transaction stalls VACUUM and inflates a PostgreSQL table. Drive it yourself and watch it happen.</p>
+
+  <div class="lab">
+
+    <section class="axis">
+      <span class="cap">Transaction ID axis</span>
+      <div class="ticks" id="ticks"></div>
+      <div class="hz">
+        <span>xmin horizon</span>
+        <b id="hzVal">—</b>
+        <span class="bar"></span>
+        <span id="hzWho">no open transaction · everything reclaimable</span>
+      </div>
+    </section>
+
+    <section style="padding:0">
+      <div class="decks">
+        <div class="deck">
+          <h3>Session A</h3>
+          <div class="state" id="stA">idle</div>
+          <div class="ops">
+            <button data-session="A" data-op="begin">BEGIN</button>
+            <button data-session="A" data-op="select">SELECT</button>
+            <button data-session="A" data-op="update">UPDATE ×3</button>
+            <button data-session="A" data-op="delete">DELETE ×3</button>
+            <button data-session="A" data-op="commit">COMMIT</button>
+          </div>
+        </div>
+        <div class="deck">
+          <h3>Session B</h3>
+          <div class="state" id="stB">idle</div>
+          <div class="ops">
+            <button data-session="B" data-op="begin">BEGIN</button>
+            <button data-session="B" data-op="select">SELECT</button>
+            <button data-session="B" data-op="update">UPDATE ×3</button>
+            <button data-session="B" data-op="delete">DELETE ×3</button>
+            <button data-session="B" data-op="commit">COMMIT</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">Heap — pages and slots</span>
+      <div class="slotkey">
+        <div class="slot live"><span>103</span><span>—</span></div>
+        <div class="txt"><b>top = xmin · transaction that created this version</b><br><b>bottom = xmax · transaction that killed it (— means still live)</b></div>
+      </div>
+      <div class="pages" id="pages"></div>
+      <div class="legend">
+        <span class="l-live"><i></i><span>live</span></span>
+        <span class="l-pending"><i></i><span>uncommitted</span></span>
+        <span class="l-blocked"><i></i><span>dead · blocked</span></span>
+        <span class="l-free"><i></i><span>dead · reclaimable</span></span>
+      </div>
+    </section>
+
+    <section>
+      <div class="meters">
+        <div class="meter">
+          <span class="k">table size</span>
+          <span class="v" id="mSize">—</span>
+        </div>
+        <div class="meter">
+          <span class="k">live rows</span>
+          <span class="v" id="mLive">—</span>
+        </div>
+        <div class="meter" id="mDeadBox">
+          <span class="k">dead tuples</span>
+          <span class="v" id="mDead">—</span>
+        </div>
+        <div class="meter">
+          <span class="k">bloat</span>
+          <span class="v" id="mBloat">—</span>
+        </div>
+        <div style="flex:1"></div>
+        <button class="solid" id="btnVacuum">VACUUM</button>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">Log</span>
+      <div class="log" id="log"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button class="solid" id="btnPlay">Play scenario</button>
+        <button id="btnStep">Next step</button>
+        <button id="btnReset">Reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">—</span>
+        <span id="nText">Press play to replay a real production incident step by step. You can also grab the controls at any time.</span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose guide">
+    <h2>Driving it yourself</h2>
+    <p>The play button only walks a fixed script. Press the session buttons directly and you can leave the script and build any situation you want. Touching any control during playback pauses it and hands you the state as-is.</p>
+
+    <h3>What each button does</h3>
+    <table class="keytable">
+      <tr><th>button</th><th>effect</th></tr>
+      <tr><td>BEGIN</td><td>Opens a transaction. <strong>No snapshot yet.</strong> On its own this does not block VACUUM</td></tr>
+      <tr><td>SELECT</td><td>Takes a snapshot. From this moment the horizon is pinned to this session. No write, so no xid is assigned</td></tr>
+      <tr><td>UPDATE ×3</td><td>Updates 3 live rows: xmax stamped on 3 old versions, 3 new versions written into free slots</td></tr>
+      <tr><td>DELETE ×3</td><td>Stamps xmax on 3 rows only. No new versions, so no new slots consumed</td></tr>
+      <tr><td>COMMIT</td><td>Commits this transaction's xid and closes the session, releasing whatever horizon it held</td></tr>
+      <tr><td>VACUUM</td><td>Attempts reclamation. Press it whenever and as often as you like</td></tr>
+    </table>
+    <p>Pressing SELECT or UPDATE with no open transaction issues BEGIN automatically, and the log says so.</p>
+
+    <h3>Reading the display</h3>
+    <ul>
+      <li>Each <strong>slot</strong> is one tuple. Top number is <code>xmin</code>, bottom is <code>xmax</code>. Colour is the state</li>
+      <li>The ochre range on the <strong>axis</strong> is everything older than the horizon — <em>safe to remove</em>. Blue-outlined chips are pinned by an open transaction, labelled with the session letter</li>
+      <li><strong>Table size</strong> is page count × 8KB. Empty slots do not shrink it if the page still exists</li>
+      <li><strong>Bloat</strong> is dead tuples as a share of all tuples</li>
+    </ul>
+
+    <h2>Try these</h2>
+
+    <div class="recipe">
+      <h4>1. BEGIN alone blocks nothing</h4>
+      <div class="seq">Reset
+A  BEGIN
+B  UPDATE ×3 → COMMIT
+   VACUUM        <em>→ reclaimed</em>
+
+A  SELECT        <em>← snapshot taken here</em>
+B  UPDATE ×3 → COMMIT
+   VACUUM        <em>→ reclaimed 0</em></div>
+      <p class="why">The culprit is not <code>BEGIN</code> but the <strong>first statement</strong>. So in <code>pg_stat_activity</code>, do not read state alone — check whether <code>backend_xmin</code> is held.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. The blocker keeps changing hands</h4>
+      <div class="seq">Reset
+A  SELECT
+B  UPDATE ×3 → COMMIT
+   VACUUM        <em>→ 0. A is blocking</em>
+
+B  SELECT        <em>← B opens one too</em>
+A  COMMIT
+   VACUUM        <em>→ 3 reclaimed. B's snapshot is newer</em>
+
+A  UPDATE ×3 → COMMIT
+   VACUUM        <em>→ 0. now B is blocking</em></div>
+      <p class="why">The horizon is set by the <strong>oldest</strong> open transaction. Killing one long transaction does not end it — the next oldest immediately takes over the role. Watch the blue chip move from A to B on the axis.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. UPDATE is what creates bloat</h4>
+      <div class="seq">Reset
+B  DELETE ×3 → COMMIT   (repeat a few times)
+   Watch the size          <em>→ does not grow</em>
+
+Reset
+B  UPDATE ×3 → COMMIT   (same number of times)
+   Watch the size          <em>→ pages appear</em></div>
+      <p class="why"><code>DELETE</code> only marks death; it writes no new tuple. <code>UPDATE</code> keeps the old version and writes a new one, so it consumes space <strong>at twice the rate</strong>. This is why bulk update jobs are the usual suspect.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. Only trailing pages get truncated</h4>
+      <div class="seq">Reset
+B  UPDATE ×3 → COMMIT   (repeat until pages grow)
+   VACUUM
+
+Check whether the last page is fully empty
+Empty      → size drops, "truncated" appears in the log
+One survivor → size unchanged</div>
+      <p class="why">VACUUM never moves data forward, so a hole in the middle of the file stays a hole. It can only cut from the end, and <strong>only when the end is completely empty</strong>.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. Death is not settled until commit</h4>
+      <div class="seq">Reset
+B  UPDATE ×3     <em>← do not commit</em>
+   Look at slots  <em>→ 3 dashed (uncommitted) appear</em>
+   Dead count 0   <em>← old versions still read as live</em>
+   VACUUM        <em>→ nothing to do</em>
+
+B  COMMIT        <em>→ 3 old versions finally die</em>
+   VACUUM        <em>→ reclaimed</em></div>
+      <p class="why">Old versions cannot be removed before commit: <strong>a rollback would make them the correct answer again</strong>. The dashed slots are the opposite case — new versions nobody can see yet. Meanwhile that transaction pins the horizon with its own xid; check the axis.</p>
+    </div>
+  </article>
+
+  <article class="prose">
+    <h2>PostgreSQL does not modify rows</h2>
+    <p>This trips up almost everyone arriving from another database. An <code>UPDATE</code> in PostgreSQL does not change the existing row. <strong>It stamps a death marker on the old version and writes a new version somewhere else.</strong> A <code>DELETE</code> likewise removes nothing — it only marks.</p>
+    <p>Every tuple carries two system columns you can select directly:</p>
+    <pre><code>SELECT xmin, xmax, * FROM orders LIMIT 5;</code></pre>
+    <ul>
+      <li><code>xmin</code> — the transaction that created this version</li>
+      <li><code>xmax</code> — the transaction that killed it (0 while still live)</li>
+    </ul>
+    <p>This is why readers never block writers: a reader simply picks the version matching its snapshot. The cost is <strong>garbage</strong>, and VACUUM is what collects it.</p>
+
+    <h2>Why VACUUM cannot just delete</h2>
+    <p>A dead tuple is not automatically removable. Some transaction may still be entitled to see that version.</p>
+    <p>So PostgreSQL computes a boundary: <strong>the oldest snapshot held by any currently open transaction</strong>. That is the <code>xmin horizon</code>. Anything that died after that line is untouchable.</p>
+    <div class="callout">One long-lived open transaction pins cleanup for the entire database at that moment — even if it does nothing at all. The effect is global, not limited to the tables it touched.</div>
+    <p>In the lab above, session A runs a single <code>SELECT</code> and then idles. Yet every dead tuple session B produces stays stuck. This is the most common bloat scenario in production.</p>
+
+    <h2>Reclaiming does not shrink the file</h2>
+    <p>When VACUUM removes dead tuples, the space becomes <strong>reusable</strong> — but the file does not get smaller. VACUUM never relocates data forward, so a hole in the middle stays a hole.</p>
+    <p>There is one exception: <strong>trailing pages that end up completely empty</strong> can be truncated and returned to the OS. Watch the lab for when page count drops and when it refuses to.</p>
+    <p>To actually get disk back you need one of:</p>
+    <ul>
+      <li><code>VACUUM FULL</code> — rewrites the whole table under an <strong>ACCESS EXCLUSIVE lock</strong>, blocking even reads, and needs free space roughly equal to the table</li>
+      <li><code>pg_repack</code> — the same result with essentially no downtime. Usually the production answer</li>
+      <li>For partitioned tables, <code>DROP</code> the partition</li>
+    </ul>
+
+    <h2>What to check in production</h2>
+    <p>If a table keeps growing and you cannot see why, look for old transactions first:</p>
+    <pre><code>SELECT pid, state, age(backend_xid) AS xid_age,
+       now() - xact_start AS duration, query
+FROM pg_stat_activity
+WHERE state != 'idle' OR backend_xid IS NOT NULL
+ORDER BY xact_start
+LIMIT 10;</code></pre>
+    <p>An <code>idle in transaction</code> session sitting for hours is very likely your culprit — a connection that opened a transaction and never committed.</p>
+    <p>For the scale of the bloat:</p>
+    <pre><code>SELECT relname,
+       n_live_tup, n_dead_tup,
+       round(n_dead_tup * 100.0 / nullif(n_live_tup + n_dead_tup, 0), 1) AS dead_pct,
+       last_autovacuum
+FROM pg_stat_user_tables
+ORDER BY n_dead_tup DESC
+LIMIT 10;</code></pre>
+    <p>Prevention comes down to a short list:</p>
+    <ul>
+      <li>Set <code>idle_in_transaction_session_timeout</code>. Highest impact by far</li>
+      <li>Move long analytical queries to a read replica — but note <code>hot_standby_feedback</code> can push the replica's horizon back onto the primary</li>
+      <li>Keep transaction boundaries explicit in your connection pool, especially code that returns a connection with autocommit disabled</li>
+      <li>Batch large <code>UPDATE</code> statements so autovacuum can keep pace between chunks</li>
+    </ul>
+    <div class="callout">This model is simplified for teaching. Real PostgreSQL also deals with HOT updates, hint bits, freezing and multixacts. The mechanism that matters here — the <code>xmin horizon</code> blocking reclamation — works exactly as shown.</div>
+  </article>
+
+  <footer>PostgreSQL 16 · simplified teaching model · <a href="/mvcc/" hreflang="ko" lang="ko">한국어</a> / English</footer>
+</main>
+
+<script src="/shared/mvcc-lab.js"></script>
+<script>
+  initMvccLab({
+    strings: {
+      hzNone:'no open transaction · everything reclaimable',
+      hzHeld:'held by session $1',
+      idle:'idle', openNoSnap:'open · no snapshot', openSnap:'open · snapshot $1', openXid:'open · xid $1 · snapshot $2',
+      play:'Play scenario', pause:'Pause',
+      nIntro:'Press play to replay a real production incident step by step. You can also grab the controls at any time.',
+      lgAuto:'Session $1: (no transaction open — BEGIN issued automatically)',
+      lgBegin:'Session $1: BEGIN',
+      lgSelect:'Session $1: SELECT — took snapshot $2',
+      lgUpdate:'Session $1: UPDATE $2 rows — $2 old versions dead, $2 new versions written',
+      lgDelete:'Session $1: DELETE $2 rows',
+      lgCommit:'Session $1: COMMIT',
+      lgVacFull:'VACUUM — reclaimed $1, held back $2',
+      lgVacNone:'VACUUM — reclaimed 0. Dead tuples newer than horizon ($1) cannot be removed yet',
+      lgTrunc:'Truncated $1 trailing page(s) — returned to OS',
+      lgNoTrunc:'Space reclaimed, file size unchanged. Freed slots are queued for reuse',
+    },
+    scenes: [
+      'A plain table with 16 rows. Everything is live.',
+      'Session B updates 3 rows. PostgreSQL never updates in place — it stamps xmax on the old version and writes a new one elsewhere. Three dead tuples appear.',
+      'VACUUM reclaims all three. With no open transaction the horizon sits in the future, so those dead tuples are provably invisible to everyone. This is the healthy path.',
+      'Here it begins. Session A runs BEGIN then a SELECT, and just sits there. A batch job, a reporting query, a connection that forgot to commit. The horizon is now pinned to A’s snapshot.',
+      'Session B keeps working, unaware. Another 3 rows updated.',
+      'This is the crux. There are dead tuples, yet VACUUM reclaims none. Session A’s snapshot predates those versions, so A still has the right to see them.',
+      'B keeps writing. Reclamation is blocked while new versions pile up, so the heap starts appending pages. That is bloat.',
+      'Running VACUUM again changes nothing, and autovacuum fares no better. The cause is not a lazy vacuum — the data genuinely must not be removed yet.',
+      'Session A finally commits. The horizon is released and jumps forward.',
+      'Everything is reclaimed now. But look at the table size — unchanged. VACUUM only marks space reusable; it will not shift trailing data forward to close a gap in the middle.',
+      'To actually give disk back you need VACUUM FULL (takes an exclusive lock) or pg_repack (online). Not getting here in the first place is far cheaper.',
+    ],
+  });
+</script>
+</body>
+</html>

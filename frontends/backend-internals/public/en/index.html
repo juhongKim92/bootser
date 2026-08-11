@@ -1,20 +1,20 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Backend Internals — 백엔드 개념 인터랙티브 시각화</title>
-  <meta name="description" content="데이터베이스, JVM, 분산 시스템의 내부 동작을 직접 조작하며 확인하는 시각화 모음. PostgreSQL MVCC와 VACUUM, G1과 ZGC의 정지 시간을 손으로 만져보며 이해합니다.">
-  <link rel="canonical" href="https://lab.vermilion19.com/">
+  <title>Backend Internals — interactive visualizations</title>
+  <meta name="description" content="Interactive visualizations of backend internals you can drive yourself: PostgreSQL MVCC and VACUUM, G1 versus ZGC pause behaviour, and more.">
+  <link rel="canonical" href="https://lab.vermilion19.com/en/">
   <link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/">
   <link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/">
   <link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/">
   <meta property="og:type" content="website">
-  <meta property="og:locale" content="ko_KR">
-  <meta property="og:locale:alternate" content="en_US">
-  <meta property="og:title" content="Backend Internals — 백엔드 개념 인터랙티브 시각화">
-  <meta property="og:description" content="데이터베이스, JVM, 분산 시스템의 내부 동작을 직접 조작하며 확인하는 시각화 모음.">
-  <meta property="og:url" content="https://lab.vermilion19.com/">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="ko_KR">
+  <meta property="og:title" content="Backend Internals — interactive visualizations">
+  <meta property="og:description" content="Interactive visualizations of backend internals you can drive yourself.">
+  <meta property="og:url" content="https://lab.vermilion19.com/en/">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -48,55 +48,55 @@
 <body>
 
 <div class="top"><div class="wrap">
-  <a class="brand" href="/">Backend Internals</a>
-  <nav><a class="btn" href="/en/" hreflang="en" lang="en">EN</a></nav>
+  <a class="brand" href="/en/">Backend Internals</a>
+  <nav><a class="btn" href="/" hreflang="ko" lang="ko">한국어</a></nav>
 </div></div>
 
 <main class="wrap">
-  <h1>직접 만져보는 백엔드 내부 동작</h1>
-  <p class="lede">글로 읽으면 알겠는데 막상 장애가 나면 손이 안 가는 개념들이 있습니다. 여기서는 직접 조작해보며 확인합니다.</p>
+  <h1>Backend internals you can actually touch</h1>
+  <p class="lede">Some concepts read fine on paper and desert you the moment production breaks. Here you drive them yourself.</p>
 
   <div class="cards">
 
-    <a class="card" href="/mvcc/">
+    <a class="card" href="/en/mvcc/">
       <span class="no">01</span>
       <span>
-        <h2>DELETE 했는데 테이블이 줄지 않는 이유</h2>
-        <p>PostgreSQL MVCC와 VACUUM. 열려 있는 트랜잭션 하나가 어떻게 데이터베이스 전체의 정리 작업을 멈춰 세우는지.</p>
+        <h2>Why your table never shrinks after DELETE</h2>
+        <p>PostgreSQL MVCC and VACUUM. How a single open transaction stalls cleanup across the entire database.</p>
       </span>
-      <span class="tag live">공개</span>
+      <span class="tag live">live</span>
     </a>
 
-    <a class="card" href="/gc/">
+    <a class="card" href="/en/gc/">
       <span class="no">02</span>
       <span>
-        <h2>G1과 ZGC는 왜 다르게 멈추는가</h2>
-        <p>힙을 키우면 G1의 STW는 길어지는데 ZGC는 거의 그대로입니다. 그 차이가 어디서 나오는지, 그리고 ZGC가 공짜가 아닌 이유.</p>
+        <h2>Why G1 and ZGC stop differently</h2>
+        <p>Grow the heap and G1’s pauses grow with it, while ZGC barely moves. Where that difference comes from — and why ZGC is not free.</p>
       </span>
-      <span class="tag live">공개</span>
+      <span class="tag live">live</span>
     </a>
 
     <a class="card" aria-disabled="true">
       <span class="no">03</span>
       <span>
-        <h2>노드 하나가 빠지면 캐시는 어떻게 무너지는가</h2>
-        <p>컨시스턴트 해싱. 가상 노드가 없을 때 분포가 얼마나 기우는지 링 위에서 직접 확인합니다.</p>
+        <h2>How a cache falls apart when one node leaves</h2>
+        <p>Consistent hashing. Watch the distribution skew on the ring when virtual nodes are missing.</p>
       </span>
-      <span class="tag">준비 중</span>
+      <span class="tag">soon</span>
     </a>
 
     <a class="card" aria-disabled="true">
       <span class="no">04</span>
       <span>
-        <h2>네트워크가 갈라지면 누가 리더가 되는가</h2>
-        <p>Raft 리더 선출. 노드를 직접 죽여가며 스플릿브레인이 왜 생기지 않는지 봅니다.</p>
+        <h2>Who becomes leader when the network splits</h2>
+        <p>Raft leader election. Kill nodes by hand and see why split brain does not happen.</p>
       </span>
-      <span class="tag">준비 중</span>
+      <span class="tag">soon</span>
     </a>
 
   </div>
 
-  <footer>백엔드 내부 동작 인터랙티브 시각화 · 한국어 / <a href="/en/" hreflang="en" lang="en">English</a></footer>
+  <footer>Interactive visualizations of backend internals · <a href="/" hreflang="ko" lang="ko">한국어</a> / English</footer>
 </main>
 </body>
 </html>

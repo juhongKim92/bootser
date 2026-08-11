@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Why G1 and ZGC stop differently — what happens as the heap grows</title>
+  <meta name="description" content="Grow the heap and G1's pauses grow with it while ZGC barely moves. Where that difference comes from — colored pointers, load barriers, allocation stalls — and why ZGC is not free.">
+  <link rel="canonical" href="https://lab.vermilion19.com/en/gc/">
+  <link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/gc/">
+  <link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/gc/">
+  <link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/gc/">
+  <meta property="og:type" content="article">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="ko_KR">
+  <meta property="og:title" content="Why G1 and ZGC stop differently — what happens as the heap grows">
+  <meta property="og:description" content="Grow the heap from 4GB to 128GB and G1's pauses grow with it. ZGC barely moves. See why — and what it costs.">
+  <meta property="og:url" content="https://lab.vermilion19.com/en/gc/">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+  <link rel="stylesheet" href="/shared/base.css">
+  <link rel="stylesheet" href="/shared/gc-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/gc/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>Why G1 and ZGC stop differently</h1>
+  <p class="lede">Grow the heap from 4GB to 128GB and G1’s pauses grow with it. ZGC barely moves. See why — and what it costs.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label><span>heap size</span><b id="vHeap">—</b></label>
+          <input type="range" id="sHeap" min="0" max="7" step="1" value="2" aria-label="heap size">
+          <div class="hint" id="hHeap"></div>
+        </div>
+        <div class="dial">
+          <label><span>allocation rate</span><b id="vAlloc">—</b></label>
+          <input type="range" id="sAlloc" min="100" max="6000" step="100" value="500" aria-label="allocation rate">
+          <div class="hint" id="hAlloc"></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">STW pauses over 60 seconds</span>
+
+      <div class="lane">
+        <div class="lane-head">
+          <h3>G1GC</h3>
+          <div class="nums" id="nG1"></div>
+        </div>
+        <svg class="plot" id="pG1" viewBox="0 0 1000 96" preserveAspectRatio="none" role="img" aria-label="G1GC pause timeline"></svg>
+      </div>
+
+      <div class="lane">
+        <div class="lane-head">
+          <h3>ZGC</h3>
+          <div class="nums" id="nZ"></div>
+        </div>
+        <svg class="plot" id="pZ" viewBox="0 0 1000 96" preserveAspectRatio="none" role="img" aria-label="ZGC pause timeline"></svg>
+        <div class="axis-note">
+          <span>0s</span>
+          <span id="scaleNote"></span>
+          <span>60s</span>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <button id="btnScale">Switch to log scale</button>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">Anatomy of one cycle</span>
+      <div class="phase">
+        <h4>G1GC — <span>stops the world while moving objects</span></h4>
+        <div class="strip" id="stripG1"></div>
+      </div>
+      <div class="phase">
+        <h4>ZGC — <span>moves objects concurrently too</span></h4>
+        <div class="strip" id="stripZ"></div>
+      </div>
+      <div class="striplegend">
+        <span class="s"><i></i><span>STW — application stopped</span></span>
+        <span class="c"><i></i><span>concurrent — runs alongside the application</span></span>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button class="solid" id="btnPlay">Play scenario</button>
+        <button id="btnStep">Next step</button>
+        <button id="btnReset">Reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">—</span>
+        <span id="nText">Press play to walk up the heap sizes and watch what happens. The sliders are yours at any time.</span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose guide">
+    <h2>Driving it yourself</h2>
+    <p>There are only two dials. The play button walks a fixed tour; moving the sliders yourself shows far more.</p>
+    <table class="keytable">
+      <tr><th>dial</th><th>what moves</th></tr>
+      <tr><td>heap size</td><td>G1's <strong>pause length</strong> grows with it. ZGC barely reacts</td></tr>
+      <tr><td>allocation rate</td><td>G1's <strong>pause count</strong> climbs; past a threshold ZGC starts <strong>stalling allocations</strong></td></tr>
+      <tr><td>log scale</td><td>On a linear scale the ZGC bars are invisible. That is the point — but you need this to see their shape</td></tr>
+    </table>
+    <p>Bar colour is the kind: grey for young collections, ochre for mixed, red for Full GC, blue for ZGC.</p>
+
+    <h2>Try these</h2>
+
+    <div class="recipe">
+      <h4>1. Move only the heap</h4>
+      <div class="seq">Hold allocation at 500 MB/s
+Walk the heap from 2GB to 128GB
+
+G1  young pause  <em>95ms → 538ms</em>
+G1  mixed pause  <em>161ms → 915ms</em>
+ZGC max pause    <em>0.28ms, unchanged</em></div>
+      <p class="why">G1 <strong>stops the world while copying live objects.</strong> A bigger heap means a bigger young generation per collection, more to copy, longer pauses. ZGC relocates concurrently, so heap size does not enter the pause equation.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. How far can G1 hold its target</h4>
+      <div class="seq">4GB   → young 188ms  (inside target)
+16GB  → young 208ms  (about on target)
+64GB  → young 270ms  (overshooting)
+128GB → young 538ms  (long gone)</div>
+      <p class="why">G1 shrinks the young generation to honour <code>MaxGCPauseMillis</code>. But it cannot go below <code>G1NewSizePercent</code> (5% by default). As the heap grows that floor grows with it, and past some point <strong>the target becomes unreachable.</strong></p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. Shorter pauses do not always win</h4>
+      <div class="seq">Hold heap at 16GB
+Raise allocation 500 → 3000 MB/s
+
+G1 young pause   <em>208ms, unchanged</em>
+G1 GC count      <em>11 → 67</em>
+G1 throughput    <em>96% → 73%</em></div>
+      <p class="why">Pause <em>length</em> and total <em>stopped time</em> are different problems. A 200ms pause twice a minute is harmless; twenty times a minute costs 7% of your throughput. Looking only at p99 latency hides this.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. ZGC stops too</h4>
+      <div class="seq">Heap 16GB
+Raise allocation to 5000 MB/s
+
+ZGC alloc stall  <em>a ms/s figure appears</em>
+ZGC throughput   <em>drops</em></div>
+      <p class="why">Allocate faster than ZGC can reclaim concurrently and threads <strong>block waiting for free pages.</strong> This is not counted as a GC pause, so the log says "0ms" while the application is genuinely stopped. It is the easiest thing to miss when tuning ZGC.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. Give ZGC room</h4>
+      <div class="seq">Hold allocation at 5000 MB/s
+Heap 16GB   → stall 528ms/s
+Heap 128GB  → stall 312ms/s</div>
+      <p class="why">Headroom is time. A wider heap gives the concurrent cycle room to finish before you run out of pages. Growing the heap lengthens G1's pauses, but <strong>for ZGC a bigger heap is usually a straight win</strong> — which is why the two collectors are tuned in opposite directions.</p>
+    </div>
+  </article>
+
+  <article class="prose">
+    <h2>Where G1 stops</h2>
+    <p>G1 divides the heap into uniform <strong>regions</strong>. To collect, it picks a set of regions and <strong>copies</strong> the live objects out into fresh ones, then frees the originals wholesale.</p>
+    <p>The catch is that copying changes addresses. Application threads must not be holding stale ones, so <strong>the world stays stopped for the entire copy.</strong> Pause time is simply "how much live data got moved".</p>
+    <pre><code>pause ≈ fixed cost + (live bytes to copy) / copy throughput</code></pre>
+    <p>G1 resizes the young generation to hit <code>-XX:MaxGCPauseMillis</code> (200ms by default), shrinking it when it overshoots. That adaptation is why the target holds up to 16GB in the lab above.</p>
+    <div class="callout">But the young generation has a floor. <code>G1NewSizePercent</code> defaults to 5%, and 5% of a 128GB heap is already 6.4GB. Copying even the 15% that survives is close to a gigabyte. That is how <strong>the target becomes unreachable</strong>.</div>
+
+    <h2>How ZGC avoids stopping</h2>
+    <p>ZGC rests on <strong>colored pointers</strong> and a <strong>load barrier</strong>.</p>
+    <p>A 64-bit pointer only needs about 44 bits for the real address. ZGC stores state in the spare high bits — whether this object has been marked, whether it has already been relocated. Every reference read in the application carries a small check of those bits.</p>
+    <pre><code>// conceptually, this check rides along with every reference load
+Object o = obj.field;        // ← barrier runs here
+// if the pointer colour is stale: find the new address and fix the reference in place
+</code></pre>
+    <p>This is what lets <strong>the application keep running while objects are being moved.</strong> A thread reaching a stale address gets forwarded on the spot, and its reference is healed.</p>
+    <p>So ZGC's STW work is three short root-scanning windows per cycle. Since JDK 16 even thread stack scanning is concurrent, which makes the pause <strong>essentially independent of both heap size and thread count</strong>.</p>
+
+    <h2>So should everything use ZGC</h2>
+    <p>No. There are three costs.</p>
+    <ul>
+      <li><strong>Throughput</strong> — the load barrier rides on every reference read, costing roughly 5–15% depending on the workload. For batch jobs measured in total time, that is a straight loss</li>
+      <li><strong>Memory</strong> — allocation continues during collection, so ZGC needs headroom. Expect to give it more heap than G1 for the same job</li>
+      <li><strong>Allocation stalls</strong> — the ones in the lab above. Outrun the collector and you stop anyway</li>
+    </ul>
+    <table class="keytable">
+      <tr><th></th><th>G1</th><th>ZGC</th></tr>
+      <tr><td>pause</td><td>tens to hundreds of ms, scales with heap</td><td>sub-millisecond, heap-independent</td></tr>
+      <tr><td>throughput</td><td>better</td><td>5–15% worse</td></tr>
+      <tr><td>bigger heap</td><td>longer pauses</td><td>generally a win</td></tr>
+      <tr><td>fits</td><td>general servers, batch, 4–32GB</td><td>latency-sensitive, large heaps, caches</td></tr>
+    </table>
+
+    <h2>What changed by JDK version</h2>
+    <p>ZGC has moved a great deal recently, so old benchmarks mislead.</p>
+    <ul>
+      <li><strong>JDK 21</strong> — Generational ZGC arrives (JEP 439). Before this, ZGC had no generations at all, so short-lived garbage forced a full-heap traversal every time. That was its throughput weakness</li>
+      <li><strong>JDK 23</strong> — generational mode becomes the default (JEP 474)</li>
+      <li><strong>JDK 24</strong> — non-generational mode removed (JEP 490). <code>-XX:+UseZGC</code> now means generational ZGC</li>
+      <li><strong>JDK 25</strong> — current LTS. G1 remains the default collector</li>
+    </ul>
+    <div class="callout">The reputation that "ZGC costs a lot of throughput" mostly comes from pre-generational measurements. The gap narrowed considerably after JDK 21 — though it is not zero, so measure rather than assume.</div>
+
+    <h2>What to check in production</h2>
+    <p>Start with what you are actually running and how much it stops.</p>
+    <pre><code>// live JVM
+jcmd &lt;pid&gt; VM.flags | tr ' ' '\n' | grep -i gc
+
+// GC logging (JDK 9+)
+-Xlog:gc*:file=gc.log:time,uptime,level,tags:filecount=5,filesize=20M
+
+// safepoints too — STW is not only GC
+-Xlog:safepoint:file=safepoint.log</code></pre>
+    <p>That second one matters. Thread dumps, biased lock revocation and JIT deoptimisation all stop the world. Concluding "no pauses" from the GC log alone leaves things out.</p>
+    <p>On ZGC, watch stalls separately:</p>
+    <pre><code>-Xlog:gc+alloc=debug   // Allocation Stall entries</code></pre>
+    <p>Rules of thumb for switching:</p>
+    <ul>
+      <li>Heap over 32GB and p99 latency hurting → ZGC is worth measuring</li>
+      <li>Heap at or under 8GB → G1 is fine; ZGC's benefit rarely covers the barrier cost</li>
+      <li>Batch or ETL where total time is the metric → G1, or even Parallel GC</li>
+      <li>Seeing Full GCs → find out <strong>why it cannot keep up</strong> before changing collectors. Usually it is allocation rate or a leak, and a new collector will not fix either</li>
+    </ul>
+    <div class="callout">The numbers here come from a simplified teaching model. Real pauses depend on object graph shape, region size, GC thread count and hardware. <strong>Nothing substitutes for measuring your own workload.</strong></div>
+  </article>
+
+  <footer>JDK 25 · simplified teaching model · <a href="/gc/" hreflang="ko" lang="ko">한국어</a> / English</footer>
+</main>
+
+<script src="/shared/gc-lab.js"></script>
+<script>
+  initGcLab({
+    strings: {
+      toLog:'Switch to log scale', toLinear:'Back to linear scale',
+      scaleLin:'linear scale · both charts share one baseline', scaleLog:'log scale · needed to see ZGC at all',
+      nMax:'max pause', nP99:'p99', nYoung:'young pause', nMixed:'mixed pause', nFull:'Full GC',
+      nCount:'GC count', nStw:'total STW', nThru:'throughput', nStall:'alloc stall',
+      play:'Play scenario', pause:'Pause',
+      hintHeapS:'small heap — containers, microservices',
+      hintHeapM:'mid heap — ordinary server applications',
+      hintHeapL:'large heap — caches, in-memory stores',
+      hintAllocS:'light load',
+      hintAllocM:'typical web application',
+      hintAllocL:'past ZGC’s concurrent reclaim rate — allocation stalls appear',
+      hintG1Full:'G1 cannot keep up — Full GC fires',
+    },
+    scenes: [
+      '4GB heap under an ordinary web workload. G1’s young pause is 188ms, inside its 200ms target, and the ZGC bars are simply not visible.',
+      'Now 16GB. The young pause is 208ms — still about on target, because G1 shrinks the young generation to get there.',
+      '64GB. The target starts slipping. G1 cannot shrink young below 5% of the heap, and 5% of 64GB is already over 3GB.',
+      'At 128GB the pause passes half a second. The ZGC bars are still flat on the floor — you need the log scale button to see them at all.',
+      'Back to 16GB, allocating four times faster. The pause stays at 208ms but the count goes from 11 to 44, and throughput falls from 96% to 82%. Short pauses are expensive when they come often.',
+      'Push further and ZGC pays too. When allocation outruns concurrent reclamation, threads block waiting for memory — an allocation stall. It does not appear as a GC pause, yet the application is stopped all the same.',
+      'Widen the heap to 128GB under the same load and the stall shrinks: headroom buys time to collect. This is where the advice to over-provision heap for ZGC comes from.',
+    ],
+  });
+</script>
+</body>
+</html>

@@ -4,203 +4,46 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PostgreSQL MVCC와 VACUUM — 왜 DELETE 해도 테이블이 줄지 않는가</title>
-  <meta name="description" content="열려 있는 트랜잭션 하나가 어떻게 VACUUM 전체를 막고 테이블 블로트를 만드는지 직접 조작하며 확인합니다. Interactive PostgreSQL MVCC and VACUUM visualization.">
+  <meta name="description" content="열려 있는 트랜잭션 하나가 어떻게 VACUUM 전체를 막고 테이블 블로트를 만드는지 직접 조작하며 확인합니다. xmin horizon, 죽은 튜플, VACUUM FULL과 pg_repack까지.">
+  <link rel="canonical" href="https://lab.vermilion19.com/mvcc/">
+  <link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/mvcc/">
+  <link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mvcc/">
+  <link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mvcc/">
+  <meta property="og:type" content="article">
+  <meta property="og:locale" content="ko_KR">
+  <meta property="og:locale:alternate" content="en_US">
+  <meta property="og:title" content="PostgreSQL MVCC와 VACUUM — 왜 DELETE 해도 테이블이 줄지 않는가">
+  <meta property="og:description" content="열려 있는 트랜잭션 하나가 어떻게 VACUUM 전체를 막고 테이블 블로트를 만드는지 직접 조작하며 확인합니다.">
+  <meta property="og:url" content="https://lab.vermilion19.com/mvcc/">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
-  <link rel="stylesheet" href="../shared/base.css">
-  <script src="../shared/lang.js"></script>
-  <style>
-    /* ============================================================
-       실험대
-       ============================================================ */
-    .lab{
-      margin:32px 0 8px;
-      border:1px solid var(--rule);
-      border-radius:4px;
-      background:var(--paper-2);
-      overflow:hidden;
-    }
-    .lab section{border-bottom:1px solid var(--rule);padding:16px 18px}
-    .lab section:last-child{border-bottom:none}
-
-    .cap{
-      font-family:var(--mono);
-      font-size:10px;letter-spacing:.18em;text-transform:uppercase;
-      color:var(--ink-3);
-      margin-bottom:10px;
-    }
-
-    /* --- 트랜잭션 축 + horizon --- */
-    .axis{position:relative;padding-top:22px}
-    .ticks{display:flex;gap:3px;flex-wrap:wrap}
-    .tick{
-      font-family:var(--mono);font-size:10px;
-      min-width:34px;text-align:center;
-      padding:4px 2px;
-      border:1px solid var(--rule);
-      border-radius:2px;
-      background:var(--paper);
-      color:var(--ink-3);
-      position:relative;
-    }
-    .tick.reclaimable{background:color-mix(in srgb, var(--free) 16%, var(--paper));color:var(--ink-2)}
-    .tick.open{border-color:var(--horizon);color:var(--horizon);font-weight:500}
-    .tick .who{
-      position:absolute;top:-16px;left:50%;transform:translateX(-50%);
-      font-size:9px;letter-spacing:.1em;color:var(--horizon);white-space:nowrap;
-    }
-    .hz{
-      display:flex;align-items:center;gap:8px;
-      margin-top:10px;
-      font-family:var(--mono);font-size:11px;color:var(--horizon);
-    }
-    .hz b{font-weight:500}
-    .hz .bar{flex:1;height:1px;background:var(--horizon);opacity:.4}
-
-    /* --- 세션 --- */
-    .decks{display:grid;grid-template-columns:1fr 1fr;gap:0}
-    @media (max-width:660px){ .decks{grid-template-columns:1fr} }
-    .deck{padding:16px 18px;border-right:1px solid var(--rule)}
-    .deck:last-child{border-right:none}
-    @media (max-width:660px){
-      .deck{border-right:none;border-bottom:1px solid var(--rule)}
-      .deck:last-child{border-bottom:none}
-    }
-    .deck h3{
-      font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
-      margin:0 0 4px;color:var(--ink-2);
-    }
-    .deck .state{
-      font-family:var(--mono);font-size:11px;
-      color:var(--ink-3);margin-bottom:10px;min-height:17px;
-    }
-    .deck .state.on{color:var(--horizon)}
-    .ops{display:flex;flex-wrap:wrap;gap:5px}
-    .ops button{padding:5px 8px;font-size:10px}
-
-    /* --- 통계 + vacuum --- */
-    .meters{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-end}
-    .meter{min-width:96px}
-    .meter .k{
-      font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
-      color:var(--ink-3);display:block;
-    }
-    .meter .v{font-family:var(--mono);font-size:20px;color:var(--ink);font-variant-numeric:tabular-nums}
-    .meter .v small{font-size:11px;color:var(--ink-3)}
-    .meter.warn .v{color:var(--blocked)}
-
-    /* --- 힙 --- */
-    .pages{display:flex;flex-direction:column;gap:6px}
-    .page{display:flex;align-items:center;gap:10px}
-    .page .pno{
-      font-family:var(--mono);font-size:10px;color:var(--ink-3);
-      width:52px;flex:0 0 52px;
-    }
-    .slots{display:flex;gap:3px;flex-wrap:wrap}
-    .slot{
-      width:38px;height:38px;
-      border:1px solid var(--rule);
-      border-radius:2px;
-      background:var(--paper);
-      display:flex;flex-direction:column;align-items:center;justify-content:center;
-      font-family:var(--mono);font-size:8.5px;line-height:1.25;
-      color:var(--ink-3);
-      transition:background .25s, border-color .25s;
-    }
-    .slot.live   {border-color:var(--live);   background:color-mix(in srgb, var(--live) 13%, var(--paper));   color:var(--live)}
-    .slot.pending{border-color:var(--pending);background:color-mix(in srgb, var(--pending) 12%, var(--paper));color:var(--ink-2); border-style:dashed}
-    .slot.blocked{border-color:var(--blocked);background:color-mix(in srgb, var(--blocked) 15%, var(--paper));color:var(--blocked)}
-    .slot.free   {border-color:var(--free);   background:color-mix(in srgb, var(--free) 20%, var(--paper));   color:var(--free)}
-
-    .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px}
-    .legend span{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--ink-3)}
-    .legend i{width:10px;height:10px;border:1px solid;border-radius:2px;display:inline-block}
-    .legend .l-live   i{border-color:var(--live);   background:color-mix(in srgb,var(--live) 13%,var(--paper))}
-    .legend .l-pending i{border-color:var(--pending);border-style:dashed}
-    .legend .l-blocked i{border-color:var(--blocked);background:color-mix(in srgb,var(--blocked) 15%,var(--paper))}
-    .legend .l-free   i{border-color:var(--free);   background:color-mix(in srgb,var(--free) 20%,var(--paper))}
-
-    /* --- 로그 --- */
-    .log{
-      font-family:var(--mono);font-size:11px;line-height:1.75;
-      color:var(--ink-2);
-      max-height:132px;overflow-y:auto;
-      scrollbar-width:thin;
-    }
-    .log div{white-space:pre-wrap}
-    .log .hi{color:var(--blocked)}
-    .log .ok{color:var(--live)}
-
-    /* --- 조작대 --- */
-    .transport{
-      background:var(--paper-3);
-      display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;
-    }
-    .transport .keys{display:flex;gap:6px;flex-wrap:wrap}
-    .narration{
-      flex:1;min-width:240px;
-      font-family:var(--serif);font-size:14.5px;line-height:1.65;
-      color:var(--ink);
-    }
-    /* --- 슬롯 읽는 법 --- */
-    .slotkey{display:flex;align-items:center;gap:12px;margin:0 0 12px}
-    .slotkey .slot{flex:0 0 38px}
-    .slotkey .txt{font-family:var(--mono);font-size:10px;line-height:1.7;color:var(--ink-3)}
-    .slotkey .txt b{color:var(--ink-2);font-weight:500}
-
-    /* --- 직접 해보기 --- */
-    .guide h2{margin-top:40px}
-    .recipe{
-      border:1px solid var(--rule);border-radius:3px;
-      background:var(--paper-2);
-      padding:14px 16px;margin:14px 0;
-      max-width:68ch;
-    }
-    .recipe h4{font-family:var(--sans);font-size:14px;font-weight:700;margin:0 0 4px}
-    .recipe .seq{
-      font-family:var(--mono);font-size:11px;line-height:1.9;
-      background:var(--paper);border:1px solid var(--rule);border-radius:2px;
-      padding:9px 11px;margin:9px 0;white-space:pre-wrap;color:var(--ink-2);
-    }
-    .recipe .seq em{font-style:normal;color:var(--horizon)}
-    .recipe .why{font-size:13.5px;color:var(--ink-2);margin:0}
-    .keytable{width:100%;border-collapse:collapse;margin:12px 0;max-width:68ch;font-size:13.5px}
-    .keytable th,.keytable td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
-    .keytable th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
-    .keytable td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap;width:1%;padding-right:18px;color:var(--ink)}
-
-    .narration .n{
-      font-family:var(--mono);font-size:10px;letter-spacing:.14em;
-      color:var(--ink-3);display:block;margin-bottom:3px;
-    }
-  </style>
+  <link rel="stylesheet" href="/shared/base.css">
+  <link rel="stylesheet" href="/shared/mvcc-lab.css">
 </head>
 <body>
 
 <div class="top"><div class="wrap">
-  <a class="brand" href="../">← Backend Internals</a>
-  <nav>
-    <button id="lang">EN</button>
-  </nav>
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/mvcc/" hreflang="en" lang="en">EN</a></nav>
 </div></div>
 
 <main class="wrap">
 
-  <h1 data-i18n="title"></h1>
-  <p class="lede" data-i18n="lede"></p>
+  <h1>DELETE 했는데 테이블이 줄지 않는 이유</h1>
+  <p class="lede">PostgreSQL에서 열려 있는 트랜잭션 하나가 어떻게 VACUUM 전체를 멈춰 세우고 테이블을 부풀리는지, 직접 조작하며 확인합니다.</p>
 
   <div class="lab">
 
     <section class="axis">
-      <span class="cap" data-i18n="capAxis"></span>
+      <span class="cap">트랜잭션 ID 축</span>
       <div class="ticks" id="ticks"></div>
       <div class="hz">
-        <span data-i18n="hzLabel"></span>
+        <span>xmin horizon</span>
         <b id="hzVal">—</b>
         <span class="bar"></span>
-        <span id="hzWho" data-i18n="hzNone"></span>
+        <span id="hzWho">열린 트랜잭션 없음 · 전부 회수 가능</span>
       </div>
     </section>
 
@@ -208,48 +51,60 @@
       <div class="decks">
         <div class="deck">
           <h3>Session A</h3>
-          <div class="state" id="stA"></div>
-          <div class="ops" id="opsA"></div>
+          <div class="state" id="stA">유휴</div>
+          <div class="ops">
+            <button data-session="A" data-op="begin">BEGIN</button>
+            <button data-session="A" data-op="select">SELECT</button>
+            <button data-session="A" data-op="update">UPDATE ×3</button>
+            <button data-session="A" data-op="delete">DELETE ×3</button>
+            <button data-session="A" data-op="commit">COMMIT</button>
+          </div>
         </div>
         <div class="deck">
           <h3>Session B</h3>
-          <div class="state" id="stB"></div>
-          <div class="ops" id="opsB"></div>
+          <div class="state" id="stB">유휴</div>
+          <div class="ops">
+            <button data-session="B" data-op="begin">BEGIN</button>
+            <button data-session="B" data-op="select">SELECT</button>
+            <button data-session="B" data-op="update">UPDATE ×3</button>
+            <button data-session="B" data-op="delete">DELETE ×3</button>
+            <button data-session="B" data-op="commit">COMMIT</button>
+          </div>
         </div>
       </div>
     </section>
 
     <section>
-      <span class="cap" data-i18n="capHeap"></span>
+      <span class="cap">힙 — 페이지와 슬롯</span>
       <div class="slotkey">
         <div class="slot live"><span>103</span><span>—</span></div>
-        <div class="txt"><b data-i18n="skTop"></b><br><b data-i18n="skBot"></b></div>
+        <div class="txt"><b>위 = xmin · 이 버전을 만든 트랜잭션</b><br><b>아래 = xmax · 이 버전을 지운 트랜잭션 (— 이면 살아 있음)</b></div>
       </div>
       <div class="pages" id="pages"></div>
       <div class="legend">
-        <span class="l-live"><i></i><span data-i18n="lgLive"></span></span>
-        <span class="l-pending"><i></i><span data-i18n="lgPending"></span></span>
-        <span class="l-blocked"><i></i><span data-i18n="lgBlocked"></span></span>
-        <span class="l-free"><i></i><span data-i18n="lgFree"></span></span>
+        <span class="l-live"><i></i><span>live</span></span>
+        <span class="l-pending"><i></i><span>커밋 전</span></span>
+        <span class="l-blocked"><i></i><span>dead · 회수 불가</span></span>
+        <span class="l-free"><i></i><span>dead · 회수 가능</span></span>
       </div>
     </section>
 
     <section>
       <div class="meters">
         <div class="meter">
-          <span class="k" data-i18n="mSize"></span>
+          <span class="k">테이블 크기</span>
           <span class="v" id="mSize">—</span>
         </div>
         <div class="meter">
-          <span class="k" data-i18n="mLive"></span>
+          <span class="k">유효 행</span>
           <span class="v" id="mLive">—</span>
         </div>
         <div class="meter" id="mDeadBox">
-          <span class="k" data-i18n="mDead"></span>
+          <span class="k">죽은 튜플</span>
           <span class="v" id="mDead">—</span>
         </div>
         <div class="meter">
-          <span class="k" data-i18n="mBloat"></span>
+          <span class="k">블로트</span>
           <span class="v" id="mBloat">—</span>
         </div>
         <div style="flex:1"></div>
@@ -258,25 +113,116 @@
     </section>
 
     <section>
-      <span class="cap" data-i18n="capLog"></span>
+      <span class="cap">로그</span>
       <div class="log" id="log"></div>
     </section>
 
     <section class="transport">
       <div class="keys">
-        <button class="solid" id="btnPlay" data-i18n="play"></button>
-        <button id="btnStep" data-i18n="step"></button>
-        <button id="btnReset" data-i18n="reset"></button>
+        <button class="solid" id="btnPlay">시나리오 재생</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
       </div>
       <div class="narration">
         <span class="n" id="nStep">—</span>
-        <span id="nText" data-i18n="nIntro"></span>
+        <span id="nText">재생을 누르면 실제 장애 상황이 순서대로 재현됩니다. 중간에 버튼을 직접 눌러 개입해도 됩니다.</span>
       </div>
     </section>
 
   </div>
 
-  <article class="prose guide" id="guide"></article>
+  <article class="prose guide">
+    <h2>직접 조작하기</h2>
+    <p>재생 버튼은 정해진 각본을 보여줄 뿐입니다. 세션 버튼을 직접 누르면 각본을 벗어나 원하는 상황을 만들 수 있어요. 재생 중에 아무 버튼이나 누르면 재생이 멈추고 그 상태에서 이어집니다.</p>
+
+    <h3>버튼이 하는 일</h3>
+    <table class="keytable">
+      <tr><th>버튼</th><th>동작</th></tr>
+      <tr><td>BEGIN</td><td>트랜잭션을 엽니다. <strong>아직 스냅샷은 잡지 않습니다.</strong> 이 상태만으로는 VACUUM을 막지 않아요</td></tr>
+      <tr><td>SELECT</td><td>스냅샷을 획득합니다. 이 순간부터 horizon이 이 세션에 묶입니다. 쓰기를 하지 않으므로 xid는 할당되지 않습니다</td></tr>
+      <tr><td>UPDATE ×3</td><td>살아 있는 행 3개를 갱신합니다. 구버전 3개에 xmax가 찍히고, 신버전 3개가 빈 슬롯에 새로 기록됩니다</td></tr>
+      <tr><td>DELETE ×3</td><td>3개에 xmax만 찍습니다. 신버전이 없으니 슬롯을 새로 쓰지 않습니다</td></tr>
+      <tr><td>COMMIT</td><td>이 트랜잭션의 xid를 커밋 목록에 넣고 세션을 닫습니다. 붙잡고 있던 horizon이 풀립니다</td></tr>
+      <tr><td>VACUUM</td><td>회수를 시도합니다. 언제든 몇 번이든 누를 수 있습니다</td></tr>
+    </table>
+    <p>트랜잭션이 열려 있지 않은 상태에서 SELECT나 UPDATE를 누르면 BEGIN이 자동으로 실행되고, 로그에 그렇게 남습니다.</p>
+
+    <h3>화면 읽는 법</h3>
+    <ul>
+      <li><strong>슬롯</strong> 하나가 튜플 하나입니다. 위 숫자가 <code>xmin</code>, 아래가 <code>xmax</code>. 색이 곧 상태예요</li>
+      <li><strong>축</strong>의 황토색 구간은 horizon보다 앞선 xid, 즉 <em>지워도 안전한 영역</em>입니다. 파란 테두리 칩은 열린 트랜잭션이 붙잡고 있는 지점이고 위에 세션 문자가 붙습니다</li>
+      <li><strong>테이블 크기</strong>는 페이지 수 × 8KB입니다. 슬롯이 비어도 페이지가 남아 있으면 크기는 그대로예요</li>
+      <li><strong>블로트</strong>는 전체 튜플 중 죽은 튜플의 비율입니다</li>
+    </ul>
+
+    <h2>이렇게 해보세요</h2>
+
+    <div class="recipe">
+      <h4>1. BEGIN만으로는 막히지 않는다</h4>
+      <div class="seq">초기화
+A  BEGIN
+B  UPDATE ×3 → COMMIT
+   VACUUM        <em>→ 회수됨</em>
+
+A  SELECT        <em>← 여기서 스냅샷을 잡는다</em>
+B  UPDATE ×3 → COMMIT
+   VACUUM        <em>→ 회수 0개</em></div>
+      <p class="why">범인은 <code>BEGIN</code>이 아니라 <strong>첫 구문</strong>입니다. 그래서 <code>pg_stat_activity</code>에서 상태만 보지 말고 <code>backend_xmin</code>이 잡혀 있는지를 함께 봐야 합니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. 막는 주체는 계속 바뀐다</h4>
+      <div class="seq">초기화
+A  SELECT
+B  UPDATE ×3 → COMMIT
+   VACUUM        <em>→ 0개. A가 막는다</em>
+
+B  SELECT        <em>← B도 트랜잭션을 연다</em>
+A  COMMIT
+   VACUUM        <em>→ 3개 회수. B 스냅샷은 더 최근이라 통과</em>
+
+A  UPDATE ×3 → COMMIT
+   VACUUM        <em>→ 0개. 이번엔 B가 막는다</em></div>
+      <p class="why">horizon은 열려 있는 것들 중 <strong>가장 오래된 하나</strong>가 결정합니다. 긴 트랜잭션 하나를 잡았다고 끝나지 않고, 다음으로 오래된 것이 곧바로 그 자리를 이어받습니다. 축에서 파란 칩이 A에서 B로 옮겨가는 걸 보세요.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. 블로트를 만드는 건 UPDATE다</h4>
+      <div class="seq">초기화
+B  DELETE ×3 → COMMIT   (여러 번 반복)
+   크기를 본다           <em>→ 늘지 않는다</em>
+
+초기화
+B  UPDATE ×3 → COMMIT   (같은 횟수)
+   크기를 본다           <em>→ 페이지가 늘어난다</em></div>
+      <p class="why"><code>DELETE</code>는 죽음만 표시하고 새 튜플을 만들지 않습니다. <code>UPDATE</code>는 구버전을 남기면서 신버전을 새로 쓰기 때문에 <strong>한 번에 두 배로</strong> 공간을 씁니다. 대량 갱신 배치가 특히 위험한 이유예요.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. 꼬리 페이지만 잘려 나간다</h4>
+      <div class="seq">초기화
+B  UPDATE ×3 → COMMIT   (페이지가 늘어날 때까지 반복)
+   VACUUM
+
+맨 뒷 페이지가 완전히 비었는지 확인
+비었으면 → 크기가 줄고 "절단" 로그가 뜬다
+한 칸이라도 살아 있으면 → 크기 그대로</div>
+      <p class="why">VACUUM은 데이터를 앞으로 당겨오지 않습니다. 그래서 파일 중간에 구멍이 나면 그 상태로 두고, <strong>뒤쪽이 통째로 비었을 때만</strong> 잘라서 OS에 돌려줍니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. 커밋 전에는 죽음도 확정되지 않는다</h4>
+      <div class="seq">초기화
+B  UPDATE ×3     <em>← COMMIT 하지 않는다</em>
+   슬롯을 본다     <em>→ 점선 3개(커밋 전) 등장</em>
+   죽은 튜플 0개   <em>← 구버전이 아직 live 로 보인다</em>
+   VACUUM        <em>→ 할 일이 없다</em>
+
+B  COMMIT        <em>→ 구버전 3개가 그제서야 dead</em>
+   VACUUM        <em>→ 회수됨</em></div>
+      <p class="why">커밋 전에는 구버전을 지울 수 없습니다. <strong>롤백되면 그 구버전이 다시 정답이 되어야</strong> 하니까요. 점선 슬롯은 반대로 아직 아무에게도 보이지 않는 신버전입니다. 동시에 그 트랜잭션은 자기 xid로 horizon도 붙잡고 있어요 — 축에서 확인해보세요.</p>
+    </div>
+  </article>
 
   <!-- ────────────────────────────────────────────────────────────────
        실제 겪은 장애 기록을 여기에 붙이면 글의 무게가 완전히 달라집니다.
@@ -293,40 +239,73 @@
 
        ──────────────────────────────────────────────────────────────── -->
 
-  <article class="prose" id="prose"></article>
+  <article class="prose">
+    <h2>PostgreSQL은 행을 수정하지 않는다</h2>
+    <p>다른 DBMS에서 넘어온 사람이 가장 먼저 부딪히는 지점입니다. PostgreSQL의 <code>UPDATE</code>는 기존 행을 고치지 않습니다. <strong>구버전에 죽은 시각을 찍고, 신버전을 다른 자리에 새로 씁니다.</strong> <code>DELETE</code>도 마찬가지로 데이터를 지우는 게 아니라 죽음을 표시할 뿐입니다.</p>
+    <p>모든 튜플은 두 개의 시스템 컬럼을 갖습니다. 직접 조회할 수 있어요.</p>
+    <pre><code>SELECT xmin, xmax, * FROM orders LIMIT 5;</code></pre>
+    <ul>
+      <li><code>xmin</code> — 이 버전을 만든 트랜잭션 ID</li>
+      <li><code>xmax</code> — 이 버전을 죽인 트랜잭션 ID (살아 있으면 0)</li>
+    </ul>
+    <p>이 구조 덕분에 읽기가 쓰기를 막지 않습니다. 읽는 쪽은 자기 스냅샷에 맞는 버전을 골라 읽으면 되니까요. 대신 <strong>쓰레기가 쌓입니다.</strong> 그 쓰레기를 치우는 게 VACUUM입니다.</p>
 
-  <footer>
-    <span data-i18n="foot"></span>
-  </footer>
+    <h2>VACUUM이 함부로 지우지 못하는 이유</h2>
+    <p>죽은 튜플이라고 해서 즉시 지울 수 있는 게 아닙니다. 그 버전을 볼 자격이 있는 트랜잭션이 아직 살아 있을 수 있으니까요.</p>
+    <p>그래서 PostgreSQL은 경계선을 하나 계산합니다. <strong>현재 열려 있는 트랜잭션들이 가진 가장 오래된 스냅샷</strong>, 이것이 <code>xmin horizon</code>입니다. 이 선보다 나중에 죽은 튜플은 건드릴 수 없습니다.</p>
+    <div class="callout">열린 트랜잭션이 하나라도 오래 살아 있으면, 그 트랜잭션이 아무 일도 하지 않더라도 데이터베이스 전체의 정리 작업이 그 시점에 묶입니다. 특정 테이블만이 아니라 전역입니다.</div>
+    <p>위 실험대에서 세션 A는 <code>SELECT</code> 한 번 하고 아무것도 하지 않습니다. 그런데 세션 B가 만들어내는 모든 쓰레기가 회수 불가 상태로 남죠. 이것이 운영 중 가장 흔한 블로트 시나리오입니다.</p>
+
+    <h2>회수해도 파일은 줄지 않는다</h2>
+    <p>VACUUM이 죽은 튜플을 치우면 그 자리는 <strong>재사용 가능</strong>해집니다. 하지만 파일 크기가 줄지는 않습니다. VACUUM은 데이터를 앞으로 당겨오지 않기 때문에, 중간에 구멍이 나 있으면 그 상태로 둡니다.</p>
+    <p>예외가 하나 있습니다. <strong>파일 맨 뒤쪽 페이지가 완전히 비었을 때만</strong> 잘라내서 OS에 돌려줍니다. 실험대에서 페이지가 줄어드는 경우와 줄지 않는 경우를 비교해보세요.</p>
+    <p>실제로 디스크를 되찾으려면 다음 중 하나가 필요합니다.</p>
+    <ul>
+      <li><code>VACUUM FULL</code> — 테이블을 통째로 다시 씁니다. <strong>ACCESS EXCLUSIVE 락</strong>이 걸려 그동안 읽기조차 막힙니다. 원본만큼의 여유 디스크도 필요합니다</li>
+      <li><code>pg_repack</code> — 사실상 무중단으로 같은 일을 합니다. 운영 환경에서는 대개 이쪽입니다</li>
+      <li>파티션 테이블이면 해당 파티션을 <code>DROP</code></li>
+    </ul>
+
+    <h2>현장에서 확인할 것</h2>
+    <p>테이블이 계속 커지는데 원인을 모르겠다면, 먼저 오래된 트랜잭션부터 찾습니다.</p>
+    <pre><code>SELECT pid, state, age(backend_xid) AS xid_age,
+       now() - xact_start AS duration, query
+FROM pg_stat_activity
+WHERE state != 'idle' OR backend_xid IS NOT NULL
+ORDER BY xact_start
+LIMIT 10;</code></pre>
+    <p><code>idle in transaction</code> 상태가 몇 시간씩 잡혀 있다면 그게 범인일 가능성이 높습니다. 애플리케이션에서 트랜잭션을 열어두고 커밋하지 않은 커넥션이죠.</p>
+    <p>블로트 규모는 이렇게 봅니다.</p>
+    <pre><code>SELECT relname,
+       n_live_tup, n_dead_tup,
+       round(n_dead_tup * 100.0 / nullif(n_live_tup + n_dead_tup, 0), 1) AS dead_pct,
+       last_autovacuum
+FROM pg_stat_user_tables
+ORDER BY n_dead_tup DESC
+LIMIT 10;</code></pre>
+    <p>예방책은 몇 가지 안 됩니다.</p>
+    <ul>
+      <li><code>idle_in_transaction_session_timeout</code> 설정 — 방치된 트랜잭션을 강제 종료합니다. 가장 효과가 큽니다</li>
+      <li>긴 분석 쿼리는 읽기 전용 복제본으로 분리 (<code>hot_standby_feedback</code> 설정에 따라 주 서버 horizon에 영향을 줄 수 있으니 주의)</li>
+      <li>커넥션 풀에서 트랜잭션 경계를 명확히 — 특히 자동 커밋을 끈 채 커넥션을 반납하는 코드</li>
+      <li>대량 <code>UPDATE</code>는 나눠서 실행하고, 사이사이 autovacuum이 따라올 시간을 줍니다</li>
+    </ul>
+    <div class="callout">이 페이지의 모델은 교육용으로 단순화한 것입니다. 실제 PostgreSQL은 HOT 업데이트, 힌트 비트, 프리즈, 멀티 트랜잭션 등 여기 없는 요소를 더 다룹니다. 다만 <code>xmin horizon</code>이 회수를 막는 구조는 실제와 같습니다.</div>
+  </article>
+
+  <footer>PostgreSQL 16 기준 · 교육용 단순화 모델 · 한국어 / <a href="/en/mvcc/" hreflang="en" lang="en">English</a></footer>
 </main>
 
+<script src="/shared/mvcc-lab.js"></script>
 <script>
-  'use strict';
-
-  /* ============================================================================
-   * 0. 문안
-   * ========================================================================== */
-
-  const T = {
-    ko:{
-      pageTitle:'PostgreSQL MVCC와 VACUUM — 왜 DELETE 해도 테이블이 줄지 않는가',
-      title:'DELETE 했는데 테이블이 줄지 않는 이유',
-      lede:'PostgreSQL에서 열려 있는 트랜잭션 하나가 어떻게 VACUUM 전체를 멈춰 세우고 테이블을 부풀리는지, 직접 조작하며 확인합니다.',
-      capAxis:'트랜잭션 ID 축',
-      capHeap:'힙 — 페이지와 슬롯',
-      capLog:'로그',
-      hzLabel:'xmin horizon',
+  initMvccLab({
+    strings: {
       hzNone:'열린 트랜잭션 없음 · 전부 회수 가능',
       hzHeld:'세션 $1 이(가) 붙잡고 있음',
-      lgLive:'live', lgPending:'커밋 전', lgBlocked:'dead · 회수 불가', lgFree:'dead · 회수 가능',
-      skTop:'위 = xmin · 이 버전을 만든 트랜잭션',
-      skBot:'아래 = xmax · 이 버전을 지운 트랜잭션 (— 이면 살아 있음)',
-      lgAuto:'세션 $1: (트랜잭션이 없어 BEGIN 자동 실행)',
-      mSize:'테이블 크기', mLive:'유효 행', mDead:'죽은 튜플', mBloat:'블로트',
-      play:'시나리오 재생', pause:'일시정지', step:'다음 단계', reset:'초기화',
-      nIntro:'재생을 누르면 실제 장애 상황이 순서대로 재현됩니다. 중간에 버튼을 직접 눌러 개입해도 됩니다.',
-      opBegin:'BEGIN', opSelect:'SELECT', opUpdate:'UPDATE ×3', opDelete:'DELETE ×3', opCommit:'COMMIT',
       idle:'유휴', openNoSnap:'열림 · 스냅샷 없음', openSnap:'열림 · 스냅샷 $1', openXid:'열림 · xid $1 · 스냅샷 $2',
+      play:'시나리오 재생', pause:'일시정지',
+      nIntro:'재생을 누르면 실제 장애 상황이 순서대로 재현됩니다. 중간에 버튼을 직접 눌러 개입해도 됩니다.',
+      lgAuto:'세션 $1: (트랜잭션이 없어 BEGIN 자동 실행)',
       lgBegin:'세션 $1: BEGIN',
       lgSelect:'세션 $1: SELECT — 스냅샷 $2 획득',
       lgUpdate:'세션 $1: UPDATE $2행 — 구버전 $2개 생성, 신버전 $2개 기록',
@@ -336,691 +315,21 @@
       lgVacNone:'VACUUM — 회수 0개. horizon($1) 이후의 죽은 튜플은 아직 지울 수 없음',
       lgTrunc:'꼬리 페이지 $1개 절단 — OS에 반환',
       lgNoTrunc:'회수는 됐지만 파일 크기는 그대로. 빈 공간이 재사용 대기 상태로 남음',
-      foot:'PostgreSQL 16 기준 · 교육용 단순화 모델'
     },
-    en:{
-      pageTitle:'PostgreSQL MVCC and VACUUM — why your table never shrinks',
-      title:'Why your table never shrinks after DELETE',
-      lede:'How a single open transaction stalls VACUUM and inflates a PostgreSQL table. Drive it yourself and watch it happen.',
-      capAxis:'Transaction ID axis',
-      capHeap:'Heap — pages and slots',
-      capLog:'Log',
-      hzLabel:'xmin horizon',
-      hzNone:'no open transaction · everything reclaimable',
-      hzHeld:'held by session $1',
-      lgLive:'live', lgPending:'uncommitted', lgBlocked:'dead · blocked', lgFree:'dead · reclaimable',
-      skTop:'top = xmin · transaction that created this version',
-      skBot:'bottom = xmax · transaction that killed it (— means still live)',
-      lgAuto:'Session $1: (no transaction open — BEGIN issued automatically)',
-      mSize:'table size', mLive:'live rows', mDead:'dead tuples', mBloat:'bloat',
-      play:'Play scenario', pause:'Pause', step:'Next step', reset:'Reset',
-      nIntro:'Press play to replay a real production incident step by step. You can also grab the controls at any time.',
-      opBegin:'BEGIN', opSelect:'SELECT', opUpdate:'UPDATE ×3', opDelete:'DELETE ×3', opCommit:'COMMIT',
-      idle:'idle', openNoSnap:'open · no snapshot', openSnap:'open · snapshot $1', openXid:'open · xid $1 · snapshot $2',
-      lgBegin:'Session $1: BEGIN',
-      lgSelect:'Session $1: SELECT — took snapshot $2',
-      lgUpdate:'Session $1: UPDATE $2 rows — $2 old versions dead, $2 new versions written',
-      lgDelete:'Session $1: DELETE $2 rows',
-      lgCommit:'Session $1: COMMIT',
-      lgVacFull:'VACUUM — reclaimed $1, held back $2',
-      lgVacNone:'VACUUM — reclaimed 0. Dead tuples newer than horizon ($1) cannot be removed yet',
-      lgTrunc:'Truncated $1 trailing page(s) — returned to OS',
-      lgNoTrunc:'Space reclaimed, file size unchanged. Freed slots are queued for reuse',
-      foot:'PostgreSQL 16 · simplified teaching model'
-    }};
-
-  let L = Lang.get();
-  const t = (k, ...a) => {
-    let s = T[L][k] ?? k;
-    a.forEach((v,i)=> s = s.replaceAll('$'+(i+1), v));
-    return s;
-  };
-
-  /* ============================================================================
-   * 1. 모델
-   *
-   *    튜플 하나는 { xmin, xmax } 를 갖는다.
-   *      xmin — 이 버전을 만든 트랜잭션
-   *      xmax — 이 버전을 지운 트랜잭션 (없으면 null)
-   *
-   *    죽은 튜플이라고 바로 지울 수 있는 게 아니다. 아직 그 버전을 볼 자격이
-   *    있는 트랜잭션이 하나라도 살아 있으면 VACUUM은 손대지 못한다.
-   *    그 경계선이 xmin horizon 이다.
-   * ========================================================================== */
-
-  const SLOTS = 8;          // 페이지당 슬롯
-  const PAGE_KB = 8;        // 페이지 크기
-
-  let st;
-
-  function reset(){
-    st = {
-      nextXid: 101,
-      committed: new Set([100]),
-      tx: { A: blank(), B: blank() },
-      tuples: [],
-      pages: 3,
-      seq: 0,
-      log: [],
-      step: 0,
-      peakSize: 0,
-    };
-    for (let i=0;i<16;i++){
-      const p = place();
-      st.tuples.push({ id: st.seq++, xmin:100, xmax:null, page:p.page, slot:p.slot });
-    }
-    st.peakSize = size();
-  }
-
-  const blank = () => ({ open:false, xid:null, snap:null });
-
-  /** 열린 트랜잭션이 붙잡고 있는 가장 오래된 xid. 없으면 미래를 가리킨다. */
-  function horizon(){
-    const xs = [];
-    for (const k of ['A','B']){
-      const x = st.tx[k];
-      if (!x.open) continue;
-      if (x.snap != null) xs.push(x.snap);
-      if (x.xid  != null) xs.push(x.xid);
-    }
-    return xs.length ? Math.min(...xs) : st.nextXid;
-  }
-
-  function holder(){
-    const h = horizon();
-    for (const k of ['A','B']){
-      const x = st.tx[k];
-      if (!x.open) continue;
-      if (x.snap === h || x.xid === h) return k;
-    }
-    return null;
-  }
-
-  const isCommitted = x => x != null && st.committed.has(x);
-
-  /** live | pending | blocked | free */
-  function stateOf(tp){
-    if (!isCommitted(tp.xmin)) return 'pending';
-    if (!isCommitted(tp.xmax)) return 'live';
-    return tp.xmax < horizon() ? 'free' : 'blocked';
-  }
-
-  function place(){
-    const used = new Set(st.tuples.map(x => x.page*SLOTS + x.slot));
-    for (let i=0;i<st.pages*SLOTS;i++) if (!used.has(i)) return { page:Math.floor(i/SLOTS), slot:i%SLOTS };
-    st.pages++;
-    return { page:st.pages-1, slot:0 };
-  }
-
-  const size    = () => st.pages * PAGE_KB;
-  const liveN   = () => st.tuples.filter(x => stateOf(x)==='live').length;
-  const deadN   = () => st.tuples.filter(x => { const s=stateOf(x); return s==='blocked'||s==='free'; }).length;
-
-  /* --- 연산 ----------------------------------------------------------------- */
-
-  function log(msg, cls){ st.log.push({ msg, cls }); if (st.log.length>60) st.log.shift(); }
-
-  function opBegin(k){
-    if (st.tx[k].open) return;
-    st.tx[k] = { open:true, xid:null, snap:null };
-    log(t('lgBegin', k));
-  }
-  function takeSnap(k){
-    const x = st.tx[k];
-    if (x.snap == null) x.snap = st.nextXid;
-  }
-  function needXid(k){
-    const x = st.tx[k];
-    if (x.xid == null) x.xid = st.nextXid++;
-    return x.xid;
-  }
-  function opSelect(k){
-    if (!st.tx[k].open){ log(t('lgAuto', k)); opBegin(k); }
-    takeSnap(k);
-    log(t('lgSelect', k, st.tx[k].snap));
-  }
-  function opWrite(k, n, kind){
-    if (!st.tx[k].open){ log(t('lgAuto', k)); opBegin(k); }
-    takeSnap(k);
-    const xid = needXid(k);
-    const targets = st.tuples.filter(x => isCommitted(x.xmin) && x.xmax == null).slice(0, n);
-    for (const tp of targets){
-      tp.xmax = xid;
-      if (kind === 'update'){
-        const p = place();
-        st.tuples.push({ id: st.seq++, xmin: xid, xmax:null, page:p.page, slot:p.slot });
-      }
-    }
-    log(t(kind === 'update' ? 'lgUpdate' : 'lgDelete', k, targets.length));
-    st.peakSize = Math.max(st.peakSize, size());
-  }
-  function opCommit(k){
-    const x = st.tx[k];
-    if (!x.open) return;
-    if (x.xid != null) st.committed.add(x.xid);
-    st.tx[k] = blank();
-    log(t('lgCommit', k));
-  }
-
-  function opVacuum(){
-    const h = horizon();
-    const before = st.tuples.length;
-    const kept = st.tuples.filter(x => stateOf(x) !== 'free');
-    const removed = before - kept.length;
-    const held = kept.filter(x => stateOf(x) === 'blocked').length;
-    st.tuples = kept;
-
-    if (removed === 0) log(t('lgVacNone', h), 'hi');
-    else log(t('lgVacFull', removed, held), held ? 'hi' : 'ok');
-
-    // 꼬리 절단 — 뒤쪽 페이지가 완전히 비어야만 OS에 돌려줄 수 있다
-    let maxPage = -1;
-    for (const x of st.tuples) maxPage = Math.max(maxPage, x.page);
-    const canDrop = st.pages - (maxPage + 1);
-    if (removed > 0){
-      if (canDrop > 0){ st.pages = Math.max(1, maxPage + 1); log(t('lgTrunc', canDrop), 'ok'); }
-      else log(t('lgNoTrunc'));
-    }
-  }
-
-  /* ============================================================================
-   * 2. 시나리오
-   * ========================================================================== */
-
-  const SCENE = [
-    { run(){}, ko:'16개 행이 들어 있는 평범한 테이블입니다. 전부 live 상태예요.',
-      en:'A plain table with 16 rows. Everything is live.' },
-
-    { run(){ opBegin('B'); opWrite('B',3,'update'); opCommit('B'); },
-      ko:'세션 B가 3행을 UPDATE 했습니다. PostgreSQL은 제자리 수정을 하지 않습니다. 구버전에 xmax를 찍고 신버전을 새 슬롯에 씁니다. 죽은 튜플 3개가 생겼어요.',
-      en:'Session B updates 3 rows. PostgreSQL never updates in place — it stamps xmax on the old version and writes a new one elsewhere. Three dead tuples appear.' },
-
-    { run(){ opVacuum(); },
-      ko:'VACUUM이 3개를 전부 회수했습니다. 열린 트랜잭션이 없으니 horizon이 미래를 가리키고, 죽은 튜플은 아무도 볼 수 없다고 판정된 겁니다. 여기까지가 정상 동작입니다.',
-      en:'VACUUM reclaims all three. With no open transaction the horizon sits in the future, so those dead tuples are provably invisible to everyone. This is the healthy path.' },
-
-    { run(){ opBegin('A'); opSelect('A'); },
-      ko:'이제 문제의 시작입니다. 세션 A가 BEGIN 후 SELECT를 실행하고 그대로 방치됩니다. 배치 잡, 리포트 쿼리, 커밋을 잊은 커넥션 — 현장에서 흔한 모습이죠. horizon이 A의 스냅샷에 고정됐습니다.',
-      en:'Here it begins. Session A runs BEGIN then a SELECT, and just sits there. A batch job, a reporting query, a connection that forgot to commit. The horizon is now pinned to A\u2019s snapshot.' },
-
-    { run(){ opBegin('B'); opWrite('B',3,'update'); opCommit('B'); },
-      ko:'세션 B는 아무것도 모른 채 계속 일합니다. 또 3행을 UPDATE 했어요.',
-      en:'Session B keeps working, unaware. Another 3 rows updated.' },
-
-    { run(){ opVacuum(); },
-      ko:'여기가 핵심입니다. 죽은 튜플이 분명히 있는데 VACUUM이 하나도 회수하지 못합니다. 세션 A의 스냅샷이 그 버전들보다 오래됐기 때문에, A가 아직 그 데이터를 볼 권리가 있거든요.',
-      en:'This is the crux. There are dead tuples, yet VACUUM reclaims none. Session A\u2019s snapshot predates those versions, so A still has the right to see them.' },
-
-    { run(){ opBegin('B'); opWrite('B',3,'update'); opCommit('B');
-        opBegin('B'); opWrite('B',3,'update'); opCommit('B'); },
-      ko:'B가 계속 씁니다. 회수는 막혀 있는데 신버전은 계속 쌓이니, 힙은 새 페이지를 붙이며 자라기 시작합니다. 이게 블로트입니다.',
-      en:'B keeps writing. Reclamation is blocked while new versions pile up, so the heap starts appending pages. That is bloat.' },
-
-    { run(){ opVacuum(); },
-      ko:'VACUUM을 몇 번을 돌려도 소용없습니다. autovacuum도 마찬가지예요. 원인은 VACUUM이 게을러서가 아니라, 지우면 안 되는 데이터이기 때문입니다.',
-      en:'Running VACUUM again changes nothing, and autovacuum fares no better. The cause is not a lazy vacuum — the data genuinely must not be removed yet.' },
-
-    { run(){ opCommit('A'); },
-      ko:'세션 A가 드디어 커밋했습니다. horizon이 풀려 미래로 이동합니다.',
-      en:'Session A finally commits. The horizon is released and jumps forward.' },
-
-    { run(){ opVacuum(); },
-      ko:'이제 전부 회수됩니다. 하지만 테이블 크기를 보세요 — 줄지 않았습니다. VACUUM은 공간을 재사용 가능하게 표시할 뿐, 파일 앞쪽이 비었다고 뒤 데이터를 앞으로 당겨오지는 않습니다.',
-      en:'Everything is reclaimed now. But look at the table size — unchanged. VACUUM only marks space reusable; it will not shift trailing data forward to close a gap in the middle.' },
-
-    { run(){},
-      ko:'디스크를 실제로 되돌려받으려면 VACUUM FULL(테이블 전체 잠금) 이나 pg_repack(온라인) 이 필요합니다. 애초에 이 상황을 안 만드는 게 훨씬 싸고요.',
-      en:'To actually give disk back you need VACUUM FULL (takes an exclusive lock) or pg_repack (online). Not getting here in the first place is far cheaper.' },
-  ];
-
-  /* ============================================================================
-   * 3. 화면
-   * ========================================================================== */
-
-  const $ = s => document.querySelector(s);
-
-  function render(){
-    const h = horizon();
-
-    // 축
-    const ticks = [];
-    for (let x=100; x<st.nextXid; x++){
-      const cls = ['tick'];
-      if (x < h) cls.push('reclaimable');
-      const who = [];
-      for (const k of ['A','B']){
-        const s = st.tx[k];
-        if (s.open && (s.xid===x || s.snap===x)){ cls.push('open'); who.push(k); }
-      }
-      ticks.push(`<span class="${cls.join(' ')}">${who.length?`<span class="who">${who.join('\u00b7')}</span>`:''}${x}</span>`);
-    }
-    if (st.nextXid <= 160)
-      ticks.push(`<span class="tick" style="opacity:.45">${st.nextXid}</span>`);
-    $('#ticks').innerHTML = ticks.join('');
-
-    $('#hzVal').textContent = h;
-    const hd = holder();
-    $('#hzWho').textContent = hd ? t('hzHeld', hd) : t('hzNone');
-
-    // 세션
-    for (const k of ['A','B']){
-      const s = st.tx[k], el = $('#st'+k);
-      el.classList.toggle('on', s.open);
-      el.textContent = !s.open ? t('idle')
-              : s.xid != null ? t('openXid', s.xid, s.snap)
-                      : s.snap != null ? t('openSnap', s.snap)
-                              : t('openNoSnap');
-    }
-
-    // 힙
-    const byPage = Array.from({length:st.pages}, () => new Array(SLOTS).fill(null));
-    for (const x of st.tuples) if (x.page < st.pages) byPage[x.page][x.slot] = x;
-    $('#pages').innerHTML = byPage.map((slots, p) => `
-    <div class="page">
-      <span class="pno">page ${p}</span>
-      <div class="slots">${slots.map(x => {
-      if (!x) return '<div class="slot"></div>';
-      const s = stateOf(x);
-      return `<div class="slot ${s}"><span>${x.xmin}</span><span>${x.xmax ?? '—'}</span></div>`;
-    }).join('')}</div>
-    </div>`).join('');
-
-    // 계기
-    const dead = deadN();
-    $('#mSize').innerHTML = `${size()}<small> KB</small>`;
-    $('#mLive').textContent = liveN();
-    $('#mDead').textContent = dead;
-    $('#mDeadBox').classList.toggle('warn', dead > 0);
-    const total = st.tuples.length;
-    const bloat = total ? Math.round(dead * 100 / total) : 0;
-    $('#mBloat').innerHTML = `${bloat}<small> %</small>`;
-
-    // 로그
-    $('#log').innerHTML = st.log.slice(-40)
-            .map(e => `<div class="${e.cls||''}">${e.msg}</div>`).join('');
-    $('#log').scrollTop = 1e6;
-
-    // 서술
-    $('#nStep').textContent = `${String(st.step).padStart(2,'0')} / ${String(SCENE.length-1).padStart(2,'0')}`;
-    $('#btnStep').disabled = st.step >= SCENE.length-1;
-  }
-
-  function applyLang(){
-    document.documentElement.lang = L;
-    if (T[L].pageTitle) document.title = T[L].pageTitle;
-    for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
-    $('#lang').textContent = L === 'ko' ? 'EN' : 'KO';
-    $('#btnPlay').textContent = playing ? t('pause') : t('play');
-    buildOps();
-    buildProse();
-    buildGuide();
-    if (st.step > 0) $('#nText').textContent = SCENE[st.step][L];
-    render();
-  }
-
-  /* --- 조작 버튼 ------------------------------------------------------------ */
-
-  function buildOps(){
-    for (const k of ['A','B']){
-      const defs = [
-        ['opBegin',  () => opBegin(k)],
-        ['opSelect', () => opSelect(k)],
-        ['opUpdate', () => opWrite(k,3,'update')],
-        ['opDelete', () => opWrite(k,3,'delete')],
-        ['opCommit', () => opCommit(k)],
-      ];
-      $('#ops'+k).innerHTML = '';
-      for (const [key, fn] of defs){
-        const b = document.createElement('button');
-        b.textContent = t(key);
-        b.onclick = () => { stop(); fn(); render(); };
-        $('#ops'+k).appendChild(b);
-      }
-    }
-  }
-
-  /* --- 진행 ----------------------------------------------------------------- */
-
-  let playing = false, timer = null;
-
-  function stepOnce(){
-    if (st.step >= SCENE.length-1){ stop(); return; }
-    st.step++;
-    SCENE[st.step].run();
-    $('#nText').textContent = SCENE[st.step][L];
-    render();
-    if (st.step >= SCENE.length-1) stop();
-  }
-
-  function play(){
-    playing = true;
-    $('#btnPlay').textContent = t('pause');
-    timer = setInterval(stepOnce, 2600);
-  }
-  function stop(){
-    playing = false;
-    clearInterval(timer);
-    $('#btnPlay').textContent = t('play');
-  }
-
-  $('#btnPlay').onclick = () => playing ? stop() : play();
-  $('#btnStep').onclick = () => { stop(); stepOnce(); };
-  $('#btnVacuum').onclick = () => { stop(); opVacuum(); render(); };
-  $('#btnReset').onclick  = () => { stop(); reset(); $('#nText').textContent = t('nIntro'); render(); };
-  $('#lang').onclick = () => { L = Lang.toggle(L); applyLang(); };
-
-  /* ============================================================================
-   * 4. 본문
-   * ========================================================================== */
-
-  function buildProse(){
-    $('#prose').innerHTML = L === 'ko' ? PROSE_KO : PROSE_EN;
-  }
-
-
-  function buildGuide(){ document.querySelector('#guide').innerHTML = L === 'ko' ? GUIDE_KO : GUIDE_EN; }
-
-  const GUIDE_KO = `
-<h2>직접 조작하기</h2>
-<p>재생 버튼은 정해진 각본을 보여줄 뿐입니다. 세션 버튼을 직접 누르면 각본을 벗어나 원하는 상황을 만들 수 있어요. 재생 중에 아무 버튼이나 누르면 재생이 멈추고 그 상태에서 이어집니다.</p>
-
-<h3>버튼이 하는 일</h3>
-<table class="keytable">
-<tr><th>버튼</th><th>동작</th></tr>
-<tr><td>BEGIN</td><td>트랜잭션을 엽니다. <strong>아직 스냅샷은 잡지 않습니다.</strong> 이 상태만으로는 VACUUM을 막지 않아요</td></tr>
-<tr><td>SELECT</td><td>스냅샷을 획득합니다. 이 순간부터 horizon이 이 세션에 묶입니다. 쓰기를 하지 않으므로 xid는 할당되지 않습니다</td></tr>
-<tr><td>UPDATE ×3</td><td>살아 있는 행 3개를 갱신합니다. 구버전 3개에 xmax가 찍히고, 신버전 3개가 빈 슬롯에 새로 기록됩니다</td></tr>
-<tr><td>DELETE ×3</td><td>3개에 xmax만 찍습니다. 신버전이 없으니 슬롯을 새로 쓰지 않습니다</td></tr>
-<tr><td>COMMIT</td><td>이 트랜잭션의 xid를 커밋 목록에 넣고 세션을 닫습니다. 붙잡고 있던 horizon이 풀립니다</td></tr>
-<tr><td>VACUUM</td><td>회수를 시도합니다. 언제든 몇 번이든 누를 수 있습니다</td></tr>
-</table>
-<p>트랜잭션이 열려 있지 않은 상태에서 SELECT나 UPDATE를 누르면 BEGIN이 자동으로 실행되고, 로그에 그렇게 남습니다.</p>
-
-<h3>화면 읽는 법</h3>
-<ul>
-<li><strong>슬롯</strong> 하나가 튜플 하나입니다. 위 숫자가 <code>xmin</code>, 아래가 <code>xmax</code>. 색이 곧 상태예요</li>
-<li><strong>축</strong>의 황토색 구간은 horizon보다 앞선 xid, 즉 <em>지워도 안전한 영역</em>입니다. 파란 테두리 칩은 열린 트랜잭션이 붙잡고 있는 지점이고 위에 세션 문자가 붙습니다</li>
-<li><strong>테이블 크기</strong>는 페이지 수 × 8KB입니다. 슬롯이 비어도 페이지가 남아 있으면 크기는 그대로예요</li>
-<li><strong>블로트</strong>는 전체 튜플 중 죽은 튜플의 비율입니다</li>
-</ul>
-
-<h2>이렇게 해보세요</h2>
-
-<div class="recipe">
-<h4>1. BEGIN만으로는 막히지 않는다</h4>
-<div class="seq">초기화
-A  BEGIN
-B  UPDATE ×3 → COMMIT
-   VACUUM        <em>→ 회수됨</em>
-
-A  SELECT        <em>← 여기서 스냅샷을 잡는다</em>
-B  UPDATE ×3 → COMMIT
-   VACUUM        <em>→ 회수 0개</em></div>
-<p class="why">범인은 <code>BEGIN</code>이 아니라 <strong>첫 구문</strong>입니다. 그래서 <code>pg_stat_activity</code>에서 상태만 보지 말고 <code>backend_xmin</code>이 잡혀 있는지를 함께 봐야 합니다.</p>
-</div>
-
-<div class="recipe">
-<h4>2. 막는 주체는 계속 바뀐다</h4>
-<div class="seq">초기화
-A  SELECT
-B  UPDATE ×3 → COMMIT
-   VACUUM        <em>→ 0개. A가 막는다</em>
-
-B  SELECT        <em>← B도 트랜잭션을 연다</em>
-A  COMMIT
-   VACUUM        <em>→ 3개 회수. B 스냅샷은 더 최근이라 통과</em>
-
-A  UPDATE ×3 → COMMIT
-   VACUUM        <em>→ 0개. 이번엔 B가 막는다</em></div>
-<p class="why">horizon은 열려 있는 것들 중 <strong>가장 오래된 하나</strong>가 결정합니다. 긴 트랜잭션 하나를 잡았다고 끝나지 않고, 다음으로 오래된 것이 곧바로 그 자리를 이어받습니다. 축에서 파란 칩이 A에서 B로 옮겨가는 걸 보세요.</p>
-</div>
-
-<div class="recipe">
-<h4>3. 블로트를 만드는 건 UPDATE다</h4>
-<div class="seq">초기화
-B  DELETE ×3 → COMMIT   (여러 번 반복)
-   크기를 본다           <em>→ 늘지 않는다</em>
-
-초기화
-B  UPDATE ×3 → COMMIT   (같은 횟수)
-   크기를 본다           <em>→ 페이지가 늘어난다</em></div>
-<p class="why"><code>DELETE</code>는 죽음만 표시하고 새 튜플을 만들지 않습니다. <code>UPDATE</code>는 구버전을 남기면서 신버전을 새로 쓰기 때문에 <strong>한 번에 두 배로</strong> 공간을 씁니다. 대량 갱신 배치가 특히 위험한 이유예요.</p>
-</div>
-
-<div class="recipe">
-<h4>4. 꼬리 페이지만 잘려 나간다</h4>
-<div class="seq">초기화
-B  UPDATE ×3 → COMMIT   (페이지가 늘어날 때까지 반복)
-   VACUUM
-
-맨 뒷 페이지가 완전히 비었는지 확인
-비었으면 → 크기가 줄고 "절단" 로그가 뜬다
-한 칸이라도 살아 있으면 → 크기 그대로</div>
-<p class="why">VACUUM은 데이터를 앞으로 당겨오지 않습니다. 그래서 파일 중간에 구멍이 나면 그 상태로 두고, <strong>뒤쪽이 통째로 비었을 때만</strong> 잘라서 OS에 돌려줍니다.</p>
-</div>
-
-<div class="recipe">
-<h4>5. 커밋 전에는 죽음도 확정되지 않는다</h4>
-<div class="seq">초기화
-B  UPDATE ×3     <em>← COMMIT 하지 않는다</em>
-   슬롯을 본다     <em>→ 점선 3개(커밋 전) 등장</em>
-   죽은 튜플 0개   <em>← 구버전이 아직 live 로 보인다</em>
-   VACUUM        <em>→ 할 일이 없다</em>
-
-B  COMMIT        <em>→ 구버전 3개가 그제서야 dead</em>
-   VACUUM        <em>→ 회수됨</em></div>
-<p class="why">커밋 전에는 구버전을 지울 수 없습니다. <strong>롤백되면 그 구버전이 다시 정답이 되어야</strong> 하니까요. 점선 슬롯은 반대로 아직 아무에게도 보이지 않는 신버전입니다. 동시에 그 트랜잭션은 자기 xid로 horizon도 붙잡고 있어요 — 축에서 확인해보세요.</p>
-</div>
-`;
-
-  const GUIDE_EN = `
-<h2>Driving it yourself</h2>
-<p>The play button only walks a fixed script. Press the session buttons directly and you can leave the script and build any situation you want. Touching any control during playback pauses it and hands you the state as-is.</p>
-
-<h3>What each button does</h3>
-<table class="keytable">
-<tr><th>button</th><th>effect</th></tr>
-<tr><td>BEGIN</td><td>Opens a transaction. <strong>No snapshot yet.</strong> On its own this does not block VACUUM</td></tr>
-<tr><td>SELECT</td><td>Takes a snapshot. From this moment the horizon is pinned to this session. No write, so no xid is assigned</td></tr>
-<tr><td>UPDATE ×3</td><td>Updates 3 live rows: xmax stamped on 3 old versions, 3 new versions written into free slots</td></tr>
-<tr><td>DELETE ×3</td><td>Stamps xmax on 3 rows only. No new versions, so no new slots consumed</td></tr>
-<tr><td>COMMIT</td><td>Commits this transaction's xid and closes the session, releasing whatever horizon it held</td></tr>
-<tr><td>VACUUM</td><td>Attempts reclamation. Press it whenever and as often as you like</td></tr>
-</table>
-<p>Pressing SELECT or UPDATE with no open transaction issues BEGIN automatically, and the log says so.</p>
-
-<h3>Reading the display</h3>
-<ul>
-<li>Each <strong>slot</strong> is one tuple. Top number is <code>xmin</code>, bottom is <code>xmax</code>. Colour is the state</li>
-<li>The ochre range on the <strong>axis</strong> is everything older than the horizon — <em>safe to remove</em>. Blue-outlined chips are pinned by an open transaction, labelled with the session letter</li>
-<li><strong>Table size</strong> is page count × 8KB. Empty slots do not shrink it if the page still exists</li>
-<li><strong>Bloat</strong> is dead tuples as a share of all tuples</li>
-</ul>
-
-<h2>Try these</h2>
-
-<div class="recipe">
-<h4>1. BEGIN alone blocks nothing</h4>
-<div class="seq">Reset
-A  BEGIN
-B  UPDATE ×3 → COMMIT
-   VACUUM        <em>→ reclaimed</em>
-
-A  SELECT        <em>← snapshot taken here</em>
-B  UPDATE ×3 → COMMIT
-   VACUUM        <em>→ reclaimed 0</em></div>
-<p class="why">The culprit is not <code>BEGIN</code> but the <strong>first statement</strong>. So in <code>pg_stat_activity</code>, do not read state alone — check whether <code>backend_xmin</code> is held.</p>
-</div>
-
-<div class="recipe">
-<h4>2. The blocker keeps changing hands</h4>
-<div class="seq">Reset
-A  SELECT
-B  UPDATE ×3 → COMMIT
-   VACUUM        <em>→ 0. A is blocking</em>
-
-B  SELECT        <em>← B opens one too</em>
-A  COMMIT
-   VACUUM        <em>→ 3 reclaimed. B's snapshot is newer</em>
-
-A  UPDATE ×3 → COMMIT
-   VACUUM        <em>→ 0. now B is blocking</em></div>
-<p class="why">The horizon is set by the <strong>oldest</strong> open transaction. Killing one long transaction does not end it — the next oldest immediately takes over the role. Watch the blue chip move from A to B on the axis.</p>
-</div>
-
-<div class="recipe">
-<h4>3. UPDATE is what creates bloat</h4>
-<div class="seq">Reset
-B  DELETE ×3 → COMMIT   (repeat a few times)
-   Watch the size          <em>→ does not grow</em>
-
-Reset
-B  UPDATE ×3 → COMMIT   (same number of times)
-   Watch the size          <em>→ pages appear</em></div>
-<p class="why"><code>DELETE</code> only marks death; it writes no new tuple. <code>UPDATE</code> keeps the old version and writes a new one, so it consumes space <strong>at twice the rate</strong>. This is why bulk update jobs are the usual suspect.</p>
-</div>
-
-<div class="recipe">
-<h4>4. Only trailing pages get truncated</h4>
-<div class="seq">Reset
-B  UPDATE ×3 → COMMIT   (repeat until pages grow)
-   VACUUM
-
-Check whether the last page is fully empty
-Empty      → size drops, "truncated" appears in the log
-One survivor → size unchanged</div>
-<p class="why">VACUUM never moves data forward, so a hole in the middle of the file stays a hole. It can only cut from the end, and <strong>only when the end is completely empty</strong>.</p>
-</div>
-
-<div class="recipe">
-<h4>5. Death is not settled until commit</h4>
-<div class="seq">Reset
-B  UPDATE ×3     <em>← do not commit</em>
-   Look at slots  <em>→ 3 dashed (uncommitted) appear</em>
-   Dead count 0   <em>← old versions still read as live</em>
-   VACUUM        <em>→ nothing to do</em>
-
-B  COMMIT        <em>→ 3 old versions finally die</em>
-   VACUUM        <em>→ reclaimed</em></div>
-<p class="why">Old versions cannot be removed before commit: <strong>a rollback would make them the correct answer again</strong>. The dashed slots are the opposite case — new versions nobody can see yet. Meanwhile that transaction pins the horizon with its own xid; check the axis.</p>
-</div>
-`;
-
-
-  const PROSE_KO = `
-<h2>PostgreSQL은 행을 수정하지 않는다</h2>
-<p>다른 DBMS에서 넘어온 사람이 가장 먼저 부딪히는 지점입니다. PostgreSQL의 <code>UPDATE</code>는 기존 행을 고치지 않습니다. <strong>구버전에 죽은 시각을 찍고, 신버전을 다른 자리에 새로 씁니다.</strong> <code>DELETE</code>도 마찬가지로 데이터를 지우는 게 아니라 죽음을 표시할 뿐입니다.</p>
-<p>모든 튜플은 두 개의 시스템 컬럼을 갖습니다. 직접 조회할 수 있어요.</p>
-<pre><code>SELECT xmin, xmax, * FROM orders LIMIT 5;</code></pre>
-<ul>
-<li><code>xmin</code> — 이 버전을 만든 트랜잭션 ID</li>
-<li><code>xmax</code> — 이 버전을 죽인 트랜잭션 ID (살아 있으면 0)</li>
-</ul>
-<p>이 구조 덕분에 읽기가 쓰기를 막지 않습니다. 읽는 쪽은 자기 스냅샷에 맞는 버전을 골라 읽으면 되니까요. 대신 <strong>쓰레기가 쌓입니다.</strong> 그 쓰레기를 치우는 게 VACUUM입니다.</p>
-
-<h2>VACUUM이 함부로 지우지 못하는 이유</h2>
-<p>죽은 튜플이라고 해서 즉시 지울 수 있는 게 아닙니다. 그 버전을 볼 자격이 있는 트랜잭션이 아직 살아 있을 수 있으니까요.</p>
-<p>그래서 PostgreSQL은 경계선을 하나 계산합니다. <strong>현재 열려 있는 트랜잭션들이 가진 가장 오래된 스냅샷</strong>, 이것이 <code>xmin horizon</code>입니다. 이 선보다 나중에 죽은 튜플은 건드릴 수 없습니다.</p>
-<div class="callout">열린 트랜잭션이 하나라도 오래 살아 있으면, 그 트랜잭션이 아무 일도 하지 않더라도 데이터베이스 전체의 정리 작업이 그 시점에 묶입니다. 특정 테이블만이 아니라 전역입니다.</div>
-<p>위 실험대에서 세션 A는 <code>SELECT</code> 한 번 하고 아무것도 하지 않습니다. 그런데 세션 B가 만들어내는 모든 쓰레기가 회수 불가 상태로 남죠. 이것이 운영 중 가장 흔한 블로트 시나리오입니다.</p>
-
-<h2>회수해도 파일은 줄지 않는다</h2>
-<p>VACUUM이 죽은 튜플을 치우면 그 자리는 <strong>재사용 가능</strong>해집니다. 하지만 파일 크기가 줄지는 않습니다. VACUUM은 데이터를 앞으로 당겨오지 않기 때문에, 중간에 구멍이 나 있으면 그 상태로 둡니다.</p>
-<p>예외가 하나 있습니다. <strong>파일 맨 뒤쪽 페이지가 완전히 비었을 때만</strong> 잘라내서 OS에 돌려줍니다. 실험대에서 페이지가 줄어드는 경우와 줄지 않는 경우를 비교해보세요.</p>
-<p>실제로 디스크를 되찾으려면 다음 중 하나가 필요합니다.</p>
-<ul>
-<li><code>VACUUM FULL</code> — 테이블을 통째로 다시 씁니다. <strong>ACCESS EXCLUSIVE 락</strong>이 걸려 그동안 읽기조차 막힙니다. 원본만큼의 여유 디스크도 필요합니다</li>
-<li><code>pg_repack</code> — 사실상 무중단으로 같은 일을 합니다. 운영 환경에서는 대개 이쪽입니다</li>
-<li>파티션 테이블이면 해당 파티션을 <code>DROP</code></li>
-</ul>
-
-<h2>현장에서 확인할 것</h2>
-<p>테이블이 계속 커지는데 원인을 모르겠다면, 먼저 오래된 트랜잭션부터 찾습니다.</p>
-<pre><code>SELECT pid, state, age(backend_xid) AS xid_age,
-       now() - xact_start AS duration, query
-FROM pg_stat_activity
-WHERE state != 'idle' OR backend_xid IS NOT NULL
-ORDER BY xact_start
-LIMIT 10;</code></pre>
-<p><code>idle in transaction</code> 상태가 몇 시간씩 잡혀 있다면 그게 범인일 가능성이 높습니다. 애플리케이션에서 트랜잭션을 열어두고 커밋하지 않은 커넥션이죠.</p>
-<p>블로트 규모는 이렇게 봅니다.</p>
-<pre><code>SELECT relname,
-       n_live_tup, n_dead_tup,
-       round(n_dead_tup * 100.0 / nullif(n_live_tup + n_dead_tup, 0), 1) AS dead_pct,
-       last_autovacuum
-FROM pg_stat_user_tables
-ORDER BY n_dead_tup DESC
-LIMIT 10;</code></pre>
-<p>예방책은 몇 가지 안 됩니다.</p>
-<ul>
-<li><code>idle_in_transaction_session_timeout</code> 설정 — 방치된 트랜잭션을 강제 종료합니다. 가장 효과가 큽니다</li>
-<li>긴 분석 쿼리는 읽기 전용 복제본으로 분리 (<code>hot_standby_feedback</code> 설정에 따라 주 서버 horizon에 영향을 줄 수 있으니 주의)</li>
-<li>커넥션 풀에서 트랜잭션 경계를 명확히 — 특히 자동 커밋을 끈 채 커넥션을 반납하는 코드</li>
-<li>대량 <code>UPDATE</code>는 나눠서 실행하고, 사이사이 autovacuum이 따라올 시간을 줍니다</li>
-</ul>
-<div class="callout">이 페이지의 모델은 교육용으로 단순화한 것입니다. 실제 PostgreSQL은 HOT 업데이트, 힌트 비트, 프리즈, 멀티 트랜잭션 등 여기 없는 요소를 더 다룹니다. 다만 <code>xmin horizon</code>이 회수를 막는 구조는 실제와 같습니다.</div>
-`;
-
-  const PROSE_EN = `
-<h2>PostgreSQL does not modify rows</h2>
-<p>This trips up almost everyone arriving from another database. An <code>UPDATE</code> in PostgreSQL does not change the existing row. <strong>It stamps a death marker on the old version and writes a new version somewhere else.</strong> A <code>DELETE</code> likewise removes nothing — it only marks.</p>
-<p>Every tuple carries two system columns you can select directly:</p>
-<pre><code>SELECT xmin, xmax, * FROM orders LIMIT 5;</code></pre>
-<ul>
-<li><code>xmin</code> — the transaction that created this version</li>
-<li><code>xmax</code> — the transaction that killed it (0 while still live)</li>
-</ul>
-<p>This is why readers never block writers: a reader simply picks the version matching its snapshot. The cost is <strong>garbage</strong>, and VACUUM is what collects it.</p>
-
-<h2>Why VACUUM cannot just delete</h2>
-<p>A dead tuple is not automatically removable. Some transaction may still be entitled to see that version.</p>
-<p>So PostgreSQL computes a boundary: <strong>the oldest snapshot held by any currently open transaction</strong>. That is the <code>xmin horizon</code>. Anything that died after that line is untouchable.</p>
-<div class="callout">One long-lived open transaction pins cleanup for the entire database at that moment — even if it does nothing at all. The effect is global, not limited to the tables it touched.</div>
-<p>In the lab above, session A runs a single <code>SELECT</code> and then idles. Yet every dead tuple session B produces stays stuck. This is the most common bloat scenario in production.</p>
-
-<h2>Reclaiming does not shrink the file</h2>
-<p>When VACUUM removes dead tuples, the space becomes <strong>reusable</strong> — but the file does not get smaller. VACUUM never relocates data forward, so a hole in the middle stays a hole.</p>
-<p>There is one exception: <strong>trailing pages that end up completely empty</strong> can be truncated and returned to the OS. Watch the lab for when page count drops and when it refuses to.</p>
-<p>To actually get disk back you need one of:</p>
-<ul>
-<li><code>VACUUM FULL</code> — rewrites the whole table under an <strong>ACCESS EXCLUSIVE lock</strong>, blocking even reads, and needs free space roughly equal to the table</li>
-<li><code>pg_repack</code> — the same result with essentially no downtime. Usually the production answer</li>
-<li>For partitioned tables, <code>DROP</code> the partition</li>
-</ul>
-
-<h2>What to check in production</h2>
-<p>If a table keeps growing and you cannot see why, look for old transactions first:</p>
-<pre><code>SELECT pid, state, age(backend_xid) AS xid_age,
-       now() - xact_start AS duration, query
-FROM pg_stat_activity
-WHERE state != 'idle' OR backend_xid IS NOT NULL
-ORDER BY xact_start
-LIMIT 10;</code></pre>
-<p>An <code>idle in transaction</code> session sitting for hours is very likely your culprit — a connection that opened a transaction and never committed.</p>
-<p>For the scale of the bloat:</p>
-<pre><code>SELECT relname,
-       n_live_tup, n_dead_tup,
-       round(n_dead_tup * 100.0 / nullif(n_live_tup + n_dead_tup, 0), 1) AS dead_pct,
-       last_autovacuum
-FROM pg_stat_user_tables
-ORDER BY n_dead_tup DESC
-LIMIT 10;</code></pre>
-<p>Prevention comes down to a short list:</p>
-<ul>
-<li>Set <code>idle_in_transaction_session_timeout</code>. Highest impact by far</li>
-<li>Move long analytical queries to a read replica — but note <code>hot_standby_feedback</code> can push the replica's horizon back onto the primary</li>
-<li>Keep transaction boundaries explicit in your connection pool, especially code that returns a connection with autocommit disabled</li>
-<li>Batch large <code>UPDATE</code> statements so autovacuum can keep pace between chunks</li>
-</ul>
-<div class="callout">This model is simplified for teaching. Real PostgreSQL also deals with HOT updates, hint bits, freezing and multixacts. The mechanism that matters here — the <code>xmin horizon</code> blocking reclamation — works exactly as shown.</div>
-`;
-
-  /* ============================================================================
-   * 5. 기동
-   * ========================================================================== */
-
-  reset();
-  applyLang();
+    scenes: [
+      '16개 행이 들어 있는 평범한 테이블입니다. 전부 live 상태예요.',
+      '세션 B가 3행을 UPDATE 했습니다. PostgreSQL은 제자리 수정을 하지 않습니다. 구버전에 xmax를 찍고 신버전을 새 슬롯에 씁니다. 죽은 튜플 3개가 생겼어요.',
+      'VACUUM이 3개를 전부 회수했습니다. 열린 트랜잭션이 없으니 horizon이 미래를 가리키고, 죽은 튜플은 아무도 볼 수 없다고 판정된 겁니다. 여기까지가 정상 동작입니다.',
+      '이제 문제의 시작입니다. 세션 A가 BEGIN 후 SELECT를 실행하고 그대로 방치됩니다. 배치 잡, 리포트 쿼리, 커밋을 잊은 커넥션 — 현장에서 흔한 모습이죠. horizon이 A의 스냅샷에 고정됐습니다.',
+      '세션 B는 아무것도 모른 채 계속 일합니다. 또 3행을 UPDATE 했어요.',
+      '여기가 핵심입니다. 죽은 튜플이 분명히 있는데 VACUUM이 하나도 회수하지 못합니다. 세션 A의 스냅샷이 그 버전들보다 오래됐기 때문에, A가 아직 그 데이터를 볼 권리가 있거든요.',
+      'B가 계속 씁니다. 회수는 막혀 있는데 신버전은 계속 쌓이니, 힙은 새 페이지를 붙이며 자라기 시작합니다. 이게 블로트입니다.',
+      'VACUUM을 몇 번을 돌려도 소용없습니다. autovacuum도 마찬가지예요. 원인은 VACUUM이 게을러서가 아니라, 지우면 안 되는 데이터이기 때문입니다.',
+      '세션 A가 드디어 커밋했습니다. horizon이 풀려 미래로 이동합니다.',
+      '이제 전부 회수됩니다. 하지만 테이블 크기를 보세요 — 줄지 않았습니다. VACUUM은 공간을 재사용 가능하게 표시할 뿐, 파일 앞쪽이 비었다고 뒤 데이터를 앞으로 당겨오지는 않습니다.',
+      '디스크를 실제로 되돌려받으려면 VACUUM FULL(테이블 전체 잠금) 이나 pg_repack(온라인) 이 필요합니다. 애초에 이 상황을 안 만드는 게 훨씬 싸고요.',
+    ],
+  });
 </script>
 </body>
 </html>

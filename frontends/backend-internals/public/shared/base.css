@@ -74,6 +74,7 @@ button, .btn{
   cursor:pointer;
   transition:border-color .15s, color .15s, background .15s;
 }
+a.btn{text-decoration:none;display:inline-block;line-height:1.45}
 button:hover:not(:disabled), .btn:hover{border-color:var(--ink-3);color:var(--ink)}
 button:focus-visible{outline:2px solid var(--horizon);outline-offset:1px}
 button:disabled{opacity:.35;cursor:not-allowed}
@@ -145,6 +146,8 @@ footer{
   letter-spacing:.06em;
   color:var(--ink-3);
 }
+footer a{color:var(--ink-2);text-decoration:underline;text-underline-offset:2px}
+footer a:hover{color:var(--ink)}
 
 @media (prefers-reduced-motion: reduce){
   *{transition-duration:.01ms !important;animation-duration:.01ms !important}
