@@ -1,47 +1,47 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Backend Internals — 백엔드 개념 인터랙티브 시각화</title>
-<meta name="description" content="데이터베이스, JVM, 분산 시스템의 내부 동작을 직접 조작하며 확인하는 시각화 모음. Interactive visualizations of backend internals.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
-<link rel="stylesheet" href="shared/base.css">
-<style>
-.cards{margin:36px 0 0;border-top:1px solid var(--rule)}
-.card{
-  display:block;text-decoration:none;color:inherit;
-  padding:22px 0;
-  border-bottom:1px solid var(--rule);
-  display:grid;grid-template-columns:46px 1fr auto;gap:18px;align-items:baseline;
-  transition:background .15s;
-}
-.card:hover{background:var(--paper-2)}
-.card[aria-disabled="true"]{opacity:.42;pointer-events:none}
-.card .no{font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.1em}
-.card h2{
-  font-family:var(--serif);font-size:19px;font-weight:700;
-  margin:0;padding:0;border:none;line-height:1.35;
-}
-.card p{font-size:14px;color:var(--ink-2);margin-top:5px;max-width:56ch}
-.card .tag{
-  font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
-  color:var(--ink-3);border:1px solid var(--rule);padding:3px 7px;border-radius:2px;white-space:nowrap;
-}
-.card .tag.live{color:var(--live);border-color:var(--live)}
-@media (max-width:600px){
-  .card{grid-template-columns:1fr;gap:6px}
-  .card .tag{justify-self:start}
-}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Backend Internals — 백엔드 개념 인터랙티브 시각화</title>
+  <meta name="description" content="데이터베이스, JVM, 분산 시스템의 내부 동작을 직접 조작하며 확인하는 시각화 모음. Interactive visualizations of backend internals.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+  <link rel="stylesheet" href="shared/base.css">
+  <style>
+    .cards{margin:36px 0 0;border-top:1px solid var(--rule)}
+    .card{
+      display:block;text-decoration:none;color:inherit;
+      padding:22px 0;
+      border-bottom:1px solid var(--rule);
+      display:grid;grid-template-columns:46px 1fr auto;gap:18px;align-items:baseline;
+      transition:background .15s;
+    }
+    .card:hover{background:var(--paper-2)}
+    .card[aria-disabled="true"]{opacity:.42;pointer-events:none}
+    .card .no{font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.1em}
+    .card h2{
+      font-family:var(--serif);font-size:19px;font-weight:700;
+      margin:0;padding:0;border:none;line-height:1.35;
+    }
+    .card p{font-size:14px;color:var(--ink-2);margin-top:5px;max-width:56ch}
+    .card .tag{
+      font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+      color:var(--ink-3);border:1px solid var(--rule);padding:3px 7px;border-radius:2px;white-space:nowrap;
+    }
+    .card .tag.live{color:var(--live);border-color:var(--live)}
+    @media (max-width:600px){
+      .card{grid-template-columns:1fr;gap:6px}
+      .card .tag{justify-self:start}
+    }
+  </style>
 </head>
 <body>
 
 <div class="top"><div class="wrap">
-  <a class="brand" href="..">Backend Internals</a>
+  <a class="brand" href="./">Backend Internals</a>
 </div></div>
 
 <main class="wrap">
@@ -59,13 +59,13 @@
       <span class="tag live">공개</span>
     </a>
 
-    <a class="card" aria-disabled="true">
+    <a class="card" href="gc/">
       <span class="no">02</span>
       <span>
         <h2>G1과 ZGC는 왜 다르게 멈추는가</h2>
-        <p>힙을 키우면 G1의 STW는 길어지는데 ZGC는 거의 그대로입니다. 그 차이가 어디서 나오는지.</p>
+        <p>힙을 키우면 G1의 STW는 길어지는데 ZGC는 거의 그대로입니다. 그 차이가 어디서 나오는지, 그리고 ZGC가 공짜가 아닌 이유.</p>
       </span>
-      <span class="tag">준비 중</span>
+      <span class="tag live">공개</span>
     </a>
 
     <a class="card" aria-disabled="true">

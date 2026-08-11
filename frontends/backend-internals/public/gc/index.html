@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>G1과 ZGC는 왜 다르게 멈추는가 — 힙을 키우면 무슨 일이 일어나나</title>
+<meta name="description" content="힙 크기를 늘리면 G1의 STW는 길어지는데 ZGC는 왜 그대로인지, 그리고 ZGC가 공짜가 아닌 이유. Interactive G1 vs ZGC pause time visualization.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="../shared/base.css">
+<style>
+.lab{margin:32px 0 8px;border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);overflow:hidden}
+.lab section{border-bottom:1px solid var(--rule);padding:16px 18px}
+.lab section:last-child{border-bottom:none}
+.cap{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;display:block}
+
+/* --- 손잡이 --- */
+.dials{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+@media (max-width:660px){ .dials{grid-template-columns:1fr;gap:16px} }
+.dial label{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
+.dial label b{font-size:15px;letter-spacing:0;text-transform:none;color:var(--ink);font-weight:500}
+.dial label b small{font-size:10px;color:var(--ink-3)}
+input[type=range]{width:100%;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--rule)}
+input[type=range]::-moz-range-track{height:2px;background:var(--rule)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-6px;border-radius:50%;background:var(--ink);border:2px solid var(--paper-2)}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--ink);border:2px solid var(--paper-2)}
+input[type=range]:focus-visible{outline:2px solid var(--horizon);outline-offset:4px}
+.hint{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:6px;min-height:14px}
+.hint.warn{color:var(--blocked)}
+
+/* --- 타임라인 --- */
+.lane{margin-bottom:16px}
+.lane:last-child{margin-bottom:0}
+.lane-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap}
+.lane-head h3{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;margin:0;color:var(--ink-2)}
+.lane-head .nums{font-family:var(--mono);font-size:11px;color:var(--ink-3);display:flex;gap:14px;flex-wrap:wrap}
+.lane-head .nums b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+.lane-head .nums .bad b{color:var(--blocked)}
+.plot{width:100%;height:96px;display:block;background:var(--paper);border:1px solid var(--rule);border-radius:2px}
+.axis-note{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:4px}
+
+/* --- 단계 띠 --- */
+.phase{margin-bottom:14px}
+.phase:last-child{margin-bottom:0}
+.phase h4{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);margin:0 0 5px;font-weight:400}
+.strip{display:flex;height:26px;border:1px solid var(--rule);border-radius:2px;overflow:hidden;background:var(--paper)}
+.strip div{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;white-space:nowrap;overflow:hidden;min-width:2px}
+.strip .stw{background:color-mix(in srgb,var(--blocked) 78%,var(--paper));color:var(--paper)}
+.strip .conc{background:color-mix(in srgb,var(--live) 16%,var(--paper));color:var(--live);border-left:1px solid var(--rule);border-right:1px solid var(--rule)}
+.striplegend{display:flex;gap:16px;margin-top:9px;font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.striplegend span{display:flex;align-items:center;gap:6px}
+.striplegend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.striplegend .s i{background:color-mix(in srgb,var(--blocked) 78%,var(--paper))}
+.striplegend .c i{background:color-mix(in srgb,var(--live) 16%,var(--paper));border:1px solid var(--rule)}
+
+/* --- 조작대 --- */
+.transport{background:var(--paper-3);display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.transport .keys{display:flex;gap:6px;flex-wrap:wrap}
+.narration{flex:1;min-width:240px;font-family:var(--serif);font-size:14.5px;line-height:1.65;color:var(--ink)}
+.narration .n{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-3);display:block;margin-bottom:3px}
+
+/* --- 안내 --- */
+.recipe{border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);padding:14px 16px;margin:14px 0;max-width:68ch}
+.recipe h4{font-family:var(--sans);font-size:14px;font-weight:700;margin:0 0 4px}
+.recipe .seq{font-family:var(--mono);font-size:11px;line-height:1.9;background:var(--paper);border:1px solid var(--rule);border-radius:2px;padding:9px 11px;margin:9px 0;white-space:pre-wrap;color:var(--ink-2)}
+.recipe .seq em{font-style:normal;color:var(--horizon)}
+.recipe .why{font-size:13.5px;color:var(--ink-2);margin:0}
+.keytable{width:100%;border-collapse:collapse;margin:12px 0;max-width:68ch;font-size:13.5px}
+.keytable th,.keytable td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.keytable th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.keytable td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap;width:1%;padding-right:18px;color:var(--ink)}
+</style>
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="../">← Backend Internals</a>
+  <nav><button id="lang">EN</button></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1 data-i18n="title"></h1>
+  <p class="lede" data-i18n="lede"></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label><span data-i18n="dHeap"></span><b id="vHeap">—</b></label>
+          <input type="range" id="sHeap" min="0" max="7" step="1" value="2">
+          <div class="hint" id="hHeap"></div>
+        </div>
+        <div class="dial">
+          <label><span data-i18n="dAlloc"></span><b id="vAlloc">—</b></label>
+          <input type="range" id="sAlloc" min="100" max="6000" step="100" value="500">
+          <div class="hint" id="hAlloc"></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap" data-i18n="capTimeline"></span>
+
+      <div class="lane">
+        <div class="lane-head">
+          <h3>G1GC</h3>
+          <div class="nums" id="nG1"></div>
+        </div>
+        <svg class="plot" id="pG1" viewBox="0 0 1000 96" preserveAspectRatio="none" role="img"></svg>
+      </div>
+
+      <div class="lane">
+        <div class="lane-head">
+          <h3>ZGC</h3>
+          <div class="nums" id="nZ"></div>
+        </div>
+        <svg class="plot" id="pZ" viewBox="0 0 1000 96" preserveAspectRatio="none" role="img"></svg>
+        <div class="axis-note">
+          <span>0s</span>
+          <span id="scaleNote"></span>
+          <span>60s</span>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <button id="btnScale" data-i18n="toLog"></button>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap" data-i18n="capPhase"></span>
+      <div class="phase">
+        <h4>G1GC — <span data-i18n="phG1Note"></span></h4>
+        <div class="strip" id="stripG1"></div>
+      </div>
+      <div class="phase">
+        <h4>ZGC — <span data-i18n="phZNote"></span></h4>
+        <div class="strip" id="stripZ"></div>
+      </div>
+      <div class="striplegend">
+        <span class="s"><i></i><span data-i18n="lgStw"></span></span>
+        <span class="c"><i></i><span data-i18n="lgConc"></span></span>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button class="solid" id="btnPlay" data-i18n="play"></button>
+        <button id="btnStep" data-i18n="step"></button>
+        <button id="btnReset" data-i18n="reset"></button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">—</span>
+        <span id="nText" data-i18n="nIntro"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose guide" id="guide"></article>
+  <article class="prose" id="prose"></article>
+
+  <footer><span data-i18n="foot"></span></footer>
+</main>
+
+<script>
+'use strict';
+
+/* ============================================================================
+ * 0. 문안
+ * ========================================================================== */
+const T = {
+ko:{
+  title:'G1과 ZGC는 왜 다르게 멈추는가',
+  lede:'힙을 4GB에서 128GB로 키우면 G1의 정지 시간은 함께 자랍니다. ZGC는 거의 그대로예요. 왜 그런지, 그리고 그 대가로 무엇을 내는지 직접 확인합니다.',
+  dHeap:'힙 크기', dAlloc:'할당 속도',
+  capTimeline:'60초 동안의 STW 정지', capPhase:'한 사이클의 구성',
+  phG1Note:'객체를 옮기는 동안 멈춘다', phZNote:'옮기는 일까지 동시에 한다',
+  lgStw:'STW — 애플리케이션 정지', lgConc:'concurrent — 애플리케이션과 동시 실행',
+  toLog:'로그 스케일로 보기', toLinear:'선형 스케일로 돌아가기',
+  scaleLin:'선형 스케일 · 두 그래프가 같은 기준', scaleLog:'로그 스케일 · ZGC 막대를 보려면 필요',
+  nMax:'최대 정지', nP99:'p99', nYoung:'young 정지', nMixed:'mixed 정지', nFull:'Full GC', nCount:'GC 횟수', nStw:'총 STW', nThru:'처리량', nStall:'할당 지연',
+  play:'시나리오 재생', pause:'일시정지', step:'다음 단계', reset:'초기화',
+  nIntro:'재생을 누르면 힙을 단계적으로 키우며 무슨 일이 일어나는지 보여줍니다. 슬라이더를 직접 움직여도 됩니다.',
+  hintHeapS:'작은 힙 — 컨테이너나 마이크로서비스',
+  hintHeapM:'중간 힙 — 일반적인 서버 애플리케이션',
+  hintHeapL:'큰 힙 — 캐시, 인메모리 저장소',
+  hintAllocS:'가벼운 부하',
+  hintAllocM:'일반적인 웹 애플리케이션',
+  hintAllocL:'ZGC 회수 능력을 넘어섰다 — 할당 지연 발생',
+  hintG1Full:'G1이 따라가지 못한다 — Full GC 발생',
+  foot:'JDK 25 기준 · 교육용 단순화 모델'
+},
+en:{
+  title:'Why G1 and ZGC stop differently',
+  lede:'Grow the heap from 4GB to 128GB and G1\u2019s pauses grow with it. ZGC barely moves. See why — and what it costs.',
+  dHeap:'heap size', dAlloc:'allocation rate',
+  capTimeline:'STW pauses over 60 seconds', capPhase:'Anatomy of one cycle',
+  phG1Note:'stops the world while moving objects', phZNote:'moves objects concurrently too',
+  lgStw:'STW — application stopped', lgConc:'concurrent — runs alongside the application',
+  toLog:'Switch to log scale', toLinear:'Back to linear scale',
+  scaleLin:'linear scale · both charts share one baseline', scaleLog:'log scale · needed to see ZGC at all',
+  nMax:'max pause', nP99:'p99', nYoung:'young pause', nMixed:'mixed pause', nFull:'Full GC', nCount:'GC count', nStw:'total STW', nThru:'throughput', nStall:'alloc stall',
+  play:'Play scenario', pause:'Pause', step:'Next step', reset:'Reset',
+  nIntro:'Press play to walk up the heap sizes and watch what happens. The sliders are yours at any time.',
+  hintHeapS:'small heap — containers, microservices',
+  hintHeapM:'mid heap — ordinary server applications',
+  hintHeapL:'large heap — caches, in-memory stores',
+  hintAllocS:'light load',
+  hintAllocM:'typical web application',
+  hintAllocL:'past ZGC\u2019s concurrent reclaim rate — allocation stalls appear',
+  hintG1Full:'G1 cannot keep up — Full GC fires',
+  foot:'JDK 25 · simplified teaching model'
+}};
+let L='ko';
+const t=(k,...a)=>{let s=T[L][k]??k;a.forEach((v,i)=>s=s.replaceAll('$'+(i+1),v));return s;};
+
+/* ============================================================================
+ * 1. 모델
+ *
+ *    G1  — 살아 있는 객체를 STW 중에 복사한다. 옮길 양이 곧 정지 시간이다.
+ *          MaxGCPauseMillis 를 맞추려 young 영역을 줄이지만, 하한(힙의 5%)이
+ *          있어서 힙이 커지면 결국 정지 시간이 따라 커진다.
+ *
+ *    ZGC — 색깔 포인터와 load barrier 덕에 이동까지 동시에 한다. STW 는 루트를
+ *          훑는 짧은 구간뿐이고, JDK 16 이후 스택 스캔도 동시 수행이라
+ *          힙 크기와 사실상 무관하다. 대신 회수 속도를 넘겨 할당하면 멈춘다.
+ * ========================================================================== */
+
+const HEAPS = [2,4,8,16,32,64,96,128];        // GB
+const WINDOW = 60_000;                        // 관측 구간 (ms)
+
+const P = {
+  pauseTarget: 200,      // -XX:MaxGCPauseMillis 기본값
+  copyMBperMS: 2.0,      // 복사 처리량
+  survive: 0.15,         // young 중 살아남는 비율
+  g1Fixed: 2,            // 고정 비용
+  g1RootPerGB: 0.35,     // 힙에 비례하는 부분 (RSet, 리전 메타데이터)
+  g1MinYoung: 0.05,      // G1NewSizePercent
+  g1MaxYoung: 0.60,      // G1MaxNewSizePercent
+  mixedEvery: 4,         // mixed 수집 주기 (관측 구간에 반드시 들어오도록)
+  mixedFactor: 1.7,
+  g1FullThreshold: 0.35, // GC 점유율이 이걸 넘으면 따라가지 못한다
+  fullGCperGB: 42,       // Full GC 시간 (ms/GB)
+
+  zPause: 0.28,          // 사이클당 STW 하나 (힙과 무관)
+  zPausesPerCycle: 3,    // Mark Start / Mark End / Relocate Start
+  zTrigger: 0.30,        // 힙의 이 비율을 소비하면 사이클 시작
+  zReclaimMBs: 2000,     // 동시 회수 처리량
+};
+
+function simulate(heapGB, allocMBs){
+  const heapMB = heapGB*1024;
+  const ev = { g1:[], z:[] };
+
+  /* --- G1 --- */
+  const ideal = P.pauseTarget * P.copyMBperMS / P.survive;
+  const young = Math.min(Math.max(ideal, heapMB*P.g1MinYoung), heapMB*P.g1MaxYoung);
+  const youngPause = P.g1Fixed + (young*P.survive)/P.copyMBperMS + heapGB*P.g1RootPerGB;
+  const interval = young/allocMBs*1000;
+  const overhead = youngPause/interval;
+  const fullPause = heapGB*P.fullGCperGB;
+
+  let tms = interval, i = 0;
+  while (tms < WINDOW){
+    const mixed = (i % P.mixedEvery === P.mixedEvery-1);
+    ev.g1.push({ t:tms, ms: mixed ? youngPause*P.mixedFactor : youngPause, kind: mixed?'mixed':'young' });
+    tms += interval; i++;
+  }
+  if (overhead > P.g1FullThreshold){
+    const n = Math.max(1, Math.floor(overhead/P.g1FullThreshold));
+    for (let k=1;k<=n;k++) ev.g1.push({ t: WINDOW*k/(n+1), ms: fullPause, kind:'full' });
+    ev.g1.sort((a,b)=>a.t-b.t);
+  }
+
+  /* --- ZGC --- */
+  // ZGC 는 소비량 기준 외에 주기적으로도 사이클을 돈다(proactive). 상한을 둔다.
+  const zInterval = Math.min(20000, Math.max(500, heapMB*P.zTrigger/allocMBs*1000));
+  let zt = zInterval;
+  while (zt < WINDOW){
+    for (let k=0;k<P.zPausesPerCycle;k++)
+      ev.z.push({ t: zt + k*(zInterval*0.18), ms: P.zPause, kind:'z' });
+    zt += zInterval;
+  }
+  // 힙이 넓을수록 사이클을 끝낼 시간이 생긴다 → 흡수 가능한 할당량이 는다
+  const effReclaim = P.zReclaimMBs * (1 + Math.log2(Math.max(1, heapGB/8)) * 0.18);
+  const excess = Math.max(0, allocMBs - effReclaim);
+  const stallPerSec = excess > 0 ? (excess/allocMBs)*1000 : 0;
+
+  return { ev, heapGB, allocMBs, young, youngPause, mixedPause: youngPause*P.mixedFactor,
+           effReclaim, interval, overhead, stallPerSec,
+           g1Full: overhead > P.g1FullThreshold };
+}
+
+const stats = (list, extraStallMs=0) => {
+  if (!list.length) return { max:0, p99:0, n:0, stw:0, thru:100 };
+  const s = list.map(e=>e.ms).sort((a,b)=>a-b);
+  const stw = s.reduce((a,b)=>a+b,0) + extraStallMs;
+  return {
+    max: s[s.length-1],
+    p99: s[Math.min(s.length-1, Math.floor(s.length*0.99))],
+    n: list.length,
+    stw,
+    thru: Math.max(0, 100 - stw/WINDOW*100),
+  };
+};
+
+/* ============================================================================
+ * 2. 그리기
+ * ========================================================================== */
+
+const $ = s => document.querySelector(s);
+let logScale = false;
+let sim;
+
+const fmt = ms => ms >= 1000 ? (ms/1000).toFixed(2)+'s' : ms >= 10 ? Math.round(ms)+'ms' : ms.toFixed(2)+'ms';
+
+function plot(el, events, ceil){
+  const H = 96, W = 1000;
+  const y = ms => {
+    if (!logScale) return Math.max(1, ms/ceil*(H-8));
+    const lo = 0.05;
+    return Math.max(1, (Math.log10(Math.max(ms,lo))-Math.log10(lo)) / (Math.log10(ceil)-Math.log10(lo)) * (H-8));
+  };
+  const bars = events.map(e => {
+    const h = Math.min(H-6, y(e.ms));
+    const x = e.t/WINDOW*W;
+    const w = e.kind==='full' ? 6 : e.kind==='z' ? 2.5 : 4;
+    const fill = e.kind==='full' ? 'var(--blocked)'
+               : e.kind==='mixed' ? 'var(--free)'
+               : e.kind==='z' ? 'var(--horizon)' : 'var(--ink-2)';
+    return `<rect x="${x.toFixed(1)}" y="${(H-h).toFixed(1)}" width="${w}" height="${h.toFixed(1)}" fill="${fill}"/>`;
+  }).join('');
+  el.innerHTML = `<line x1="0" y1="${H-0.5}" x2="${W}" y2="${H-0.5}" stroke="var(--rule)"/>${bars}`;
+}
+
+function phaseStrip(el, segs){
+  const total = segs.reduce((a,s)=>a+s.ms,0);
+  el.innerHTML = segs.map(s => {
+    const pct = Math.max(0.35, s.ms/total*100);
+    const label = pct > 9 ? s.name : '';
+    return `<div class="${s.stw?'stw':'conc'}" style="width:${pct}%" title="${s.name} · ${fmt(s.ms)}">${label}</div>`;
+  }).join('');
+}
+
+function render(){
+  const heapGB = HEAPS[+$('#sHeap').value];
+  const allocMBs = +$('#sAlloc').value;
+  sim = simulate(heapGB, allocMBs);
+
+  $('#vHeap').innerHTML = `${heapGB}<small> GB</small>`;
+  $('#vAlloc').innerHTML = `${allocMBs}<small> MB/s</small>`;
+  $('#hHeap').textContent = heapGB<=8 ? t('hintHeapS') : heapGB<=32 ? t('hintHeapM') : t('hintHeapL');
+  const ha = $('#hAlloc');
+  if (sim.g1Full){ ha.textContent = t('hintG1Full'); ha.className='hint warn'; }
+  else if (sim.stallPerSec>0){ ha.textContent = t('hintAllocL'); ha.className='hint warn'; }
+  else { ha.textContent = allocMBs<=400 ? t('hintAllocS') : t('hintAllocM'); ha.className='hint'; }
+
+  const sG1 = stats(sim.ev.g1);
+  const sZ  = stats(sim.ev.z, sim.stallPerSec*60);
+  const ceil = logScale ? Math.max(sG1.max, 10) : Math.max(sG1.max, 1);
+
+  plot($('#pG1'), sim.ev.g1, ceil);
+  plot($('#pZ'),  sim.ev.z,  ceil);
+  $('#scaleNote').textContent = logScale ? t('scaleLog') : t('scaleLin');
+  $('#btnScale').textContent = logScale ? t('toLinear') : t('toLog');
+
+  const num = (k,v,bad) => `<span class="${bad?'bad':''}">${t(k)} <b>${v}</b></span>`;
+  $('#nG1').innerHTML =
+    num('nYoung', fmt(sim.youngPause), sim.youngPause > P.pauseTarget*1.1) +
+    num('nMixed', fmt(sim.mixedPause)) +
+    (sim.g1Full ? num('nFull', fmt(sG1.max), true) : '') +
+    num('nCount', sG1.n) +
+    num('nStw', fmt(sG1.stw)) +
+    num('nThru', sG1.thru.toFixed(1)+'%', sG1.thru<90);
+  $('#nZ').innerHTML =
+    num('nMax', fmt(sZ.max)) +
+    num('nCount', sZ.n) +
+    num('nStw', fmt(sim.ev.z.reduce((a,e)=>a+e.ms,0))) +
+    (sim.stallPerSec>0 ? num('nStall', Math.round(sim.stallPerSec)+'ms/s', true) : '') +
+    num('nThru', sZ.thru.toFixed(1)+'%', sZ.thru<90);
+
+  // 한 사이클의 구성 — 실제 비율대로
+  const yp = sim.youngPause;
+  phaseStrip($('#stripG1'), [
+    { name:'Young Evacuation', ms: yp, stw:true },
+    { name:'Concurrent Mark',  ms: yp*6, stw:false },
+    { name:'Remark',           ms: yp*0.18, stw:true },
+    { name:'Concurrent Cleanup', ms: yp*1.2, stw:false },
+    { name:'Mixed Evacuation', ms: yp*P.mixedFactor, stw:true },
+  ]);
+  const zp = P.zPause;
+  phaseStrip($('#stripZ'), [
+    { name:'Mark Start',            ms: zp, stw:true },
+    { name:'Concurrent Mark',       ms: zp*90, stw:false },
+    { name:'Mark End',              ms: zp, stw:true },
+    { name:'Concurrent Prepare',    ms: zp*24, stw:false },
+    { name:'Relocate Start',        ms: zp, stw:true },
+    { name:'Concurrent Relocate',   ms: zp*70, stw:false },
+  ]);
+}
+
+/* ============================================================================
+ * 3. 시나리오
+ * ========================================================================== */
+
+const SCENE = [
+  { heap:1, alloc:500,
+    ko:'힙 4GB, 일반적인 웹 애플리케이션 부하입니다. G1의 young 정지가 188ms로 200ms 목표 안에 들어와 있고, ZGC 막대는 아예 보이지 않습니다.',
+    en:'4GB heap under an ordinary web workload. G1\u2019s young pause is 188ms, inside its 200ms target, and the ZGC bars are simply not visible.' },
+  { heap:3, alloc:500,
+    ko:'16GB로 올렸습니다. young 정지가 208ms — 목표를 거의 지키고 있어요. G1이 young 영역 크기를 스스로 줄여 맞추고 있기 때문입니다.',
+    en:'Now 16GB. The young pause is 208ms — still about on target, because G1 shrinks the young generation to get there.' },
+  { heap:5, alloc:500,
+    ko:'64GB. young 정지가 270ms — 여기서부터 목표가 무너집니다. young 영역을 아무리 줄여도 힙의 5% 아래로는 못 내려가는데, 64GB의 5%는 이미 3GB가 넘거든요.',
+    en:'64GB. The target starts slipping. G1 cannot shrink young below 5% of the heap, and 5% of 64GB is already over 3GB.' },
+  { heap:7, alloc:500,
+    ko:'128GB에서는 young 정지가 538ms, mixed는 0.9초를 넘습니다. ZGC 막대는 여전히 바닥에 붙어 있어요. 로그 스케일 버튼을 눌러야 겨우 보입니다.',
+    en:'At 128GB the pause passes half a second. The ZGC bars are still flat on the floor — you need the log scale button to see them at all.' },
+  { heap:3, alloc:2000,
+    ko:'이번엔 힙을 16GB로 되돌리고 할당 속도를 네 배로 올립니다. 정지 길이는 208ms 그대로인데 횟수가 11회에서 44회로 늘고, 처리량은 96%에서 82%로 떨어집니다. 짧은 정지도 자주 오면 비쌉니다.',
+    en:'Back to 16GB, allocating four times faster. The pause stays at 208ms but the count goes from 11 to 44, and throughput falls from 96% to 82%. Short pauses are expensive when they come often.' },
+  { heap:3, alloc:5000,
+    ko:'더 올리면 ZGC에도 대가가 나타납니다. 동시 회수 속도를 할당이 앞지르면 스레드가 메모리를 받지 못해 멈춥니다. 이게 allocation stall이에요. GC 로그에는 정지로 안 잡히지만 애플리케이션은 분명히 멈춥니다.',
+    en:'Push further and ZGC pays too. When allocation outruns concurrent reclamation, threads block waiting for memory — an allocation stall. It does not appear as a GC pause, yet the application is stopped all the same.' },
+  { heap:7, alloc:5000,
+    ko:'같은 부하에서 힙을 128GB로 키우면 ZGC의 지연은 줄어듭니다. 여유 공간이 회수 시간을 벌어주기 때문입니다. ZGC에서 힙을 넉넉히 주라는 조언이 여기서 나옵니다.',
+    en:'Widen the heap to 128GB under the same load and the stall shrinks: headroom buys time to collect. This is where the advice to over-provision heap for ZGC comes from.' },
+];
+
+let step = 0, playing = false, timer = null;
+
+function applyStep(){
+  const s = SCENE[step];
+  $('#sHeap').value = s.heap;
+  $('#sAlloc').value = s.alloc;
+  $('#nText').textContent = s[L];
+  $('#nStep').textContent = `${String(step+1).padStart(2,'0')} / ${String(SCENE.length).padStart(2,'0')}`;
+  $('#btnStep').disabled = step >= SCENE.length-1;
+  render();
+}
+function stepOnce(){
+  if (step >= SCENE.length-1){ stop(); return; }
+  step++; applyStep();
+  if (step >= SCENE.length-1) stop();
+}
+function play(){ playing=true; $('#btnPlay').textContent=t('pause'); timer=setInterval(stepOnce, 3400); }
+function stop(){ playing=false; clearInterval(timer); $('#btnPlay').textContent=t('play'); }
+
+$('#btnPlay').onclick = () => playing?stop():play();
+$('#btnStep').onclick = () => { stop(); stepOnce(); };
+$('#btnReset').onclick = () => { stop(); step=0; applyStep(); };
+$('#btnScale').onclick = () => { logScale=!logScale; render(); };
+$('#sHeap').oninput = () => { stop(); render(); };
+$('#sAlloc').oninput = () => { stop(); render(); };
+$('#lang').onclick = () => { L = L==='ko'?'en':'ko'; applyLang(); };
+
+function applyLang(){
+  document.documentElement.lang = L;
+  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+  $('#lang').textContent = L==='ko'?'EN':'KO';
+  $('#btnPlay').textContent = playing?t('pause'):t('play');
+  $('#guide').innerHTML = L==='ko'?GUIDE_KO:GUIDE_EN;
+  $('#prose').innerHTML = L==='ko'?PROSE_KO:PROSE_EN;
+  $('#nText').textContent = step===0 ? t('nIntro') : SCENE[step][L];
+  render();
+}
+
+/* ============================================================================
+ * 4. 본문
+ * ========================================================================== */
+
+const GUIDE_KO = `
+<h2>직접 조작하기</h2>
+<p>손잡이는 두 개뿐입니다. 재생 버튼은 정해진 순서를 훑을 뿐이니, 슬라이더를 직접 움직이는 쪽이 훨씬 많은 걸 보여줍니다.</p>
+<table class="keytable">
+<tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+<tr><td>힙 크기</td><td>G1의 <strong>정지 길이</strong>가 따라 자랍니다. ZGC는 거의 반응하지 않습니다</td></tr>
+<tr><td>할당 속도</td><td>G1은 <strong>정지 횟수</strong>가 늘고, ZGC는 일정 선을 넘으면 <strong>할당 지연</strong>이 생깁니다</td></tr>
+<tr><td>로그 스케일</td><td>선형에서는 ZGC 막대가 보이지 않습니다. 그게 요점이지만, 모양을 보려면 필요합니다</td></tr>
+</table>
+<p>막대 색은 종류입니다. 회색은 young 수집, 황토색은 mixed 수집, 빨강은 Full GC, 파랑은 ZGC입니다.</p>
+
+<h2>이렇게 해보세요</h2>
+
+<div class="recipe">
+<h4>1. 힙만 키워본다</h4>
+<div class="seq">할당 속도는 500 MB/s 고정
+힙을 2GB → 128GB 로 천천히 끌어올린다
+
+G1  young 정지   <em>95ms → 538ms</em>
+G1  mixed 정지   <em>161ms → 915ms</em>
+ZGC 최대 정지    <em>0.28ms 그대로</em></div>
+<p class="why">G1은 <strong>살아 있는 객체를 복사하는 동안 멈춥니다.</strong> 힙이 크면 한 번에 훑는 young 영역도 커지고, 옮길 양이 늘어나니 정지도 길어집니다. ZGC는 옮기는 일 자체를 동시에 하므로 힙 크기가 정지에 영향을 주지 않습니다.</p>
+</div>
+
+<div class="recipe">
+<h4>2. G1은 어디까지 목표를 지키나</h4>
+<div class="seq">힙 4GB   → young 188ms  (목표 안)
+힙 16GB  → young 208ms  (거의 지킴)
+힙 64GB  → young 270ms  (넘기 시작)
+힙 128GB → young 538ms  (완전히 벗어남)</div>
+<p class="why">G1은 <code>MaxGCPauseMillis</code>를 맞추려 young 영역을 줄입니다. 하지만 <code>G1NewSizePercent</code>(기본 5%) 아래로는 못 내려가요. 힙이 커지면 이 하한 자체가 커져서, 어느 시점부터는 <strong>목표를 지킬 방법이 없어집니다.</strong></p>
+</div>
+
+<div class="recipe">
+<h4>3. 짧은 정지가 항상 이기는 건 아니다</h4>
+<div class="seq">힙 16GB 고정
+할당 속도를 500 → 3000 MB/s
+
+G1 young 정지    <em>208ms 그대로</em>
+G1 GC 횟수       <em>11회 → 67회</em>
+G1 처리량        <em>96% → 73%</em></div>
+<p class="why">정지 <em>길이</em>와 정지 <em>총량</em>은 다른 문제입니다. 200ms짜리가 1분에 두 번이면 무해하지만 스무 번이면 처리량이 7% 깎입니다. p99 지연만 보고 판단하면 이 비용을 놓칩니다.</p>
+</div>
+
+<div class="recipe">
+<h4>4. ZGC도 멈춘다</h4>
+<div class="seq">힙 16GB
+할당 속도를 5000 MB/s 까지 올린다
+
+ZGC 할당 지연   <em>ms/s 수치가 나타난다</em>
+ZGC 처리량      <em>떨어진다</em></div>
+<p class="why">동시 회수 속도보다 빨리 할당하면 스레드가 빈 페이지를 기다리며 <strong>멈춰 섭니다.</strong> GC 정지로 집계되지 않아 로그만 보면 "정지 0ms"인데 애플리케이션은 실제로 서 있어요. ZGC 튜닝에서 가장 놓치기 쉬운 지점입니다.</p>
+</div>
+
+<div class="recipe">
+<h4>5. ZGC에는 힙을 넉넉히 준다</h4>
+<div class="seq">할당 속도 5000 MB/s 고정
+힙 16GB   → 지연 528ms/s
+힙 128GB  → 지연 312ms/s</div>
+<p class="why">여유 공간이 곧 시간입니다. 힙이 넓으면 동시 수집이 끝날 때까지 버틸 여유가 생겨요. G1에서는 힙을 키우면 정지가 길어지지만, <strong>ZGC에서는 힙을 키우는 게 대체로 이득</strong>입니다. 두 수집기의 튜닝 방향이 정반대인 이유입니다.</p>
+</div>
+`;
+
+const GUIDE_EN = `
+<h2>Driving it yourself</h2>
+<p>There are only two dials. The play button walks a fixed tour; moving the sliders yourself shows far more.</p>
+<table class="keytable">
+<tr><th>dial</th><th>what moves</th></tr>
+<tr><td>heap size</td><td>G1's <strong>pause length</strong> grows with it. ZGC barely reacts</td></tr>
+<tr><td>allocation rate</td><td>G1's <strong>pause count</strong> climbs; past a threshold ZGC starts <strong>stalling allocations</strong></td></tr>
+<tr><td>log scale</td><td>On a linear scale the ZGC bars are invisible. That is the point — but you need this to see their shape</td></tr>
+</table>
+<p>Bar colour is the kind: grey for young collections, ochre for mixed, red for Full GC, blue for ZGC.</p>
+
+<h2>Try these</h2>
+
+<div class="recipe">
+<h4>1. Move only the heap</h4>
+<div class="seq">Hold allocation at 500 MB/s
+Walk the heap from 2GB to 128GB
+
+G1  young pause  <em>95ms → 538ms</em>
+G1  mixed pause  <em>161ms → 915ms</em>
+ZGC max pause    <em>0.28ms, unchanged</em></div>
+<p class="why">G1 <strong>stops the world while copying live objects.</strong> A bigger heap means a bigger young generation per collection, more to copy, longer pauses. ZGC relocates concurrently, so heap size does not enter the pause equation.</p>
+</div>
+
+<div class="recipe">
+<h4>2. How far can G1 hold its target</h4>
+<div class="seq">4GB   → young 188ms  (inside target)
+16GB  → young 208ms  (about on target)
+64GB  → young 270ms  (overshooting)
+128GB → young 538ms  (long gone)</div>
+<p class="why">G1 shrinks the young generation to honour <code>MaxGCPauseMillis</code>. But it cannot go below <code>G1NewSizePercent</code> (5% by default). As the heap grows that floor grows with it, and past some point <strong>the target becomes unreachable.</strong></p>
+</div>
+
+<div class="recipe">
+<h4>3. Shorter pauses do not always win</h4>
+<div class="seq">Hold heap at 16GB
+Raise allocation 500 → 3000 MB/s
+
+G1 young pause   <em>208ms, unchanged</em>
+G1 GC count      <em>11 → 67</em>
+G1 throughput    <em>96% → 73%</em></div>
+<p class="why">Pause <em>length</em> and total <em>stopped time</em> are different problems. A 200ms pause twice a minute is harmless; twenty times a minute costs 7% of your throughput. Looking only at p99 latency hides this.</p>
+</div>
+
+<div class="recipe">
+<h4>4. ZGC stops too</h4>
+<div class="seq">Heap 16GB
+Raise allocation to 5000 MB/s
+
+ZGC alloc stall  <em>a ms/s figure appears</em>
+ZGC throughput   <em>drops</em></div>
+<p class="why">Allocate faster than ZGC can reclaim concurrently and threads <strong>block waiting for free pages.</strong> This is not counted as a GC pause, so the log says "0ms" while the application is genuinely stopped. It is the easiest thing to miss when tuning ZGC.</p>
+</div>
+
+<div class="recipe">
+<h4>5. Give ZGC room</h4>
+<div class="seq">Hold allocation at 5000 MB/s
+Heap 16GB   → stall 528ms/s
+Heap 128GB  → stall 312ms/s</div>
+<p class="why">Headroom is time. A wider heap gives the concurrent cycle room to finish before you run out of pages. Growing the heap lengthens G1's pauses, but <strong>for ZGC a bigger heap is usually a straight win</strong> — which is why the two collectors are tuned in opposite directions.</p>
+</div>
+`;
+
+const PROSE_KO = `
+<h2>G1이 멈추는 지점</h2>
+<p>G1은 힙을 <strong>리전</strong>이라는 균일한 조각으로 나눕니다. 수집할 때는 리전 몇 개를 골라 collection set을 만들고, 그 안의 살아 있는 객체를 다른 리전으로 <strong>복사</strong>합니다. 복사가 끝나면 원래 리전은 통째로 비워요.</p>
+<p>문제는 복사하는 동안 객체의 주소가 바뀐다는 겁니다. 애플리케이션 스레드가 옛 주소를 들고 있으면 안 되니, <strong>복사하는 내내 세상을 멈춰야 합니다.</strong> 정지 시간이 곧 "옮긴 데이터의 양"이에요.</p>
+<pre><code>정지 시간 ≈ 고정 비용 + (옮길 살아있는 객체 양) / 복사 처리량</code></pre>
+<p>G1은 <code>-XX:MaxGCPauseMillis</code>(기본 200ms)를 맞추려고 young 영역 크기를 스스로 조절합니다. 예측이 빗나가면 다음 번에 young을 줄이는 식이죠. 실험대에서 힙 16GB까지 목표가 지켜지는 게 이 덕분입니다.</p>
+<div class="callout">하지만 young 영역에는 하한이 있습니다. <code>G1NewSizePercent</code> 기본값이 5%인데, 힙이 128GB면 그 5%가 이미 6.4GB예요. 여기서 살아남는 15%만 복사해도 1GB에 가깝습니다. <strong>목표를 지킬 방법이 사라지는 지점</strong>이 이렇게 생깁니다.</div>
+
+<h2>ZGC가 멈추지 않는 방법</h2>
+<p>ZGC의 핵심은 <strong>색깔 포인터(colored pointers)</strong>와 <strong>load barrier</strong>입니다.</p>
+<p>64비트 포인터에서 실제 주소로 쓰이는 건 하위 44비트 정도입니다. ZGC는 남는 상위 비트에 <em>이 객체가 마킹됐는지, 이미 이동했는지</em> 같은 상태를 새겨 넣습니다. 그리고 애플리케이션이 참조를 읽을 때마다 그 비트를 검사하는 코드(load barrier)를 끼워 넣어요.</p>
+<pre><code>// 개념적으로 이런 검사가 참조 읽기마다 들어간다
+Object o = obj.field;        // ← 여기서 barrier 실행
+// 포인터 색이 낡았다면: 새 주소를 찾아 참조를 고쳐 끼운다
+</code></pre>
+<p>이 덕분에 <strong>객체를 옮기는 도중에도 애플리케이션이 계속 돌 수 있습니다.</strong> 옛 주소로 접근하는 스레드가 있으면 barrier가 즉석에서 새 주소로 안내하고 참조까지 갱신해주거든요.</p>
+<p>그래서 ZGC의 STW는 사이클당 세 번, 각각 루트를 훑는 짧은 구간뿐입니다. JDK 16부터는 스레드 스택 스캔마저 동시에 수행해서, 정지 시간이 <strong>힙 크기와도 스레드 수와도 사실상 무관</strong>해졌습니다.</p>
+
+<h2>그럼 항상 ZGC를 쓰면 되나</h2>
+<p>아닙니다. 대가가 셋 있습니다.</p>
+<ul>
+<li><strong>처리량</strong> — load barrier가 모든 참조 읽기에 붙습니다. 워크로드에 따라 5~15% 정도 처리량이 깎입니다. 배치 잡처럼 지연보다 총 처리량이 중요한 경우엔 손해예요</li>
+<li><strong>메모리</strong> — 동시 수집 중에도 할당이 계속되므로 여유 공간이 필요합니다. 같은 작업에 G1보다 힙을 더 줘야 합니다</li>
+<li><strong>할당 지연</strong> — 위 실험대에서 본 그것입니다. 회수 속도를 앞지르면 결국 멈춥니다</li>
+</ul>
+<p>정리하면 이렇게 나뉩니다.</p>
+<table class="keytable">
+<tr><th></th><th>G1</th><th>ZGC</th></tr>
+<tr><td>정지 시간</td><td>수십~수백 ms, 힙에 비례</td><td>1ms 미만, 힙과 무관</td></tr>
+<tr><td>처리량</td><td>더 좋음</td><td>5~15% 손해</td></tr>
+<tr><td>힙을 키우면</td><td>정지가 길어짐</td><td>대체로 이득</td></tr>
+<tr><td>맞는 곳</td><td>일반 서버, 배치, 4~32GB</td><td>지연 민감, 대용량 힙, 캐시</td></tr>
+</table>
+
+<h2>JDK 버전별 상황</h2>
+<p>ZGC는 최근 몇 년 사이 크게 달라졌습니다. 예전 자료를 보고 판단하면 안 되는 영역이에요.</p>
+<ul>
+<li><strong>JDK 21</strong> — 세대별 ZGC 도입 (JEP 439). 이전 ZGC는 세대 구분이 없어서 짧게 살다 죽는 객체도 매번 전체 힙을 훑어야 했습니다. 이게 ZGC의 처리량 약점이었어요</li>
+<li><strong>JDK 23</strong> — 세대별 모드가 기본값 (JEP 474)</li>
+<li><strong>JDK 24</strong> — 비세대 모드 제거 (JEP 490). 이제 <code>-XX:+UseZGC</code>는 곧 세대별 ZGC입니다</li>
+<li><strong>JDK 25</strong> — 현재 LTS. G1은 여전히 기본 수집기입니다</li>
+</ul>
+<div class="callout">"ZGC는 처리량이 많이 떨어진다"는 인상은 대부분 세대별 도입 이전 자료에서 온 것입니다. JDK 21 이후로는 격차가 상당히 줄었어요. 다만 여전히 0은 아니니 직접 측정하는 게 맞습니다.</div>
+
+<h2>현장에서 확인할 것</h2>
+<p>먼저 지금 뭘 쓰고 있고 얼마나 멈추는지 봅니다.</p>
+<pre><code>// 실행 중인 JVM
+jcmd &lt;pid&gt; VM.flags | tr ' ' '\\n' | grep -i gc
+
+// GC 로그 켜기 (JDK 9+)
+-Xlog:gc*:file=gc.log:time,uptime,level,tags:filecount=5,filesize=20M
+
+// 안전점(safepoint) 까지 보려면 — STW 는 GC 만의 것이 아니다
+-Xlog:safepoint:file=safepoint.log</code></pre>
+<p>두 번째 로그가 중요합니다. 스레드 덤프, 바이어스드 락 해제, JIT 디옵티마이제이션도 STW를 만듭니다. GC 로그만 보고 "정지가 없다"고 결론 내리면 놓치는 게 생겨요.</p>
+<p>ZGC를 쓰신다면 할당 지연을 따로 봐야 합니다.</p>
+<pre><code>-Xlog:gc+alloc=debug   // Allocation Stall 항목이 찍힌다</code></pre>
+<p>바꿀지 판단하는 기준은 대략 이렇습니다.</p>
+<ul>
+<li>힙이 32GB를 넘고 p99 지연이 문제라면 → ZGC를 재볼 가치가 있습니다</li>
+<li>힙이 8GB 이하라면 → G1으로 충분합니다. ZGC의 이점이 barrier 비용을 상쇄하기 어렵습니다</li>
+<li>배치·ETL처럼 총 처리 시간이 지표라면 → G1, 또는 Parallel GC까지 고려</li>
+<li>Full GC가 찍히고 있다면 → 수집기를 바꾸기 전에 <strong>왜 따라가지 못하는지</strong>부터 봅니다. 대개 할당 속도나 누수가 원인이고, 수집기를 바꿔도 해결되지 않습니다</li>
+</ul>
+<div class="callout">이 페이지의 수치는 개념을 보여주기 위한 단순 모델입니다. 실제 정지 시간은 객체 그래프 모양, 리전 크기, GC 스레드 수, 하드웨어에 따라 크게 달라집니다. <strong>본인 워크로드로 측정하는 것을 대신할 수 있는 건 없습니다.</strong></div>
+`;
+
+const PROSE_EN = `
+<h2>Where G1 stops</h2>
+<p>G1 divides the heap into uniform <strong>regions</strong>. To collect, it picks a set of regions and <strong>copies</strong> the live objects out into fresh ones, then frees the originals wholesale.</p>
+<p>The catch is that copying changes addresses. Application threads must not be holding stale ones, so <strong>the world stays stopped for the entire copy.</strong> Pause time is simply "how much live data got moved".</p>
+<pre><code>pause ≈ fixed cost + (live bytes to copy) / copy throughput</code></pre>
+<p>G1 resizes the young generation to hit <code>-XX:MaxGCPauseMillis</code> (200ms by default), shrinking it when it overshoots. That adaptation is why the target holds up to 16GB in the lab above.</p>
+<div class="callout">But the young generation has a floor. <code>G1NewSizePercent</code> defaults to 5%, and 5% of a 128GB heap is already 6.4GB. Copying even the 15% that survives is close to a gigabyte. That is how <strong>the target becomes unreachable</strong>.</div>
+
+<h2>How ZGC avoids stopping</h2>
+<p>ZGC rests on <strong>colored pointers</strong> and a <strong>load barrier</strong>.</p>
+<p>A 64-bit pointer only needs about 44 bits for the real address. ZGC stores state in the spare high bits — whether this object has been marked, whether it has already been relocated. Every reference read in the application carries a small check of those bits.</p>
+<pre><code>// conceptually, this check rides along with every reference load
+Object o = obj.field;        // ← barrier runs here
+// if the pointer colour is stale: find the new address and fix the reference in place
+</code></pre>
+<p>This is what lets <strong>the application keep running while objects are being moved.</strong> A thread reaching a stale address gets forwarded on the spot, and its reference is healed.</p>
+<p>So ZGC's STW work is three short root-scanning windows per cycle. Since JDK 16 even thread stack scanning is concurrent, which makes the pause <strong>essentially independent of both heap size and thread count</strong>.</p>
+
+<h2>So should everything use ZGC</h2>
+<p>No. There are three costs.</p>
+<ul>
+<li><strong>Throughput</strong> — the load barrier rides on every reference read, costing roughly 5–15% depending on the workload. For batch jobs measured in total time, that is a straight loss</li>
+<li><strong>Memory</strong> — allocation continues during collection, so ZGC needs headroom. Expect to give it more heap than G1 for the same job</li>
+<li><strong>Allocation stalls</strong> — the ones in the lab above. Outrun the collector and you stop anyway</li>
+</ul>
+<table class="keytable">
+<tr><th></th><th>G1</th><th>ZGC</th></tr>
+<tr><td>pause</td><td>tens to hundreds of ms, scales with heap</td><td>sub-millisecond, heap-independent</td></tr>
+<tr><td>throughput</td><td>better</td><td>5–15% worse</td></tr>
+<tr><td>bigger heap</td><td>longer pauses</td><td>generally a win</td></tr>
+<tr><td>fits</td><td>general servers, batch, 4–32GB</td><td>latency-sensitive, large heaps, caches</td></tr>
+</table>
+
+<h2>What changed by JDK version</h2>
+<p>ZGC has moved a great deal recently, so old benchmarks mislead.</p>
+<ul>
+<li><strong>JDK 21</strong> — Generational ZGC arrives (JEP 439). Before this, ZGC had no generations at all, so short-lived garbage forced a full-heap traversal every time. That was its throughput weakness</li>
+<li><strong>JDK 23</strong> — generational mode becomes the default (JEP 474)</li>
+<li><strong>JDK 24</strong> — non-generational mode removed (JEP 490). <code>-XX:+UseZGC</code> now means generational ZGC</li>
+<li><strong>JDK 25</strong> — current LTS. G1 remains the default collector</li>
+</ul>
+<div class="callout">The reputation that "ZGC costs a lot of throughput" mostly comes from pre-generational measurements. The gap narrowed considerably after JDK 21 — though it is not zero, so measure rather than assume.</div>
+
+<h2>What to check in production</h2>
+<p>Start with what you are actually running and how much it stops.</p>
+<pre><code>// live JVM
+jcmd &lt;pid&gt; VM.flags | tr ' ' '\\n' | grep -i gc
+
+// GC logging (JDK 9+)
+-Xlog:gc*:file=gc.log:time,uptime,level,tags:filecount=5,filesize=20M
+
+// safepoints too — STW is not only GC
+-Xlog:safepoint:file=safepoint.log</code></pre>
+<p>That second one matters. Thread dumps, biased lock revocation and JIT deoptimisation all stop the world. Concluding "no pauses" from the GC log alone leaves things out.</p>
+<p>On ZGC, watch stalls separately:</p>
+<pre><code>-Xlog:gc+alloc=debug   // Allocation Stall entries</code></pre>
+<p>Rules of thumb for switching:</p>
+<ul>
+<li>Heap over 32GB and p99 latency hurting → ZGC is worth measuring</li>
+<li>Heap at or under 8GB → G1 is fine; ZGC's benefit rarely covers the barrier cost</li>
+<li>Batch or ETL where total time is the metric → G1, or even Parallel GC</li>
+<li>Seeing Full GCs → find out <strong>why it cannot keep up</strong> before changing collectors. Usually it is allocation rate or a leak, and a new collector will not fix either</li>
+</ul>
+<div class="callout">The numbers here come from a simplified teaching model. Real pauses depend on object graph shape, region size, GC thread count and hardware. <strong>Nothing substitutes for measuring your own workload.</strong></div>
+`;
+
+/* ============================================================================
+ * 5. 기동
+ * ========================================================================== */
+applyLang();
+$('#nStep').textContent = `01 / ${String(SCENE.length).padStart(2,'0')}`;
+</script>
+</body>
+</html>
