@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebSocket across servers — scaling out broke the messages</title>
+<meta name="description" content="Add a second WebSocket server and half your messages stop arriving. Work through fixing it with Redis Pub/Sub, the fan-out it costs, and the gap it leaves during reconnects because Pub/Sub stores nothing.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/websocket/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/websocket/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/websocket/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/websocket/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="WebSocket across servers — scaling out broke the messages">
+<meta property="og:description" content="Delivery drops to 1/N the moment you add servers. Work through the Redis Pub/Sub fix and what it costs.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/websocket/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="WebSocket across servers — scaling out broke the messages">
+<meta name="twitter:description" content="Why delivery becomes 1/N, and what Pub/Sub asks for in return.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/websocket-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/websocket/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>Scaling out broke the messages</h1>
+  <p class="lede">Chat worked perfectly on one server. Add a second and half the messages stop arriving — without changing a line of code. This is the bill for WebSocket keeping its state on the server.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>servers</label>
+          <span class="v" id="vN">4<small> ×</small></span>
+          <input type="range" id="sN" min="1" max="8" step="1" value="4" aria-label="number of WebSocket servers">
+        </div>
+        <div class="dial">
+          <label>room size</label>
+          <span class="v" id="vK">12<small> ppl</small></span>
+          <input type="range" id="sK" min="2" max="40" step="1" value="12" aria-label="people in the room">
+        </div>
+        <div class="dial">
+          <label>reconnecting</label>
+          <span class="v" id="vD">0<small> %</small></span>
+          <input type="range" id="sD" min="0" max="30" step="5" value="0" aria-label="share of clients currently reconnecting">
+        </div>
+        <div class="dial">
+          <label>propagation</label>
+          <div class="seg" id="segMode">
+            <button data-mode="local" aria-pressed="true">local only</button>
+            <button data-mode="bcast" aria-pressed="false">broadcast</button>
+            <button data-mode="room" aria-pressed="false">per-room channel</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>simulation</label>
+          <button id="btnRun">pause</button>
+        </div>
+      </div>
+      <div class="hint" id="hMode"></div>
+    </section>
+
+    <section>
+      <span class="cap">one event published to one room</span>
+
+      <div class="redis" id="redis">
+        <span class="tag">Redis</span>
+        <span class="chan" id="chan"></span>
+        <span class="fan" id="fanNow"></span>
+      </div>
+
+      <div class="servers" id="servers"></div>
+      <div class="offline" id="offline"></div>
+      <div class="meters" id="meters"></div>
+
+      <p class="boardnote">Grey dots are room members connected to that server; green dots are the ones who received this message. A solid green border means the server received the message; a red dashed border means it <strong>received the message with nobody to give it to</strong>. Connection layout is redrawn on every publish — in reality a client stays pinned to one server, but this shows the average across many rooms and many moments on one screen. Grey numbers in the readouts are the expected values for these conditions.</p>
+    </section>
+
+    <section>
+      <span class="cap">event log</span>
+      <div class="events" id="events"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 06</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>Drive it yourself</h2>
+    <table class="keytable">
+      <tr><th>control</th><th>what happens</th></tr>
+      <tr><td>servers</td><td>How many WebSocket servers are running. Clients land on any of them through the load balancer</td></tr>
+      <tr><td>room size</td><td>How many people are in this room. The smaller it is, the more <strong>broadcasting becomes wasted work</strong></td></tr>
+      <tr><td>reconnecting</td><td>Share of members briefly disconnected, attached to no server at all</td></tr>
+      <tr><td>propagation</td><td>local only / broadcast / per-room channel</td></tr>
+    </table>
+
+    <h2>Things to try</h2>
+
+    <div class="recipe">
+      <h4>1. Go from one server to four</h4>
+      <div class="seq">local only, room of 12, 0% reconnecting
+
+1 server   delivery <em>100%</em>
+2 servers  delivery <em>50%</em>
+4 servers  delivery <em>25%</em>
+8 servers  delivery <em>12.5%</em></div>
+      <p class="why">The code did not change; only the server count did. Delivery falls to exactly <code>1/N</code>. The server that received the event <strong>knows only the sockets attached to itself</strong> and has no idea the others exist. A rare case of scaling out breaking a feature outright.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. Switch to broadcast</h4>
+      <div class="seq">4 servers, room of 12
+
+local only  delivery 25%    Redis fan-out 0
+broadcast   delivery <em>100%</em>   Redis fan-out <em>4.00</em></div>
+      <p class="why">One Redis channel, every server subscribed. Whichever server receives the event, it <strong>travels through Redis to all of them.</strong> Delivery is back to 100% — at the cost of copying every message once per server.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. Shrink the room to see what fan-out costs</h4>
+      <div class="seq">broadcast, 8 servers, room of 3
+
+Redis fan-out  <em>8.00</em>
+wasted         <em>67.0%</em>
+
+several red dashed cards — received, nobody to deliver to</div>
+      <p class="why">Here is the real cost of broadcasting. Three people in the room, and <strong>all eight servers receive the message, deserialise it, look through their room table, find nobody, and drop it.</strong> In a product full of one-to-one conversations, adding servers turns directly into wasted CPU.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. Switch to per-room channels</h4>
+      <div class="seq">8 servers, room of 3
+
+broadcast          fan-out 8.00   wasted 67.0%
+per-room channel   fan-out <em>2.64</em>   wasted <em>0%</em></div>
+      <p class="why">Give every room its own channel, and have each server subscribe <strong>only to the rooms it actually holds</strong>. Servers with no member never receive it at all, and fan-out drops from 8 to 2.64. Not free, though — the channel count grows with the number of rooms, and every join and leave means a subscribe or unsubscribe.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. Put some people mid-reconnect</h4>
+      <div class="seq">per-room channel, 4 servers, room of 12, 20% reconnecting
+
+delivery      <em>80%</em>
+missed total  <em>keeps climbing</em></div>
+      <p class="why">Pub/Sub does not fix this one. <strong>Redis Pub/Sub does not store anything.</strong> If you are not subscribed at the moment of publication, the message is simply gone. A three-second reconnect means three seconds of messages lost permanently. That 100% delivery figure only ever meant <em>while the connection was up</em>.</p>
+    </div>
+
+    <h2>Why more servers break it</h2>
+    <p>HTTP is easy to scale because it is stateless — any server produces the same result. <strong>WebSocket is the opposite.</strong> The connection itself is state, and that state lives in one specific server's memory.</p>
+    <pre><code>// the usual first implementation
+Map&lt;String, Set&lt;WebSocketSession&gt;&gt; roomSessions;   // ← this server's memory
+
+void broadcast(String room, String payload) {
+    for (WebSocketSession s : roomSessions.get(room)) {   // ← only sockets on this server
+        s.sendMessage(new TextMessage(payload));
+    }
+}</code></pre>
+    <p>This code is perfectly correct on one server. The moment there are two, <strong>half the room stops receiving.</strong> It is not a bug so much as code written on the assumption of a single instance.</p>
+    <div class="callout">This failure comes from <strong>instance count, not load</strong>. So it never reproduces in dev or staging on one instance, and only appears in production on N. And because it gets reported as "messages sometimes don't arrive", it is easy to misdiagnose as a network problem.</div>
+
+    <h2>Sticky sessions are not the answer</h2>
+    <p>The first idea that comes to mind is pinning everyone in a room to the same server at the load balancer. It does work. The costs are steep.</p>
+    <ul>
+      <li><strong>Load skews.</strong> One large room can occupy an entire server</li>
+      <li><strong>Every deploy disconnects everyone.</strong> Take that server down and the whole room drops</li>
+      <li><strong>Cross-room messages become impossible.</strong> Notifications, mentions and presence all cross room boundaries</li>
+      <li><strong>A room can outgrow one server.</strong> And then you are back to the same problem</li>
+    </ul>
+    <p>Sticky sessions remain useful for keeping a <em>connection</em> on one server — landing a reconnect back where it was. They are just <strong>not a message propagation strategy.</strong></p>
+
+    <h2>What Pub/Sub does</h2>
+    <p>The point is that servers no longer need to know about each other. Each one only needs to know Redis.</p>
+    <pre><code>// the server that received the event — it does NOT write to its own sockets
+redis.convertAndSend("room:" + roomId, payload);
+
+// every server runs the same subscriber code
+void onMessage(String channel, String payload) {
+    String room = channel.substring("room:".length());
+    for (WebSocketSession s : roomSessions.get(room)) {   // ← only its own share
+        s.sendMessage(new TextMessage(payload));
+    }
+}</code></pre>
+    <p>The important detail is that <strong>the publishing server does not write to its own sockets directly.</strong> It writes when the message comes back through Redis. That keeps the path singular, so ordering and duplication only have to be reasoned about in one place. Mixing a direct write with Pub/Sub gives you a bug where only people on your own server receive everything twice.</p>
+
+    <h2>How to slice the channels</h2>
+    <p>That is the choice between the lab's two Pub/Sub modes.</p>
+    <table class="keytable">
+      <tr><th>approach</th><th>fan-out</th><th>cost</th></tr>
+      <tr><td>one channel</td><td>server count N</td><td>servers with no member still receive, deserialise and discard</td></tr>
+      <tr><td>per-room channel</td><td>servers holding a member</td><td>channel count grows with rooms; subscribe/unsubscribe on every join and leave</td></tr>
+    </table>
+    <p>Expected fan-out is <code>N(1 − (1 − s)^k)</code>, where <code>s</code> is the chance a given member sits on a given server and <code>k</code> is the room size. <code>(1 − s)^k</code> is <strong>the probability that a server holds nobody from this room</strong> — which is exactly the broadcast waste ratio.</p>
+    <table class="keytable">
+      <tr><th>servers</th><th>room size</th><th>broadcast waste</th><th>per-room fan-out</th></tr>
+      <tr><td>4</td><td>20</td><td>0.3%</td><td>3.99</td></tr>
+      <tr><td>4</td><td>3</td><td>42.2%</td><td>2.31</td></tr>
+      <tr><td>8</td><td>20</td><td>6.9%</td><td>7.45</td></tr>
+      <tr><td>8</td><td>3</td><td>67.0%</td><td>2.64</td></tr>
+    </table>
+    <p>The rule is simple. <strong>If rooms are larger than your server count, broadcast is fine; if they are smaller, waste dominates.</strong> Products built on one-to-one chats or personal notifications — rooms of one or two — pay more waste with every server you add.</p>
+    <div class="callout"><strong>Careful on Redis Cluster.</strong> A plain <code>PUBLISH</code> propagates to <strong>every node in the cluster</strong>, no matter how you slice channels. To confine a channel to a node you need Redis 7's sharded Pub/Sub (<code>SPUBLISH</code> / <code>SSUBSCRIBE</code>). If you moved to per-room channels and Redis load did not drop, look here.</div>
+
+    <h2>Pub/Sub stores nothing</h2>
+    <p>This is the property people discover last. Redis Pub/Sub delivers <strong>only to whoever is subscribed at the moment of publication</strong>. No queue, no replay, no acknowledgement.</p>
+    <p>So the gaps open up at these moments:</p>
+    <ul>
+      <li><strong>Client reconnecting</strong> — subway, elevator, switching networks. That is the lab's "reconnecting" slider</li>
+      <li><strong>Server restart or deploy</strong> — anything published while that server had no subscription is simply not there</li>
+      <li><strong>Redis restart</strong> — the subscription state itself disappears</li>
+    </ul>
+    <p>Even when the delivery readout says 100%, that only ever covered <em>the time the connection was up</em>. What the user experiences is "part of the conversation is missing".</p>
+
+    <h2>Filling the gap</h2>
+    <p>The standard shape is to let Pub/Sub handle <strong>live delivery only</strong>, and keep <strong>the record somewhere else</strong>.</p>
+    <pre><code>1. store the message first        → get a monotonically increasing seq
+2. publish through Pub/Sub carrying that seq
+3. the client remembers the last seq it received
+4. on reconnect it asks for everything after that
+   GET /rooms/{id}/messages?after={lastSeq}</code></pre>
+    <p>In this shape Pub/Sub is only <strong>a "something new happened" signal</strong>, and correctness belongs to the store. Missing a signal is harmless because the next reconnect fills it in, so Pub/Sub's lack of guarantees stops mattering.</p>
+    <p>Ordering works the same way. Pub/Sub preserves order within a channel but <strong>guarantees nothing across channels</strong>, and a reconnect breaks the stream anyway. Having the client sort by <code>seq</code> and detect gaps to re-request is the reliable route.</p>
+    <div class="callout">If you need stronger guarantees, Redis <strong>Streams</strong> (persistence, consumer groups, replay) or Kafka are the step up. But most chat and notification systems are well served by <em>Pub/Sub + a store + seq resync</em>. Asking the broker for delivery guarantees moves your operational complexity up a level.</div>
+
+    <h2>What to check in production</h2>
+    <p><strong>Run two instances when you test.</strong> None of the problems on this page reproduce on one. Starting two locally on different ports and connecting to each catches most of it.</p>
+    <p><strong>Look for code that still writes to its own sockets.</strong> Adopt Pub/Sub but leave a direct <code>session.sendMessage()</code> on the publish path, and people on that one server receive everything twice — an awkward symptom to trace.</p>
+    <p><strong>Confirm you unsubscribe.</strong> With per-room channels, failing to <code>unsubscribe</code> when the last member leaves means subscriptions pile up, and the longer a server runs the closer its fan-out creeps back to broadcast.</p>
+    <p><strong>Metrics worth having.</strong></p>
+    <table class="keytable">
+      <tr><th>metric</th><th>why</th></tr>
+      <tr><td>connections per instance</td><td>whether sticky sessions or LB config are skewing everything to one side</td></tr>
+      <tr><td>subscribed channels per server</td><td>grows monotonically if unsubscribes are missing</td></tr>
+      <tr><td>messages received and discarded</td><td>this page's "wasted" — shows the broadcast cost directly</td></tr>
+      <tr><td>resync requests and gap length after reconnect</td><td>how large the gaps really are</td></tr>
+      <tr><td>Redis <code>pubsub_channels</code></td><td>from <code>INFO</code>. The real scale of your per-room channel strategy</td></tr>
+    </table>
+    <p><strong>Plan for the reconnect storm during deploys.</strong> Take one server down and every connection on it reconnects at once, then all of them call the resync endpoint. Without exponential backoff and jitter on the client, every deploy becomes a self-inflicted DDoS.</p>
+
+    <div class="callout">This model is simplified for teaching. In reality a client stays pinned to one server, and neither room sizes nor connection distribution are uniform. The lab <strong>redraws the distribution on every publish</strong> to show the average behaviour — read it as an average across many rooms and moments, not a snapshot of one service.</div>
+
+  </article>
+
+  <footer>WebSocket across servers · simplified teaching model · <a href="/websocket/" hreflang="ko" lang="ko">한국어</a> / English · <a href="mailto:contact@vermilion19.com">contact@vermilion19.com</a></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  pause:'pause', resume:'resume',
+  uSrv:'×', uMem:'ppl',
+  m_local:'local only', m_bcast:'broadcast', m_room:'per-room channel',
+  chanNone:'unused — the receiving server writes only to its own sockets',
+  chanAll:'channel: ws:broadcast — every server subscribed',
+  chanRoom:'channel: room:42 — only servers holding a member',
+  fanNow:'delivered to $1 / $2 servers',
+  sOrigin:'got the event',
+  sNoMember:'nobody from this room',
+  sGot:'delivered to $1',
+  sWaste:'received, nobody to deliver to',
+  sSkip:'not received',
+  sOffline:'$1 of $2 reconnecting — attached to no server',
+  mReach:'delivery', mFan:'Redis fan-out', mWaste:'wasted', mMissed:'missed total',
+  mExp:'exp $1', mOf:'of $1',
+  hLocal:'several servers but local-only delivery — capped at 1/N, about $1%',
+  hWaste:'$1% of the broadcast goes to servers with no member — time to look at per-room channels',
+  hOffline:'reconnecting clients miss these permanently — Pub/Sub stores nothing',
+  hOk:'everything is reaching its target under these conditions',
+  lgSetup:'$1 servers · room of $2 · $3% reconnecting · $4 — readouts reset',
+  lgLocal:'local only — reached just the $1 attached to ws-$3 (room of $2)',
+  lgWaste:'$1 of $2 broadcasts wasted — no member of this room there',
+  lgOffline:'$1 reconnecting clients missed this message — no way to get it back',
+  scene:[
+    'One server, twelve people in the room. Delivery is 100%. Every connection lives in the memory of that one server, so walking the room list and writing is all it takes. Nothing is wrong yet.',
+    'Now four servers. Not a line of code changed, and delivery has fallen to 25%. The server that received the event knows only its own sockets and has no idea the people on the other three exist. Scaling out broke the feature.',
+    'One Redis channel, every server subscribed. Delivery is back to 100% — whichever server receives the event, it travels through Redis to all of them. The cost is that every message is copied once per server.',
+    'Eight servers now, and only three people in the room. Look at the red dashed cards: those servers received the message with nobody to give it to. All eight deserialise it, search their room table, and drop it. Two thirds of the work is wasted.',
+    'Switched to per-room channels. Each server subscribes only to the rooms it holds, so servers with no member are never sent anything. Fan-out drops from 8 to about 2.6. In exchange the channel count grows with the number of rooms, and every join and leave costs a subscribe or unsubscribe.',
+    'Finally, 20% of the room is mid-reconnect. Delivery is 80% even on Pub/Sub — because Redis Pub/Sub stores nothing. Miss the moment of publication and the message is gone for good. Watch the missed total climb. Only a store plus seq resync closes this gap.'
+  ],
+};
+</script>
+<script src="/shared/websocket-lab.js"></script>
+</body>
+</html>
