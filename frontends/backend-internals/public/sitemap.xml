@@ -8,8 +8,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/"/>
     <lastmod>2026-08-11</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
   </url>
 
   <url>
@@ -18,8 +16,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/"/>
     <lastmod>2026-08-11</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
   </url>
 
   <url>
@@ -28,8 +24,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mvcc/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mvcc/"/>
     <lastmod>2026-08-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -38,8 +32,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mvcc/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mvcc/"/>
     <lastmod>2026-08-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -48,8 +40,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/gc/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/gc/"/>
     <lastmod>2026-08-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -58,8 +48,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/gc/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/gc/"/>
     <lastmod>2026-08-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -68,8 +56,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/hashring/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/hashring/"/>
     <lastmod>2026-08-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -78,8 +64,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/hashring/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/hashring/"/>
     <lastmod>2026-08-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -88,8 +72,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/raft/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/raft/"/>
     <lastmod>2026-08-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -98,8 +80,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/raft/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/raft/"/>
     <lastmod>2026-08-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -108,8 +88,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mqtt/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mqtt/"/>
     <lastmod>2026-08-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -118,8 +96,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mqtt/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mqtt/"/>
     <lastmod>2026-08-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -128,8 +104,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/websocket/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/websocket/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -138,8 +112,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/websocket/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/websocket/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -148,8 +120,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/keepalive/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/keepalive/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -158,8 +128,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/keepalive/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/keepalive/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -168,8 +136,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/connpool/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/connpool/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -178,8 +144,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/connpool/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/connpool/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -188,8 +152,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/jobclaim/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/jobclaim/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -198,8 +160,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/jobclaim/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/jobclaim/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -208,8 +168,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/retryloop/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/retryloop/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -218,8 +176,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/retryloop/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/retryloop/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -228,8 +184,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/backpressure/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/backpressure/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -238,8 +192,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/backpressure/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/backpressure/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -248,8 +200,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/correlation/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/correlation/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -258,8 +208,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/correlation/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/correlation/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -268,8 +216,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/genericplan/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/genericplan/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -278,8 +224,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/genericplan/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/genericplan/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
 
@@ -289,8 +233,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/retrystorm/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/retrystorm/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -299,8 +241,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/retrystorm/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/retrystorm/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
 
@@ -310,8 +250,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/writeskew/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/writeskew/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -320,8 +258,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/writeskew/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/writeskew/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -330,8 +266,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/stampede/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/stampede/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <url>
@@ -340,8 +274,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/stampede/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/stampede/"/>
     <lastmod>2026-08-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
 
   <!-- 시각화를 추가할 때마다 아래 두 블록(한국어/영어)을 복사해 넣고 <slug> 와 lastmod 를 갱신합니다.
@@ -352,8 +284,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/SLUG/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/SLUG/"/>
     <lastmod>YYYY-MM-DD</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://lab.vermilion19.com/en/SLUG/</loc>
@@ -361,8 +291,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/SLUG/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/SLUG/"/>
     <lastmod>YYYY-MM-DD</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
   -->
 
