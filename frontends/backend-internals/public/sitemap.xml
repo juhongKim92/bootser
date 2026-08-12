@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- gen-sitemap.mjs 가 만듭니다. 손으로 고치지 마세요.
+     lastmod 는 각 페이지 HTML 과 그 페이지 전용 *-lab.{js,css} 의 마지막 커밋 날짜 중 최신값입니다. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:xhtml="http://www.w3.org/1999/xhtml">
 
@@ -7,7 +9,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/"/>
-    <lastmod>2026-08-11</lastmod>
+    <lastmod>2026-08-12</lastmod>
   </url>
 
   <url>
@@ -15,166 +17,6 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/"/>
-    <lastmod>2026-08-11</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/mvcc/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/mvcc/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mvcc/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mvcc/"/>
-    <lastmod>2026-08-11</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/en/mvcc/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/mvcc/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mvcc/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mvcc/"/>
-    <lastmod>2026-08-11</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/gc/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/gc/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/gc/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/gc/"/>
-    <lastmod>2026-08-11</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/en/gc/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/gc/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/gc/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/gc/"/>
-    <lastmod>2026-08-11</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/hashring/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/hashring/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/hashring/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/hashring/"/>
-    <lastmod>2026-08-11</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/en/hashring/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/hashring/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/hashring/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/hashring/"/>
-    <lastmod>2026-08-11</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/raft/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/raft/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/raft/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/raft/"/>
-    <lastmod>2026-08-11</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/en/raft/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/raft/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/raft/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/raft/"/>
-    <lastmod>2026-08-11</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/mqtt/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/mqtt/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mqtt/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mqtt/"/>
-    <lastmod>2026-08-11</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/en/mqtt/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/mqtt/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mqtt/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mqtt/"/>
-    <lastmod>2026-08-11</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/websocket/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/websocket/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/websocket/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/websocket/"/>
-    <lastmod>2026-08-12</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/en/websocket/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/websocket/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/websocket/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/websocket/"/>
-    <lastmod>2026-08-12</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/keepalive/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/keepalive/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/keepalive/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/keepalive/"/>
-    <lastmod>2026-08-12</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/en/keepalive/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/keepalive/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/keepalive/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/keepalive/"/>
-    <lastmod>2026-08-12</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/connpool/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/connpool/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/connpool/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/connpool/"/>
-    <lastmod>2026-08-12</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/en/connpool/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/connpool/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/connpool/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/connpool/"/>
-    <lastmod>2026-08-12</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/jobclaim/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/jobclaim/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/jobclaim/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/jobclaim/"/>
-    <lastmod>2026-08-12</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/en/jobclaim/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/jobclaim/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/jobclaim/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/jobclaim/"/>
-    <lastmod>2026-08-12</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/retryloop/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/retryloop/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/retryloop/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/retryloop/"/>
-    <lastmod>2026-08-12</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/en/retryloop/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/retryloop/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/retryloop/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/retryloop/"/>
     <lastmod>2026-08-12</lastmod>
   </url>
 
@@ -195,6 +37,22 @@
   </url>
 
   <url>
+    <loc>https://lab.vermilion19.com/connpool/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/connpool/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/connpool/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/connpool/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/connpool/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/connpool/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/connpool/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/connpool/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
     <loc>https://lab.vermilion19.com/correlation/</loc>
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/correlation/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/correlation/"/>
@@ -207,6 +65,22 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/correlation/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/correlation/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/correlation/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/gc/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/gc/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/gc/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/gc/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/gc/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/gc/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/gc/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/gc/"/>
     <lastmod>2026-08-12</lastmod>
   </url>
 
@@ -226,6 +100,117 @@
     <lastmod>2026-08-12</lastmod>
   </url>
 
+  <url>
+    <loc>https://lab.vermilion19.com/hashring/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/hashring/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/hashring/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/hashring/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/hashring/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/hashring/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/hashring/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/hashring/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/jobclaim/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/jobclaim/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/jobclaim/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/jobclaim/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/jobclaim/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/jobclaim/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/jobclaim/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/jobclaim/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/keepalive/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/keepalive/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/keepalive/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/keepalive/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/keepalive/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/keepalive/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/keepalive/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/keepalive/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/mqtt/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/mqtt/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mqtt/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mqtt/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/mqtt/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/mqtt/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mqtt/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mqtt/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/mvcc/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/mvcc/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mvcc/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mvcc/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/mvcc/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/mvcc/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mvcc/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/mvcc/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/raft/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/raft/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/raft/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/raft/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/raft/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/raft/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/raft/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/raft/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/retryloop/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/retryloop/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/retryloop/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/retryloop/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/retryloop/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/retryloop/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/retryloop/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/retryloop/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
 
   <url>
     <loc>https://lab.vermilion19.com/retrystorm/</loc>
@@ -240,23 +225,6 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/retrystorm/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/retrystorm/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/retrystorm/"/>
-    <lastmod>2026-08-12</lastmod>
-  </url>
-
-
-  <url>
-    <loc>https://lab.vermilion19.com/writeskew/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/writeskew/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/writeskew/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/writeskew/"/>
-    <lastmod>2026-08-12</lastmod>
-  </url>
-
-  <url>
-    <loc>https://lab.vermilion19.com/en/writeskew/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/writeskew/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/writeskew/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/writeskew/"/>
     <lastmod>2026-08-12</lastmod>
   </url>
 
@@ -276,22 +244,36 @@
     <lastmod>2026-08-12</lastmod>
   </url>
 
-  <!-- 시각화를 추가할 때마다 아래 두 블록(한국어/영어)을 복사해 넣고 <slug> 와 lastmod 를 갱신합니다.
-       hreflang 세 줄은 양쪽 모두에 똑같이 들어가야 합니다 — 한쪽만 있으면 구글이 무시합니다.
   <url>
-    <loc>https://lab.vermilion19.com/SLUG/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/SLUG/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/SLUG/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/SLUG/"/>
-    <lastmod>YYYY-MM-DD</lastmod>
+    <loc>https://lab.vermilion19.com/websocket/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/websocket/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/websocket/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/websocket/"/>
+    <lastmod>2026-08-12</lastmod>
   </url>
+
   <url>
-    <loc>https://lab.vermilion19.com/en/SLUG/</loc>
-    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/SLUG/"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/SLUG/"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/SLUG/"/>
-    <lastmod>YYYY-MM-DD</lastmod>
+    <loc>https://lab.vermilion19.com/en/websocket/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/websocket/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/websocket/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/websocket/"/>
+    <lastmod>2026-08-12</lastmod>
   </url>
-  -->
+
+  <url>
+    <loc>https://lab.vermilion19.com/writeskew/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/writeskew/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/writeskew/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/writeskew/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/writeskew/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/writeskew/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/writeskew/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/writeskew/"/>
+    <lastmod>2026-08-12</lastmod>
+  </url>
 
 </urlset>

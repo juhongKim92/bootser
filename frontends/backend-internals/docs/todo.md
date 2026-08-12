@@ -133,7 +133,10 @@
 - [ ] 인덱스 두 벌에 카드 추가 — 그룹은 `<details class="group">` 이므로
       `<h2 class="group">` 이 아니라 `<summary>` 안의 `<h2>` 를 앵커로 잡고,
       `<summary>` 의 `<span class="count">` 개수도 함께 올린다
-- [ ] `sitemap.xml` 에 ko/en 두 블록 (파일 안 주석에 템플릿 있음)
+- [ ] `sitemap.xml` 은 **손으로 고치지 않는다** — `node gen-sitemap.mjs` 가
+      각 페이지의 실제 마지막 커밋 날짜로 다시 만든다
+- [ ] 배포는 이 순서로 — ① `gen-sitemap.mjs`(트리가 깨끗할 때) ② `inject-beacon.mjs`
+      ③ `wrangler deploy`. 거꾸로 하면 beacon 주입 탓에 lastmod 가 전부 오늘이 된다
 - [ ] 배포 후 Search Console 에서 sitemap 재제출 + URL 검사
 
 ## SEO
