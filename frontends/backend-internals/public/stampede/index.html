@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TTL 이 끝나는 순간 — 캐시 스탬피드</title>
+<meta name="description" content="캐시 히트율 99.4%인데 30초마다 서버가 휘청입니다. 만료 한 번에 100개의 재계산이 동시에 시작되기 때문이에요. 무방비 · 뮤텍스 · 확률적 조기 만료 · stale-while-revalidate 네 방식을 같은 부하에서 돌려봅니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/stampede/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/stampede/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/stampede/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/stampede/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="TTL 이 끝나는 순간">
+<meta property="og:description" content="히트율 99.4%인데 장애가 납니다. 평균은 멀쩡한데 순간이 무너지니까요.">
+<meta property="og:url" content="https://lab.vermilion19.com/stampede/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TTL 이 끝나는 순간">
+<meta name="twitter:description" content="만료 한 번당 중복 재계산은 λ·T. 히트율로는 절대 안 보입니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/stampede-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/stampede/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>TTL 이 끝나는 순간</h1>
+  <p class="lede">캐시 히트율은 99.4%입니다. 대시보드 어디를 봐도 문제가 없어요. 그런데 30초마다 응답 시간 그래프에 못이 하나씩 박힙니다. <strong>0.6%가 고르게 흩어져 오지 않고 한 순간에 몰려 오기 때문입니다.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>방식</label>
+          <div class="seg" id="segPol" role="group" aria-label="스탬피드 방지 방식">
+            <button data-pol="none" aria-pressed="true">무방비</button>
+            <button data-pol="mutex">뮤텍스</button>
+            <button data-pol="xfetch">확률적 조기 만료</button>
+            <button data-pol="swr">SWR</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sLam">요청률 λ</label>
+          <span class="v" id="vLam">500<small> /s</small></span>
+          <input type="range" id="sLam" min="50" max="2000" step="50" value="500" aria-label="이 키에 대한 초당 요청 수">
+        </div>
+        <div class="dial">
+          <label for="sT">재계산 시간 T</label>
+          <span class="v" id="vT">200<small> ms</small></span>
+          <input type="range" id="sT" min="20" max="1000" step="20" value="200" aria-label="캐시를 다시 채우는 데 걸리는 시간">
+        </div>
+        <div class="dial">
+          <label for="sTTL">TTL</label>
+          <span class="v" id="vTTL">30<small> 초</small></span>
+          <input type="range" id="sTTL" min="1" max="60" step="1" value="30" aria-label="캐시 유효 시간">
+        </div>
+        <div class="dial">
+          <label>&nbsp;</label>
+          <button id="btnRun">일시정지</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">동시에 도는 재계산</span>
+      <div class="board">
+        <div class="trace" id="trace"></div>
+        <div class="tracex" id="traceX"></div>
+
+        <div class="ttl">
+          <div class="ttlbar"><div class="fill" id="ttlFill"></div></div>
+          <div class="ttlmeta" id="ttlMeta"></div>
+        </div>
+
+        <div class="works" id="works"></div>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">네 방식이 각각 무엇을 주고 무엇을 받나</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+        <div class="speed" id="segSpeed" role="group" aria-label="재생 속도">
+          <button data-speed="0.5">0.5&times;</button>
+          <button data-speed="1" aria-pressed="true">1&times;</button>
+          <button data-speed="2">2&times;</button>
+        </div>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 06</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>방식</td><td>네 방식을 같은 난수 씨앗에서 다시 돌립니다. 요청이 같은 순서로 도착하니 차이는 오직 방식 때문입니다.</td></tr>
+    <tr><td>요청률 λ</td><td>이 키 하나에 오는 초당 요청 수. <strong>만료당 중복 재계산이 이 값에 정비례합니다.</strong></td></tr>
+    <tr><td>재계산 시간 T</td><td>캐시를 다시 채우는 데 걸리는 시간. 스탬피드가 열려 있는 창의 길이입니다.</td></tr>
+    <tr><td>TTL</td><td>얼마나 자주 만료되는가. <strong>스탬피드의 크기가 아니라 빈도를 정합니다.</strong></td></tr>
+  </table>
+
+  <p>시계열의 점선은 <strong>재계산 1개</strong> 높이입니다. 정상이라면 막대가 그 선에 붙어 있어야 해요. 붉은 기둥이 솟는 순간이 스탬피드입니다.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 히트율 99.4% — 대시보드에는 아무 문제가 없다</h4>
+    <div class="seq">무방비 · λ 500/s · 재계산 200ms · TTL 30초
+히트율 <em>99.4%</em> · 평균 재계산 <em>3.01/s</em>
+그런데 만료 순간 동시 재계산 <em>101개</em></div>
+    <p class="why">히트율은 <code>TTL / (TTL + T)</code> = 30 / 30.2 = 99.34%입니다. 재계산도 평균 초당 3개뿐이에요. <strong>어느 평균 지표에도 문제가 안 보입니다.</strong> 그런데 그 3개가 고르게 오는 게 아니라 30초에 한 번 101개가 한꺼번에 옵니다. 시계열의 기둥을 보세요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. TTL 을 3초로 줄인다 — 기둥의 높이는 그대로다</h4>
+    <div class="seq">TTL 30초 → 3초
+히트율 99.4% → <em>94.1%</em> · 평균 재계산 3.01 → <em>29.4/s</em>
+만료당 중복 재계산 <em>100 그대로</em> · 동시 최대 <em>101 그대로</em></div>
+    <p class="why">TTL 을 줄이면 기둥이 <em>자주</em> 오지 <em>낮아지지</em> 않습니다. 기둥의 높이는 <code>λ · T</code> 로 정해지고 TTL 은 거기 안 들어가거든요. <strong>"TTL 을 조정해서 완화한다"가 안 통하는 이유입니다.</strong> 반대로 늘리면 빈도만 줄어 사고가 더 드물게, 그래서 더 갑작스럽게 옵니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 요청률을 두 배로 — 기둥도 두 배</h4>
+    <div class="seq">λ 500/s → 1000/s
+만료당 중복 재계산 100 → <em>201</em> · 동시 최대 101 → <em>202</em>
+히트율은 <em>94.1% 그대로</em></div>
+    <p class="why">히트율이 한 자리도 안 움직이는데 순간 부하는 정확히 두 배가 됩니다. <strong>인기가 많은 키일수록 위험합니다</strong> — 캐시를 가장 잘 쓰고 있는 키가 가장 크게 터지는 키예요. 만료당 중복 재계산이 <code>λ · T</code> 라는 건 이런 뜻입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. 뮤텍스 / 싱글플라이트 — 중복은 사라지고 대기가 생긴다</h4>
+    <div class="seq">만료당 재계산 100 → <em>1</em> · 동시 최대 <em>1</em>
+대신 나머지 <em>99건이 최대 200ms 대기</em>
+히트율 93.8% (거의 그대로)</div>
+    <p class="why">첫 번째로 도착한 요청만 재계산하고 나머지는 그 결과를 기다립니다. 기둥이 사라졌어요. <strong>그런데 공짜가 아닙니다.</strong> <code>λ·T - 1</code> = 99건이 최대 재계산 시간만큼 멈춰 서 있습니다. 백엔드는 지켰지만 그 99건은 여전히 200ms 를 씁니다 — <a href="/backpressure/">11번</a>의 CallerRuns 와 같은 거래예요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 확률적 조기 만료 — 만료 자체가 오지 않는다</h4>
+    <div class="seq">히트율 <em>100%</em> · 만료당 재계산 1 · 동시 최대 1
+대기 <em>0건</em> · 낡은 값 <em>0건</em></div>
+    <p class="why">각 요청이 <code>now − T·β·ln(rand()) ≥ expiry</code> 를 확인해, 만료가 가까워질수록 높은 확률로 <strong>미리</strong> 갱신합니다. 누군가 한 명이 만료 전에 나서니 하드 미스가 아예 안 생겨요. 히트율이 100%가 됩니다. <code>T</code> 가 들어가 있는 게 핵심입니다 — <strong>재계산이 오래 걸리는 키일수록 더 일찍 나섭니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. stale-while-revalidate — 낡은 값을 주고 시간을 산다</h4>
+    <div class="seq">만료당 재계산 1 · 동시 최대 1 · 대기 <em>0건</em>
+대신 만료마다 <em>낡은 값 응답 100건</em></div>
+    <p class="why">만료된 값을 그대로 돌려주고 뒤에서 한 번만 갱신합니다. 기둥도 없고 대기도 없어요. 대가는 <strong>정확성</strong>입니다 — 만료 뒤 200ms 동안 도착한 100건은 낡은 값을 받습니다. 재고나 잔액처럼 이게 안 되는 데이터가 있고, 인기 순위처럼 아무래도 좋은 데이터가 있습니다. <strong>고를 수 있는 건 언제나 셋 중 하나뿐이에요.</strong></p>
+  </div>
+
+  <h2>왜 히트율로는 안 보이는가</h2>
+
+  <p>두 값이 있습니다. 재계산의 <strong>평균</strong>은 <code>λ·T / (TTL+T)</code> — 기본 설정에서 초당 3.01개입니다. 재계산의 <strong>순간 최대</strong>는 <code>λ·T</code> — 101개예요. <strong>33배 차이납니다.</strong></p>
+
+  <div class="callout">평균으로 용량을 잡으면 초당 3개짜리 워커 풀이면 충분합니다. 실제로 필요한 건 순간 101개예요. <strong>평균은 멀쩡한데 순간이 무너집니다.</strong></div>
+
+  <p><a href="/genericplan/">13번(계획 캐시)</a>에서 봤던 젠센 부등식이 다른 옷을 입고 나온 겁니다. 거기서는 옵티마이저가 평균 선택도로 계획을 골랐고, 여기서는 우리가 평균 재계산율로 용량을 잡습니다. <strong>둘 다 평균으로 판단하고 둘 다 꼬리에서 사고가 납니다.</strong></p>
+
+  <h2>만료가 서로 맞춰지는 것</h2>
+
+  <p>키 하나로도 이런데, 진짜 사고는 여러 키의 만료가 <strong>같은 순간에 몰릴 때</strong> 납니다. 그리고 그건 아주 쉽게 일어나요.</p>
+
+  <table class="keytable">
+    <tr><th>언제</th><th>왜 몰리나</th></tr>
+    <tr><td>배포 직후</td><td>캐시가 빈 채로 시작해 트래픽이 한꺼번에 채웁니다. 같은 순간에 채워졌으니 <strong>TTL 도 같은 순간에 끝납니다.</strong></td></tr>
+    <tr><td>캐시 서버 재시작</td><td>같은 이유. 복구된 뒤 정확히 TTL 초 후에 두 번째 사고가 옵니다.</td></tr>
+    <tr><td>일괄 갱신 배치</td><td>새벽에 한 번에 밀어 넣으면 다음 날 같은 시각에 다 같이 만료됩니다.</td></tr>
+    <tr><td>정각 TTL</td><td><code>expireAt(자정)</code> 같은 절대 시각 만료는 설계부터 동기화되어 있습니다.</td></tr>
+  </table>
+
+  <p>해법은 <strong>TTL 에 지터</strong>를 주는 것입니다 — <code>TTL × (1 + rand()·0.2)</code> 정도면 만료가 흩어져요. <a href="/retrystorm/">14번</a>에서 백오프에 지터를 넣어 재시도의 파도를 없앤 것과 정확히 같은 처방이고, 정확히 같은 한계도 있습니다. <strong>지터는 뭉친 것을 펴줄 뿐 총량을 줄이지 않습니다.</strong> 키 하나의 스탬피드는 지터로 안 없어져요 — 위의 네 방식 중 하나가 필요합니다.</p>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>Spring Cache</td><td><code>@Cacheable</code> 은 기본적으로 무방비입니다. Caffeine 을 쓰면 <code>refreshAfterWrite</code> 가 SWR 에 가깝고, <code>LoadingCache</code> 의 로더는 키 단위로 싱글플라이트를 해줍니다.</td></tr>
+    <tr><td>Redis + 앱 캐시</td><td>Redis 는 스탬피드를 막아주지 않습니다. 뮤텍스를 쓰려면 <strong>Redis 락을 따로 잡아야</strong> 하고, 그러면 락 TTL 이 재계산보다 짧을 때의 문제가 새로 생깁니다.</td></tr>
+    <tr><td>싱글플라이트 범위</td><td>인스턴스가 10대면 프로세스 안 뮤텍스로는 <strong>10개까지 줄어들 뿐</strong>입니다. 100 → 10 도 큰 개선이지만 1은 아니에요. 1이 필요하면 분산 락이 듭니다.</td></tr>
+    <tr><td>확률적 조기 만료</td><td>값과 함께 <strong>재계산에 걸린 시간</strong>을 저장해 두어야 <code>T</code> 를 알 수 있습니다. 이 한 필드가 구현의 전부입니다.</td></tr>
+    <tr><td>TTL 지터</td><td>넣으세요. 다만 이걸로 스탬피드를 막았다고 생각하면 안 됩니다 — 막는 건 <em>동기화</em>지 <em>중복</em>이 아닙니다.</td></tr>
+    <tr><td>측정</td><td>히트율 말고 <strong>재계산 동시 실행 수의 최대값</strong>을 재세요. 평균 지표만 보면 이 문제는 영원히 안 보입니다.</td></tr>
+  </table>
+
+  <p><a href="/hashring/">3번(컨시스턴트 해싱)</a>이 <em>노드가 빠지면 캐시가 어떻게 무너지는가</em>였다면, 이 페이지는 <em>아무도 빠지지 않았는데 시각이 겹치면 무슨 일이 일어나는가</em>입니다.</p>
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/stampede/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  pause:'일시정지', resume:'다시 시작',
+  uPs:'/s', uMs:'ms', uSec:'초',
+  refOne:'재계산 1개',
+  axAgo:'$1초 전', axScale:'세로 눈금 $1개', axNow:'지금',
+  ttlLeft:'만료까지 $1초', ttlGone:'만료됨', ttlOf:'TTL $1초',
+  wNone:'도는 재계산 없음', wMore:'+$1개',
+  mHit:'히트율', mBurst:'만료당 중복 재계산', mPeak:'동시 재계산 최대',
+  mAvgRec:'평균 재계산', mWait:'대기한 요청', mStale:'낡은 값 응답',
+  n_none:'무방비', n_mutex:'뮤텍스 / 싱글플라이트', n_xfetch:'확률적 조기 만료', n_swr:'stale-while-revalidate',
+  cPol:'방식', cBurst:'만료당 재계산', cWait:'대기', cCost:'대가',
+  cLamT:'$1 (= λ·T)', cWaitV:'최대 $1ms', cNone:'없음',
+  cost_none:'만료 순간 백엔드가 λ·T 배로 맞는다',
+  cost_mutex:'λ·T − 1 건이 재계산을 기다린다',
+  cost_xfetch:'값과 함께 재계산 시간을 저장해야 한다',
+  cost_swr:'만료 직후 요청이 낡은 값을 받는다',
+  vQuiet:'<b>조용하다.</b> 만료까지 $1초 남았다 — 지금은 네 방식이 구별되지 않는다',
+  vNone:'<b>만료마다 $1개가 동시에 돈다.</b> 평균은 초당 $2개다.<br>어느 평균 지표에도 안 보이는데, 순간에는 백엔드가 그만큼을 한꺼번에 맞는다.',
+  vMutex:'<b>재계산은 1개로 줄었다.</b> 대신 <b>$1건</b>이 기다렸고 가장 오래 기다린 요청이 <b>$2ms</b> <span class="at">— 백엔드를 지킨 값을 앞단이 낸다</span>',
+  vXfetch:'<b>만료가 오기 전에 미리 갱신했다.</b> 하드 미스가 없어 히트율이 <b>$1%</b> <span class="at">— 재계산이 오래 걸리는 키일수록 더 일찍 나선다</span>',
+  vSwr:'<b>기둥도 대기도 없다.</b> 대신 <b>$1건</b>이 낡은 값을 받았다 <span class="at">— 지연 대신 정확성을 냈다</span>',
+  hQuiet:'캐시가 살아 있다 — 히트율 $1%',
+  hExpired:'만료됐다 — 지금 도착하는 요청이 캐시를 비켜 지나간다',
+  hStorm:'재계산 $1개가 동시에 돌고 있다',
+  scene:[
+    '뜨거운 키 하나에 초당 500건이 옵니다. 재계산은 200ms, TTL 은 30초예요. 히트율이 99.4%로 뜹니다 — 대시보드 어디를 봐도 문제가 없죠. 평균 재계산도 초당 3개뿐입니다. 그런데 TTL 막대가 끝까지 가는 순간을 지켜보세요. 시계열에 기둥이 하나 솟습니다. 동시 재계산 101개예요.',
+    'TTL 만 3초로 줄였습니다. 히트율이 94.1%로 떨어지고 평균 재계산이 초당 29개가 됐어요. 그런데 기둥의 높이는 그대로 101입니다. TTL 을 줄이면 기둥이 자주 올 뿐 낮아지지 않아요 — 높이를 정하는 건 λ·T 이고 거기에 TTL 은 안 들어갑니다.',
+    '요청률만 두 배인 초당 1,000건으로 올렸습니다. 히트율은 94.1%로 한 자리도 안 움직였는데 기둥이 202개가 됐어요. 캐시를 가장 잘 쓰고 있는 인기 키가 가장 크게 터지는 키입니다. 만료당 중복 재계산이 λ·T 라는 게 이런 뜻이에요.',
+    '뮤텍스를 켰습니다. 첫 번째 요청만 재계산하고 나머지는 그 결과를 기다려요. 기둥이 사라지고 동시 재계산이 1이 됐습니다. 대신 대기 미터가 오르는 걸 보세요 — 만료마다 99건이 최대 200ms 씩 멈춰 섭니다. 백엔드는 지켰는데 그 값을 앞단이 내고 있는 겁니다.',
+    '확률적 조기 만료입니다. 각 요청이 now − T·β·ln(rand()) ≥ expiry 를 확인해, 만료가 가까울수록 높은 확률로 미리 갱신해요. 누군가 한 명이 먼저 나서니 하드 미스가 아예 안 생깁니다. 히트율이 100%가 됐고 대기도 낡은 값도 0이에요. 식에 T 가 들어 있는 게 핵심입니다 — 오래 걸리는 키일수록 더 일찍 나섭니다.',
+    'stale-while-revalidate 입니다. 만료된 값을 그대로 주고 뒤에서 한 번만 갱신해요. 기둥도 없고 대기도 없습니다. 대신 낡은 값 응답 미터가 오릅니다 — 만료마다 100건이 200ms 지난 값을 받아요. 지연 대신 정확성을 낸 겁니다. 재고나 잔액이면 못 쓰고, 인기 순위면 아무래도 좋습니다.'
+  ],
+};
+</script>
+<script src="/shared/stampede-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>

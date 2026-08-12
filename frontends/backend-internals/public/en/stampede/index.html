@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The moment the TTL ends — cache stampede</title>
+<meta name="description" content="A 99.4% cache hit rate, and the server staggers every thirty seconds, because one expiry starts a hundred recomputations at once. Run unprotected, mutex, probabilistic early expiry and stale-while-revalidate under the same load.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/stampede/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/stampede/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/stampede/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/stampede/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="The moment the TTL ends">
+<meta property="og:description" content="A 99.4% hit rate and an outage anyway. The average is fine; the instant is not.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/stampede/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The moment the TTL ends">
+<meta name="twitter:description" content="Duplicate recomputes per expiry is λ·T. The hit rate will never show it to you.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/stampede-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/stampede/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>The moment the TTL ends</h1>
+  <p class="lede">The cache hit rate is 99.4%. Nothing on any dashboard looks wrong. And every thirty seconds the latency graph takes another nail. <strong>Because that 0.6% does not arrive spread out — it arrives all at once.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>approach</label>
+          <div class="seg" id="segPol" role="group" aria-label="stampede protection">
+            <button data-pol="none" aria-pressed="true">unprotected</button>
+            <button data-pol="mutex">mutex</button>
+            <button data-pol="xfetch">early expiry</button>
+            <button data-pol="swr">SWR</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sLam">request rate λ</label>
+          <span class="v" id="vLam">500<small> /s</small></span>
+          <input type="range" id="sLam" min="50" max="2000" step="50" value="500" aria-label="requests per second for this key">
+        </div>
+        <div class="dial">
+          <label for="sT">recompute time T</label>
+          <span class="v" id="vT">200<small> ms</small></span>
+          <input type="range" id="sT" min="20" max="1000" step="20" value="200" aria-label="time to refill the cache">
+        </div>
+        <div class="dial">
+          <label for="sTTL">TTL</label>
+          <span class="v" id="vTTL">30<small> s</small></span>
+          <input type="range" id="sTTL" min="1" max="60" step="1" value="30" aria-label="cache lifetime">
+        </div>
+        <div class="dial">
+          <label>&nbsp;</label>
+          <button id="btnRun">pause</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">recomputations running at once</span>
+      <div class="board">
+        <div class="trace" id="trace"></div>
+        <div class="tracex" id="traceX"></div>
+
+        <div class="ttl">
+          <div class="ttlbar"><div class="fill" id="ttlFill"></div></div>
+          <div class="ttlmeta" id="ttlMeta"></div>
+        </div>
+
+        <div class="works" id="works"></div>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">what each of the four gives you, and what it charges</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">previous</button>
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+        <div class="speed" id="segSpeed" role="group" aria-label="playback speed">
+          <button data-speed="0.5">0.5&times;</button>
+          <button data-speed="1" aria-pressed="true">1&times;</button>
+          <button data-speed="2">2&times;</button>
+        </div>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 06</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Drive it yourself</h2>
+
+  <table class="keytable">
+    <tr><th>dial</th><th>what it changes</th></tr>
+    <tr><td>approach</td><td>Re-runs all four from the same random seed. Requests arrive in the same order, so any difference is down to the approach alone.</td></tr>
+    <tr><td>request rate λ</td><td>Requests per second for this one key. <strong>Duplicate recomputes per expiry scale directly with it.</strong></td></tr>
+    <tr><td>recompute time T</td><td>How long it takes to refill the cache — the width of the window the stampede runs through.</td></tr>
+    <tr><td>TTL</td><td>How often it expires. <strong>It sets the frequency of the stampede, not its size.</strong></td></tr>
+  </table>
+
+  <p>The dotted line on the chart is the height of <strong>one recomputation</strong>. In a healthy system the bars sit on that line. A red column is a stampede.</p>
+
+  <h2>Things to try</h2>
+
+  <div class="recipe">
+    <h4>1. A 99.4% hit rate — nothing wrong on any dashboard</h4>
+    <div class="seq">unprotected · λ 500/s · recompute 200ms · TTL 30s
+hit rate <em>99.4%</em> · average recomputes <em>3.01/s</em>
+and at the expiry instant, <em>101 at once</em></div>
+    <p class="why">The hit rate is <code>TTL / (TTL + T)</code> = 30 / 30.2 = 99.34%. Recomputes average three a second. <strong>No average metric shows a problem.</strong> But those three do not arrive evenly — once every thirty seconds, 101 arrive together. Watch the column on the chart.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Drop the TTL to 3s — the column is exactly as tall</h4>
+    <div class="seq">TTL 30s → 3s
+hit rate 99.4% → <em>94.1%</em> · average recomputes 3.01 → <em>29.4/s</em>
+duplicates per expiry <em>still 100</em> · peak concurrent <em>still 101</em></div>
+    <p class="why">Shortening the TTL makes the column arrive <em>more often</em>, not <em>lower</em>. Its height is set by <code>λ · T</code>, and TTL does not appear in that. <strong>This is why "tune the TTL" never fixes it.</strong> Lengthening it only makes the incident rarer — and therefore more surprising when it lands.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Double the request rate — double the column</h4>
+    <div class="seq">λ 500/s → 1000/s
+duplicates per expiry 100 → <em>201</em> · peak concurrent 101 → <em>202</em>
+hit rate <em>unchanged at 94.1%</em></div>
+    <p class="why">The hit rate does not move a single digit while the instantaneous load exactly doubles. <strong>The more popular the key, the more dangerous it is</strong> — the key getting the most value out of your cache is the key that blows up hardest. That is what <code>λ · T</code> means in practice.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Mutex / singleflight — the duplicates go, the waiting arrives</h4>
+    <div class="seq">recomputes per expiry 100 → <em>1</em> · peak concurrent <em>1</em>
+in exchange, the other <em>99 wait up to 200ms</em>
+hit rate 93.8% (essentially unchanged)</div>
+    <p class="why">Only the first request through recomputes; the rest wait for its result. The column is gone. <strong>It was not free.</strong> <code>λ·T − 1</code> = 99 requests are stopped for as long as the recomputation takes. The backend is protected, and those 99 still spend 200ms — the same trade as CallerRuns in <a href="/en/backpressure/">page 11</a>.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Probabilistic early expiry — the expiry never arrives</h4>
+    <div class="seq">hit rate <em>100%</em> · recomputes per expiry 1 · peak concurrent 1
+waiting <em>0</em> · stale responses <em>0</em></div>
+    <p class="why">Each request evaluates <code>now − T·β·ln(rand()) ≥ expiry</code>, so as expiry approaches it becomes increasingly likely that someone refreshes <strong>early</strong>. One volunteer steps up before the deadline and a hard miss never happens. The hit rate reaches 100%. The <code>T</code> in that formula is the point — <strong>the more expensive a key is to recompute, the earlier it volunteers.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. stale-while-revalidate — serve the old value and buy time</h4>
+    <div class="seq">recomputes per expiry 1 · peak concurrent 1 · waiting <em>0</em>
+in exchange, <em>100 stale responses per expiry</em></div>
+    <p class="why">Hand back the expired value and refresh once in the background. No column and no waiting. The charge is <strong>accuracy</strong> — the 100 requests arriving in the 200ms after expiry get a stale value. Some data cannot take that (stock levels, balances) and some does not care (a trending list). <strong>You only ever get to pick one of the three.</strong></p>
+  </div>
+
+  <h2>Why the hit rate cannot show you this</h2>
+
+  <p>There are two numbers. The <strong>average</strong> recompute rate is <code>λ·T / (TTL+T)</code> — 3.01 per second at the defaults. The <strong>instantaneous peak</strong> is <code>λ·T</code> — 101. <strong>A factor of thirty-three.</strong></p>
+
+  <div class="callout">Size the worker pool from the average and three a second is plenty. What you actually need is 101 at once. <strong>The average is fine and the instant collapses.</strong></div>
+
+  <p>This is Jensen's inequality from <a href="/en/genericplan/">page 13 (plan cache)</a> wearing different clothes. There the optimizer picked a plan from the average selectivity; here we size capacity from the average recompute rate. <strong>Both judge by the mean and both fail in the tail.</strong></p>
+
+  <h2>When expiries line up</h2>
+
+  <p>That is one key. The real outages happen when many keys expire <strong>at the same instant</strong> — and that is remarkably easy to arrange.</p>
+
+  <table class="keytable">
+    <tr><th>when</th><th>why they line up</th></tr>
+    <tr><td>right after a deploy</td><td>The cache starts empty and traffic fills it all at once. Filled together means <strong>the TTLs end together.</strong></td></tr>
+    <tr><td>cache server restart</td><td>Same reason. The second incident arrives exactly one TTL after recovery.</td></tr>
+    <tr><td>bulk refresh jobs</td><td>Push everything in at 3am and it all expires at the same time the next day.</td></tr>
+    <tr><td>absolute TTLs</td><td><code>expireAt(midnight)</code> is synchronised by design.</td></tr>
+  </table>
+
+  <p>The fix is <strong>jitter on the TTL</strong> — something like <code>TTL × (1 + rand()·0.2)</code> scatters the expiries. It is exactly the prescription from <a href="/en/retrystorm/">page 14</a>, where jitter on the backoff removed the retry waves, and it has exactly the same limit. <strong>Jitter spreads a clump; it does not reduce a total.</strong> It will not remove the stampede on a single key — for that you need one of the four approaches above.</p>
+
+  <h2>In practice</h2>
+
+  <table class="keytable">
+    <tr><th>where</th><th>what to check</th></tr>
+    <tr><td>Spring Cache</td><td><code>@Cacheable</code> is unprotected by default. With Caffeine, <code>refreshAfterWrite</code> is close to SWR, and a <code>LoadingCache</code> loader gives you per-key singleflight.</td></tr>
+    <tr><td>Redis + local cache</td><td>Redis does not stop stampedes. A mutex means <strong>taking a Redis lock yourself</strong>, which introduces the separate problem of a lock TTL shorter than the recomputation.</td></tr>
+    <tr><td>singleflight scope</td><td>With ten instances, an in-process mutex only gets you <strong>down to ten</strong>. 100 → 10 is a real win but it is not 1. Getting to 1 costs a distributed lock.</td></tr>
+    <tr><td>early expiry</td><td>Store <strong>how long the recomputation took</strong> alongside the value so you know <code>T</code>. That one extra field is the whole implementation.</td></tr>
+    <tr><td>TTL jitter</td><td>Add it. Just do not think it dealt with the stampede — it addresses <em>synchronisation</em>, not <em>duplication</em>.</td></tr>
+    <tr><td>measurement</td><td>Track <strong>peak concurrent recomputations</strong>, not the hit rate. Watch only averages and this problem stays invisible forever.</td></tr>
+  </table>
+
+  <p>Where <a href="/en/hashring/">page 3 (consistent hashing)</a> asked <em>how the cache collapses when a node leaves</em>, this page asks <em>what happens when nobody leaves but the clocks agree</em>.</p>
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">index</a> · <a href="/stampede/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  pause:'pause', resume:'resume',
+  uPs:'/s', uMs:'ms', uSec:'s',
+  refOne:'one recompute',
+  axAgo:'$1s ago', axScale:'scale $1', axNow:'now',
+  ttlLeft:'$1s to expiry', ttlGone:'expired', ttlOf:'TTL $1s',
+  wNone:'nothing recomputing', wMore:'+$1 more',
+  mHit:'hit rate', mBurst:'duplicates per expiry', mPeak:'peak concurrent',
+  mAvgRec:'average recomputes', mWait:'requests that waited', mStale:'stale responses',
+  n_none:'unprotected', n_mutex:'mutex / singleflight', n_xfetch:'probabilistic early expiry', n_swr:'stale-while-revalidate',
+  cPol:'approach', cBurst:'recomputes per expiry', cWait:'waiting', cCost:'the charge',
+  cLamT:'$1 (= λ·T)', cWaitV:'up to $1ms', cNone:'none',
+  cost_none:'the backend takes λ·T at once on every expiry',
+  cost_mutex:'λ·T − 1 requests wait for the recomputation',
+  cost_swr:'requests just after expiry get a stale value',
+  cost_xfetch:'you must store the recompute time with the value',
+  vQuiet:'<b>Quiet.</b> $1s until expiry — the four approaches are indistinguishable right now',
+  vNone:'<b>$1 run at once on every expiry.</b> The average is $2 per second.<br>No average metric shows it, and in that instant the backend takes all of them together.',
+  vMutex:'<b>Down to one recomputation.</b> In exchange <b>$1</b> requests waited, the longest for <b>$2ms</b> <span class="at">— the front end pays what the backend saved</span>',
+  vXfetch:'<b>Refreshed before the expiry arrived.</b> With no hard miss the hit rate is <b>$1%</b> <span class="at">— the more expensive the key, the earlier it volunteers</span>',
+  vSwr:'<b>No column and no waiting.</b> In exchange <b>$1</b> requests got a stale value <span class="at">— accuracy paid instead of latency</span>',
+  hQuiet:'the cache is warm — hit rate $1%',
+  hExpired:'expired — requests arriving now go straight past the cache',
+  hStorm:'$1 recomputations running at once',
+  scene:[
+    'One hot key taking 500 requests a second. Recomputation takes 200ms and the TTL is 30 seconds. The hit rate reads 99.4% — nothing on any dashboard looks wrong, and recomputes average three a second. Now watch the TTL bar run out. A single column shoots up the chart: 101 recomputations at once.',
+    'Only the TTL changed, down to 3 seconds. The hit rate falls to 94.1% and average recomputes jump to 29 a second. But the column is exactly as tall: 101. Shortening the TTL makes it arrive more often, not lower — the height is λ·T, and TTL is not in that formula.',
+    'Only the request rate changed, doubled to 1,000 a second. The hit rate has not moved a digit from 94.1% and the column is now 202. The popular key — the one getting the most out of your cache — is the one that blows up hardest. That is what duplicates-per-expiry being λ·T means.',
+    'Mutex on. Only the first request recomputes and the rest wait for its result. The column is gone and peak concurrency is 1. Now watch the waiting meter climb — 99 requests per expiry are stopped for up to 200ms each. The backend is protected and the front end is paying for it.',
+    'Probabilistic early expiry. Each request evaluates now − T·β·ln(rand()) ≥ expiry, so the closer the deadline the likelier someone refreshes early. One volunteer steps up first and a hard miss never happens: the hit rate is 100%, with no waiting and nothing stale. The T in the formula is the point — expensive keys volunteer sooner.',
+    'stale-while-revalidate. Hand back the expired value and refresh once in the background. No column, no waiting. Instead the stale-response meter climbs — 100 requests per expiry get a value up to 200ms old. Accuracy paid instead of latency. Unusable for stock or balances; fine for a trending list.'
+  ],
+};
+</script>
+<script src="/shared/stampede-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>
