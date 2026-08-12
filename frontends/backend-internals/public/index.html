@@ -39,18 +39,44 @@
       color:var(--ink-3);border:1px solid var(--rule);padding:3px 7px;border-radius:2px;white-space:nowrap;
     }
     .card .tag.live{color:var(--live);border-color:var(--live)}
-    .cards h2.group{
+    details.group > summary{
+      list-style:none;cursor:pointer;
+      padding:34px 0 3px;
+      display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+    }
+    details.group > summary::-webkit-details-marker{display:none}
+    details.group:first-of-type > summary{padding-top:24px}
+    details.group > summary:hover h2{color:var(--ink)}
+    details.group > summary:focus-visible{outline:1px solid var(--horizon);outline-offset:3px}
+    details.group > summary h2{
       font-family:var(--mono);
       font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
       color:var(--ink-3);font-weight:400;line-height:1.5;
-      margin:0;padding:34px 0 3px;border:none;
-      display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+      margin:0;padding:0;border:none;transition:color .15s;
     }
-    .cards h2.group:first-child{padding-top:24px}
-    .cards h2.group em{
+    details.group > summary h2 em{
       font-family:var(--serif);font-style:normal;font-size:14px;
       letter-spacing:0;text-transform:none;color:var(--ink-2);
+      margin-left:12px;
     }
+    /* 삼각형은 열림 상태에서 90도 돈다 */
+    summary .arw{
+      flex:none;align-self:center;width:0;height:0;
+      border-left:4.5px solid var(--ink-3);
+      border-top:3.5px solid transparent;
+      border-bottom:3.5px solid transparent;
+      transition:transform .15s;
+    }
+    details[open] > summary .arw{transform:rotate(90deg)}
+    summary .count{
+      margin-left:auto;align-self:center;
+      font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;
+      color:var(--ink-3);border:1px solid var(--rule);
+      padding:2px 7px;border-radius:2px;white-space:nowrap;
+    }
+    /* 접혀 있을 때만 개수를 보여준다 — 펼쳐져 있으면 세면 되니까 */
+    details[open] > summary .count{opacity:0}
+    details.group > summary:hover .count{opacity:1}
     @media (max-width:600px){
       .card{grid-template-columns:1fr;gap:6px}
       .card .tag{justify-self:start}
@@ -69,162 +95,199 @@
   <p class="lede">글로 읽으면 알겠는데 막상 장애가 나면 손이 안 가는 개념들이 있습니다. 여기서는 직접 조작해보며 확인합니다.</p>
 
   <div class="cards">
+    <details class="group" open data-g="1">
+      <summary>
+        <span class="arw" aria-hidden="true"></span>
+        <h2>개념 <em>내부 동작을 손으로 만져본다</em></h2>
+        <span class="count">6편</span>
+      </summary>
+      <div class="glist">
 
-    <h2 class="group">개념 <em>내부 동작을 손으로 만져본다</em></h2>
+        <a class="card" href="/mvcc/">
+        <span class="no">01</span>
+        <span>
+          <h2>DELETE 했는데 테이블이 줄지 않는 이유</h2>
+          <p>PostgreSQL MVCC와 VACUUM. 열려 있는 트랜잭션 하나가 어떻게 데이터베이스 전체의 정리 작업을 멈춰 세우는지.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
 
-    <a class="card" href="/mvcc/">
-      <span class="no">01</span>
-      <span>
-        <h2>DELETE 했는데 테이블이 줄지 않는 이유</h2>
-        <p>PostgreSQL MVCC와 VACUUM. 열려 있는 트랜잭션 하나가 어떻게 데이터베이스 전체의 정리 작업을 멈춰 세우는지.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
+      <a class="card" href="/gc/">
+        <span class="no">02</span>
+        <span>
+          <h2>G1과 ZGC는 왜 다르게 멈추는가</h2>
+          <p>힙을 키우면 G1의 STW는 길어지는데 ZGC는 거의 그대로입니다. 그 차이가 어디서 나오는지, 그리고 ZGC가 공짜가 아닌 이유.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
 
-    <a class="card" href="/gc/">
-      <span class="no">02</span>
-      <span>
-        <h2>G1과 ZGC는 왜 다르게 멈추는가</h2>
-        <p>힙을 키우면 G1의 STW는 길어지는데 ZGC는 거의 그대로입니다. 그 차이가 어디서 나오는지, 그리고 ZGC가 공짜가 아닌 이유.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
+      <a class="card" href="/hashring/">
+        <span class="no">03</span>
+        <span>
+          <h2>노드 하나가 빠지면 캐시는 어떻게 무너지는가</h2>
+          <p>컨시스턴트 해싱. 가상 노드가 없을 때 분포가 얼마나 기우는지 링 위에서 직접 확인합니다.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
 
-    <a class="card" href="/hashring/">
-      <span class="no">03</span>
-      <span>
-        <h2>노드 하나가 빠지면 캐시는 어떻게 무너지는가</h2>
-        <p>컨시스턴트 해싱. 가상 노드가 없을 때 분포가 얼마나 기우는지 링 위에서 직접 확인합니다.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
+      <a class="card" href="/raft/">
+        <span class="no">04</span>
+        <span>
+          <h2>네트워크가 갈라지면 누가 리더가 되는가</h2>
+          <p>Raft 리더 선출. 노드를 직접 죽여가며 스플릿브레인이 왜 생기지 않는지 봅니다.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
 
-    <a class="card" href="/raft/">
-      <span class="no">04</span>
-      <span>
-        <h2>네트워크가 갈라지면 누가 리더가 되는가</h2>
-        <p>Raft 리더 선출. 노드를 직접 죽여가며 스플릿브레인이 왜 생기지 않는지 봅니다.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
+      <a class="card" href="/genericplan/">
+        <span class="no">13</span>
+        <span>
+          <h2>여섯 번째 실행부터 느려진다</h2>
+          <p>계획 캐시와 파라미터 편향. 옵티마이저는 평균으로 계획을 고르는데, 장애는 평균이 아닌 값에서 납니다.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
 
-    <a class="card" href="/genericplan/">
-      <span class="no">13</span>
-      <span>
-        <h2>여섯 번째 실행부터 느려진다</h2>
-        <p>계획 캐시와 파라미터 편향. 옵티마이저는 평균으로 계획을 고르는데, 장애는 평균이 아닌 값에서 납니다.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
+      <a class="card" href="/stampede/">
+        <span class="no">16</span>
+        <span>
+          <h2>TTL 이 끝나는 순간</h2>
+          <p>캐시 스탬피드. 히트율 99.4%인데 만료 한 번에 재계산 101개가 동시에 시작됩니다.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
 
-    <a class="card" href="/stampede/">
-      <span class="no">16</span>
-      <span>
-        <h2>TTL 이 끝나는 순간</h2>
-        <p>캐시 스탬피드. 히트율 99.4%인데 만료 한 번에 재계산 101개가 동시에 시작됩니다.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
+      </div>
+    </details>
 
-    <h2 class="group">실시간 통신 <em>연결이 끊기고 메시지가 어긋나는 자리</em></h2>
+    <details class="group" open data-g="2">
+      <summary>
+        <span class="arw" aria-hidden="true"></span>
+        <h2>실시간 통신 <em>연결이 끊기고 메시지가 어긋나는 자리</em></h2>
+        <span class="count">3편</span>
+      </summary>
+      <div class="glist">
 
-    <a class="card" href="/mqtt/">
-      <span class="no">05</span>
-      <span>
-        <h2>한 번만 전달한다는 약속의 값</h2>
-        <p>MQTT QoS 0/1/2. 유실률을 올려가며 셋을 나란히 돌려봅니다. QoS 1 의 중복과 QoS 2 의 패킷 수를 같은 화면에서 비교합니다.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
+        <a class="card" href="/mqtt/">
+        <span class="no">05</span>
+        <span>
+          <h2>한 번만 전달한다는 약속의 값</h2>
+          <p>MQTT QoS 0/1/2. 유실률을 올려가며 셋을 나란히 돌려봅니다. QoS 1 의 중복과 QoS 2 의 패킷 수를 같은 화면에서 비교합니다.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
 
-    <a class="card" href="/websocket/">
-      <span class="no">06</span>
-      <span>
-        <h2>서버를 늘렸더니 메시지가 안 간다</h2>
-        <p>WebSocket 다중 서버와 Redis Pub/Sub. 도달률이 1/N 으로 떨어지는 것과, Pub/Sub 이 그 대가로 요구하는 팬아웃을 나란히 봅니다.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
+      <a class="card" href="/websocket/">
+        <span class="no">06</span>
+        <span>
+          <h2>서버를 늘렸더니 메시지가 안 간다</h2>
+          <p>WebSocket 다중 서버와 Redis Pub/Sub. 도달률이 1/N 으로 떨어지는 것과, Pub/Sub 이 그 대가로 요구하는 팬아웃을 나란히 봅니다.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
 
-    <a class="card" href="/keepalive/">
-      <span class="no">07</span>
-      <span>
-        <h2>서버는 두 시간 동안 살아있다고 믿는다</h2>
-        <p>Keep-alive 와 죽은 커넥션, 그리고 LWT. 죽은 연결을 언제 알아차리는지, Last Will 이 언제 나가고 언제 안 나가는지.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
+      <a class="card" href="/keepalive/">
+        <span class="no">07</span>
+        <span>
+          <h2>서버는 두 시간 동안 살아있다고 믿는다</h2>
+          <p>Keep-alive 와 죽은 커넥션, 그리고 LWT. 죽은 연결을 언제 알아차리는지, Last Will 이 언제 나가고 언제 안 나가는지.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
 
-    <h2 class="group">용량은 왜 무너지는가 <em>쿼리는 빠른데 시스템이 멈춘다</em></h2>
+      </div>
+    </details>
 
-    <a class="card" href="/connpool/">
-      <span class="no">08</span>
-      <span>
-        <h2>17밀리초 쿼리가 커넥션 풀을 말린다</h2>
-        <p>OSIV 와 트랜잭션 경계. 누수 경고가 가리키는 쿼리는 범인이 아닙니다 — 점유 시간이 어디서 늘어나는지 봅니다.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
+    <details class="group" open data-g="3">
+      <summary>
+        <span class="arw" aria-hidden="true"></span>
+        <h2>용량은 왜 무너지는가 <em>쿼리는 빠른데 시스템이 멈춘다</em></h2>
+        <span class="count">3편</span>
+      </summary>
+      <div class="glist">
 
-    <a class="card" href="/backpressure/">
-      <span class="no">11</span>
-      <span>
-        <h2>거부는 버그가 아니라 신호다</h2>
-        <p>백프레셔와 큐 정책. 큐를 무제한으로 열면 거부가 사라지는 게 아니라 OOM 으로 바뀝니다.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
+        <a class="card" href="/connpool/">
+        <span class="no">08</span>
+        <span>
+          <h2>17밀리초 쿼리가 커넥션 풀을 말린다</h2>
+          <p>OSIV 와 트랜잭션 경계. 누수 경고가 가리키는 쿼리는 범인이 아닙니다 — 점유 시간이 어디서 늘어나는지 봅니다.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
 
-    <a class="card" href="/retrystorm/">
-      <span class="no">14</span>
-      <span>
-        <h2>부하는 걷혔는데 돌아오지 않는다</h2>
-        <p>재시도 증폭과 메타스터블. 슬라이더를 원래대로 되돌려도 큐가 안 빕니다 — 무너지는 임계와 회복 임계가 다릅니다.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
+      <a class="card" href="/backpressure/">
+        <span class="no">11</span>
+        <span>
+          <h2>거부는 버그가 아니라 신호다</h2>
+          <p>백프레셔와 큐 정책. 큐를 무제한으로 열면 거부가 사라지는 게 아니라 OOM 으로 바뀝니다.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
 
-    <h2 class="group">조용히 틀리는 것들 <em>예외도 로그도 없이 결과만 틀린다</em></h2>
+      <a class="card" href="/retrystorm/">
+        <span class="no">14</span>
+        <span>
+          <h2>부하는 걷혔는데 돌아오지 않는다</h2>
+          <p>재시도 증폭과 메타스터블. 슬라이더를 원래대로 되돌려도 큐가 안 빕니다 — 무너지는 임계와 회복 임계가 다릅니다.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
 
-    <a class="card" href="/jobclaim/">
-      <span class="no">09</span>
-      <span>
-        <h2>인스턴스를 2대로 늘리는 순간 같은 작업이 두 번 돈다</h2>
-        <p>작업 선점. 인메모리 락부터 SKIP LOCKED 까지 네 방식을 같은 조건에서 돌려보며, 한 대에서는 왜 넷이 구별되지 않는지 봅니다.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
+      </div>
+    </details>
 
-    <a class="card" href="/retryloop/">
-      <span class="no">10</span>
-      <span>
-        <h2>롤백해도 시퀀스는 돌아오지 않는다</h2>
-        <p>재시도 루프와 int4 시퀀스 소진. 발급된 번호와 실제 남은 행, 두 막대가 벌어지는 것을 봅니다.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
+    <details class="group" open data-g="4">
+      <summary>
+        <span class="arw" aria-hidden="true"></span>
+        <h2>조용히 틀리는 것들 <em>예외도 로그도 없이 결과만 틀린다</em></h2>
+        <span class="count">4편</span>
+      </summary>
+      <div class="glist">
 
-    <a class="card" href="/correlation/">
-      <span class="no">12</span>
-      <span>
-        <h2>응답을 순서로 맞추면 언제 어긋나는가</h2>
-        <p>요청-응답 매칭과 correlationId. 위치로 짝지으면 한 번 어긋난 뒤로 스스로 복구하지 못합니다.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
-    <a class="card" href="/writeskew/">
-      <span class="no">15</span>
-      <span>
-        <h2>둘 다 확인했고 둘 다 통과했다</h2>
-        <p>격리 수준과 write skew. Repeatable Read 로 올려도 숫자가 하나도 안 바뀝니다 — 각자 자기 행만 쓰니까요.</p>
-      </span>
-      <span class="tag live">공개</span>
-    </a>
+        <a class="card" href="/jobclaim/">
+        <span class="no">09</span>
+        <span>
+          <h2>인스턴스를 2대로 늘리는 순간 같은 작업이 두 번 돈다</h2>
+          <p>작업 선점. 인메모리 락부터 SKIP LOCKED 까지 네 방식을 같은 조건에서 돌려보며, 한 대에서는 왜 넷이 구별되지 않는지 봅니다.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
+
+      <a class="card" href="/retryloop/">
+        <span class="no">10</span>
+        <span>
+          <h2>롤백해도 시퀀스는 돌아오지 않는다</h2>
+          <p>재시도 루프와 int4 시퀀스 소진. 발급된 번호와 실제 남은 행, 두 막대가 벌어지는 것을 봅니다.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
+
+      <a class="card" href="/correlation/">
+        <span class="no">12</span>
+        <span>
+          <h2>응답을 순서로 맞추면 언제 어긋나는가</h2>
+          <p>요청-응답 매칭과 correlationId. 위치로 짝지으면 한 번 어긋난 뒤로 스스로 복구하지 못합니다.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
+
+      <a class="card" href="/writeskew/">
+        <span class="no">15</span>
+        <span>
+          <h2>둘 다 확인했고 둘 다 통과했다</h2>
+          <p>격리 수준과 write skew. Repeatable Read 로 올려도 숫자가 하나도 안 바뀝니다 — 각자 자기 행만 쓰니까요.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
+
+      </div>
+    </details>
 
   </div>
 
   <footer>백엔드 내부 동작 인터랙티브 시각화 · 한국어 / <a href="/en/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
 </main>
+<script src="/shared/groups.js"></script>
 <script src="/shared/contact.js"></script>
 </body>
 </html>

@@ -130,7 +130,9 @@
 - [ ] 실험대 로직/스타일은 `public/shared/<slug>-lab.js` · `<slug>-lab.css` 로 한 벌만
 - [ ] 본문은 HTML 에 직접 — JS 주입 금지 (색인 안 됨)
 - [ ] canonical + hreflang 3줄(ko·en·x-default), 양쪽 페이지 모두에 동일하게
-- [ ] 인덱스 두 벌에 카드 추가
+- [ ] 인덱스 두 벌에 카드 추가 — 그룹은 `<details class="group">` 이므로
+      `<h2 class="group">` 이 아니라 `<summary>` 안의 `<h2>` 를 앵커로 잡고,
+      `<summary>` 의 `<span class="count">` 개수도 함께 올린다
 - [ ] `sitemap.xml` 에 ko/en 두 블록 (파일 안 주석에 템플릿 있음)
 - [ ] 배포 후 Search Console 에서 sitemap 재제출 + URL 검사
 

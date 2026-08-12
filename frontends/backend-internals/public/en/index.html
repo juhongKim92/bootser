@@ -39,18 +39,44 @@
       color:var(--ink-3);border:1px solid var(--rule);padding:3px 7px;border-radius:2px;white-space:nowrap;
     }
     .card .tag.live{color:var(--live);border-color:var(--live)}
-    .cards h2.group{
+    details.group > summary{
+      list-style:none;cursor:pointer;
+      padding:34px 0 3px;
+      display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+    }
+    details.group > summary::-webkit-details-marker{display:none}
+    details.group:first-of-type > summary{padding-top:24px}
+    details.group > summary:hover h2{color:var(--ink)}
+    details.group > summary:focus-visible{outline:1px solid var(--horizon);outline-offset:3px}
+    details.group > summary h2{
       font-family:var(--mono);
       font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
       color:var(--ink-3);font-weight:400;line-height:1.5;
-      margin:0;padding:34px 0 3px;border:none;
-      display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+      margin:0;padding:0;border:none;transition:color .15s;
     }
-    .cards h2.group:first-child{padding-top:24px}
-    .cards h2.group em{
+    details.group > summary h2 em{
       font-family:var(--serif);font-style:normal;font-size:14px;
       letter-spacing:0;text-transform:none;color:var(--ink-2);
+      margin-left:12px;
     }
+    /* 삼각형은 열림 상태에서 90도 돈다 */
+    summary .arw{
+      flex:none;align-self:center;width:0;height:0;
+      border-left:4.5px solid var(--ink-3);
+      border-top:3.5px solid transparent;
+      border-bottom:3.5px solid transparent;
+      transition:transform .15s;
+    }
+    details[open] > summary .arw{transform:rotate(90deg)}
+    summary .count{
+      margin-left:auto;align-self:center;
+      font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;
+      color:var(--ink-3);border:1px solid var(--rule);
+      padding:2px 7px;border-radius:2px;white-space:nowrap;
+    }
+    /* 접혀 있을 때만 개수를 보여준다 — 펼쳐져 있으면 세면 되니까 */
+    details[open] > summary .count{opacity:0}
+    details.group > summary:hover .count{opacity:1}
     @media (max-width:600px){
       .card{grid-template-columns:1fr;gap:6px}
       .card .tag{justify-self:start}
@@ -69,162 +95,199 @@
   <p class="lede">Some concepts read fine on paper and desert you the moment production breaks. Here you drive them yourself.</p>
 
   <div class="cards">
+    <details class="group" open data-g="1">
+      <summary>
+        <span class="arw" aria-hidden="true"></span>
+        <h2>Concepts <em>internals you can put your hands on</em></h2>
+        <span class="count">6</span>
+      </summary>
+      <div class="glist">
 
-    <h2 class="group">Concepts <em>internals you can put your hands on</em></h2>
+        <a class="card" href="/en/mvcc/">
+        <span class="no">01</span>
+        <span>
+          <h2>Why your table never shrinks after DELETE</h2>
+          <p>PostgreSQL MVCC and VACUUM. How a single open transaction stalls cleanup across the entire database.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
 
-    <a class="card" href="/en/mvcc/">
-      <span class="no">01</span>
-      <span>
-        <h2>Why your table never shrinks after DELETE</h2>
-        <p>PostgreSQL MVCC and VACUUM. How a single open transaction stalls cleanup across the entire database.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
+      <a class="card" href="/en/gc/">
+        <span class="no">02</span>
+        <span>
+          <h2>Why G1 and ZGC stop differently</h2>
+          <p>Grow the heap and G1’s pauses grow with it, while ZGC barely moves. Where that difference comes from — and why ZGC is not free.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
 
-    <a class="card" href="/en/gc/">
-      <span class="no">02</span>
-      <span>
-        <h2>Why G1 and ZGC stop differently</h2>
-        <p>Grow the heap and G1’s pauses grow with it, while ZGC barely moves. Where that difference comes from — and why ZGC is not free.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
+      <a class="card" href="/en/hashring/">
+        <span class="no">03</span>
+        <span>
+          <h2>How a cache falls apart when one node leaves</h2>
+          <p>Consistent hashing. Watch the distribution skew on the ring when virtual nodes are missing.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
 
-    <a class="card" href="/en/hashring/">
-      <span class="no">03</span>
-      <span>
-        <h2>How a cache falls apart when one node leaves</h2>
-        <p>Consistent hashing. Watch the distribution skew on the ring when virtual nodes are missing.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
+      <a class="card" href="/en/raft/">
+        <span class="no">04</span>
+        <span>
+          <h2>Who becomes leader when the network splits</h2>
+          <p>Raft leader election. Kill nodes by hand and see why split brain does not happen.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
 
-    <a class="card" href="/en/raft/">
-      <span class="no">04</span>
-      <span>
-        <h2>Who becomes leader when the network splits</h2>
-        <p>Raft leader election. Kill nodes by hand and see why split brain does not happen.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
+      <a class="card" href="/en/genericplan/">
+        <span class="no">13</span>
+        <span>
+          <h2>Slow from the sixth execution on</h2>
+          <p>Plan cache and parameter skew. The optimizer plans for the average — and the outage arrives on a value that is not average.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
 
-    <a class="card" href="/en/genericplan/">
-      <span class="no">13</span>
-      <span>
-        <h2>Slow from the sixth execution on</h2>
-        <p>Plan cache and parameter skew. The optimizer plans for the average — and the outage arrives on a value that is not average.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
+      <a class="card" href="/en/stampede/">
+        <span class="no">16</span>
+        <span>
+          <h2>The moment the TTL ends</h2>
+          <p>Cache stampede. A 99.4% hit rate, and one expiry starts 101 recomputations at once.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
 
-    <a class="card" href="/en/stampede/">
-      <span class="no">16</span>
-      <span>
-        <h2>The moment the TTL ends</h2>
-        <p>Cache stampede. A 99.4% hit rate, and one expiry starts 101 recomputations at once.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
+      </div>
+    </details>
 
-    <h2 class="group">Real-time messaging <em>where connections drop and messages go astray</em></h2>
+    <details class="group" open data-g="2">
+      <summary>
+        <span class="arw" aria-hidden="true"></span>
+        <h2>Real-time messaging <em>where connections drop and messages go astray</em></h2>
+        <span class="count">3</span>
+      </summary>
+      <div class="glist">
 
-    <a class="card" href="/en/mqtt/">
-      <span class="no">05</span>
-      <span>
-        <h2>What "exactly once" actually costs</h2>
-        <p>MQTT QoS 0/1/2. Raise the failure rate and run all three side by side — QoS 1's duplicates against QoS 2's packet count, on one screen.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
+        <a class="card" href="/en/mqtt/">
+        <span class="no">05</span>
+        <span>
+          <h2>What "exactly once" actually costs</h2>
+          <p>MQTT QoS 0/1/2. Raise the failure rate and run all three side by side — QoS 1's duplicates against QoS 2's packet count, on one screen.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
 
-    <a class="card" href="/en/websocket/">
-      <span class="no">06</span>
-      <span>
-        <h2>Scaling out broke the messages</h2>
-        <p>WebSocket across servers with Redis Pub/Sub. Watch delivery fall to 1/N, and see what Pub/Sub charges in fan-out to put it back.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
+      <a class="card" href="/en/websocket/">
+        <span class="no">06</span>
+        <span>
+          <h2>Scaling out broke the messages</h2>
+          <p>WebSocket across servers with Redis Pub/Sub. Watch delivery fall to 1/N, and see what Pub/Sub charges in fan-out to put it back.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
 
-    <a class="card" href="/en/keepalive/">
-      <span class="no">07</span>
-      <span>
-        <h2>Your server believes it for two hours</h2>
-        <p>Keep-alive, dead connections and LWT. When a dead connection finally gets noticed, and when a Last Will fires — or quietly does not.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
+      <a class="card" href="/en/keepalive/">
+        <span class="no">07</span>
+        <span>
+          <h2>Your server believes it for two hours</h2>
+          <p>Keep-alive, dead connections and LWT. When a dead connection finally gets noticed, and when a Last Will fires — or quietly does not.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
 
-    <h2 class="group">How capacity collapses <em>the queries are fast and the system stalls anyway</em></h2>
+      </div>
+    </details>
 
-    <a class="card" href="/en/connpool/">
-      <span class="no">08</span>
-      <span>
-        <h2>A 17-millisecond query drains the pool</h2>
-        <p>OSIV and transaction boundaries. The query the leak warning names is not the culprit — watch where the hold time actually goes.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
+    <details class="group" open data-g="3">
+      <summary>
+        <span class="arw" aria-hidden="true"></span>
+        <h2>How capacity collapses <em>the queries are fast and the system stalls anyway</em></h2>
+        <span class="count">3</span>
+      </summary>
+      <div class="glist">
 
-    <a class="card" href="/en/backpressure/">
-      <span class="no">11</span>
-      <span>
-        <h2>Rejection is a signal, not a bug</h2>
-        <p>Backpressure and queue policy. Open the queue up and rejection does not go away — it turns into an OOM.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
+        <a class="card" href="/en/connpool/">
+        <span class="no">08</span>
+        <span>
+          <h2>A 17-millisecond query drains the pool</h2>
+          <p>OSIV and transaction boundaries. The query the leak warning names is not the culprit — watch where the hold time actually goes.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
 
-    <a class="card" href="/en/retrystorm/">
-      <span class="no">14</span>
-      <span>
-        <h2>The load is gone and it still will not recover</h2>
-        <p>Retry amplification and metastability. Put the slider back and the queue stays full — breaking and recovering have different thresholds.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
+      <a class="card" href="/en/backpressure/">
+        <span class="no">11</span>
+        <span>
+          <h2>Rejection is a signal, not a bug</h2>
+          <p>Backpressure and queue policy. Open the queue up and rejection does not go away — it turns into an OOM.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
 
-    <h2 class="group">Failing quietly <em>no exception, no log — just a wrong result</em></h2>
+      <a class="card" href="/en/retrystorm/">
+        <span class="no">14</span>
+        <span>
+          <h2>The load is gone and it still will not recover</h2>
+          <p>Retry amplification and metastability. Put the slider back and the queue stays full — breaking and recovering have different thresholds.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
 
-    <a class="card" href="/en/jobclaim/">
-      <span class="no">09</span>
-      <span>
-        <h2>Add a second instance and the same job runs twice</h2>
-        <p>Claiming work. Four strategies from in-memory locks to SKIP LOCKED, side by side — and why a single instance cannot tell them apart.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
+      </div>
+    </details>
 
-    <a class="card" href="/en/retryloop/">
-      <span class="no">10</span>
-      <span>
-        <h2>A rollback does not give the sequence back</h2>
-        <p>Retry loops and int4 sequence exhaustion. Watch the two bars — numbers handed out versus rows actually stored — separate.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
+    <details class="group" open data-g="4">
+      <summary>
+        <span class="arw" aria-hidden="true"></span>
+        <h2>Failing quietly <em>no exception, no log — just a wrong result</em></h2>
+        <span class="count">4</span>
+      </summary>
+      <div class="glist">
 
-    <a class="card" href="/en/correlation/">
-      <span class="no">12</span>
-      <span>
-        <h2>When matching responses by order goes wrong</h2>
-        <p>Request-response matching and correlationId. Pair by position and one misalignment never corrects itself.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
-    <a class="card" href="/en/writeskew/">
-      <span class="no">15</span>
-      <span>
-        <h2>Both checked, and both passed</h2>
-        <p>Isolation levels and write skew. Raise it to Repeatable Read and not one number changes — each writes only its own row.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
+        <a class="card" href="/en/jobclaim/">
+        <span class="no">09</span>
+        <span>
+          <h2>Add a second instance and the same job runs twice</h2>
+          <p>Claiming work. Four strategies from in-memory locks to SKIP LOCKED, side by side — and why a single instance cannot tell them apart.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
+
+      <a class="card" href="/en/retryloop/">
+        <span class="no">10</span>
+        <span>
+          <h2>A rollback does not give the sequence back</h2>
+          <p>Retry loops and int4 sequence exhaustion. Watch the two bars — numbers handed out versus rows actually stored — separate.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
+
+      <a class="card" href="/en/correlation/">
+        <span class="no">12</span>
+        <span>
+          <h2>When matching responses by order goes wrong</h2>
+          <p>Request-response matching and correlationId. Pair by position and one misalignment never corrects itself.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
+
+      <a class="card" href="/en/writeskew/">
+        <span class="no">15</span>
+        <span>
+          <h2>Both checked, and both passed</h2>
+          <p>Isolation levels and write skew. Raise it to Repeatable Read and not one number changes — each writes only its own row.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
+
+      </div>
+    </details>
 
   </div>
 
   <footer>Interactive visualizations of backend internals · <a href="/" hreflang="ko" lang="ko">한국어</a> / English · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
 </main>
+<script src="/shared/groups.js"></script>
 <script src="/shared/contact.js"></script>
 </body>
 </html>
