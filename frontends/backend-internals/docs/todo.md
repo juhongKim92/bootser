@@ -175,3 +175,20 @@
 - [ ] `not_found_handling = "404-page"` 인데 `public/404.html` 이 없다. 현재는 평문 404 응답
 - [ ] JSON-LD (`TechArticle`) 추가 여부 — 검색 결과 표시에 도움될 수 있음
 - [ ] 폰트를 CDN 대신 self-host 할지 (초기 렌더 지연)
+
+## 연락처 노출
+
+- [x] 푸터의 `mailto:` 평문 제거 — `shared/contact.js` 로 조립 (22개 파일 전부)
+  - 로컬 파트와 도메인을 **뒤집어 따로** 담고 `@` 는 `String.fromCharCode(64)` 로 만든다.
+    HTML 소스 어디에도 `@` 가 인접한 이메일 패턴이 없다 (`grep -E` 로 확인, 0건)
+  - JS 꺼진 환경용 `<noscript>contact (at) vermilion19 (dot) com</noscript>` 폴백
+  - **막는 것**: 정규식으로 소스를 훑는 수집기 — 대다수가 여기 해당
+  - **못 막는 것**: 헤드리스 브라우저로 렌더링까지 하는 수집기. 이건 이 방식으로
+    못 막고 폼이나 별칭 주소로 가야 한다
+
+- [ ] Cloudflare **Scrape Shield → Email Address Obfuscation** 켜져 있는지 확인
+  - 대시보드 토글 하나. 켜면 Cloudflare 가 응답 HTML 의 `mailto:` 를 알아서 난독화한다
+  - 다만 Workers/Pages 응답에도 적용되는지는 환경마다 다르다는 얘기가 있으니
+    켠 뒤 실제 응답 소스를 직접 확인할 것. 위 JS 조립과 겹쳐도 해가 없다
+- [ ] 더 갈 거라면 — 별칭 주소(`lab@`)를 따로 파서 푸터에만 쓰기.
+  오염되면 별칭만 버리면 되고 본 주소는 안전하다
