@@ -1,0 +1,107 @@
+/* ============================================================
+   08. 커넥션 풀 · OSIV · 트랜잭션 경계 — 실험대
+   ============================================================ */
+
+.lab{margin:32px 0 8px;border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);overflow:hidden}
+.lab section{border-bottom:1px solid var(--rule);padding:16px 18px}
+.lab section:last-child{border-bottom:none}
+.cap{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;display:block}
+
+/* --- 손잡이 --- */
+.dials{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-end}
+.dial label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
+.dial input[type=range]{width:145px;max-width:44vw;accent-color:var(--horizon);vertical-align:middle}
+.dial .v{font-family:var(--mono);font-size:17px;color:var(--ink);font-variant-numeric:tabular-nums;min-width:76px;display:inline-block}
+.dial .v small{font-size:11px;color:var(--ink-3)}
+.seg{display:flex;gap:0;border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+.seg button{border:none;border-right:1px solid var(--rule);border-radius:0;padding:6px 12px;font-size:11px;white-space:nowrap}
+.seg button:last-child{border-right:none}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.hint{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:8px;min-height:14px}
+.hint.warn{color:var(--blocked)}
+
+/* --- 요청 하나의 시간축 --- */
+.req{border:1px solid var(--rule);border-radius:3px;background:var(--paper);padding:13px 14px 11px}
+.bar{display:flex;height:32px;border-radius:2px;overflow:hidden;border:1px solid var(--rule)}
+.bar div{
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:9.5px;white-space:nowrap;overflow:hidden;min-width:0;
+}
+.bar .free{background:var(--paper-3);color:var(--ink-3)}
+.bar .db{background:var(--horizon);color:var(--paper)}
+.bar .held{
+  background:repeating-linear-gradient(45deg,var(--blocked) 0,var(--blocked) 5px,transparent 5px,transparent 10px);
+  color:var(--ink);
+}
+.bar .released{background:var(--paper-3);color:var(--live)}
+
+.hold{display:flex;height:16px;margin-top:3px}
+.hold div{font-family:var(--mono);font-size:9px;display:flex;align-items:center;justify-content:center;color:var(--ink-3)}
+.hold .on{border-top:2px solid var(--blocked);color:var(--blocked)}
+.hold .off{border-top:2px dotted var(--rule)}
+
+.legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:11px}
+.legend span{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9.5px;color:var(--ink-3)}
+.legend i{width:11px;height:11px;display:inline-block;border-radius:2px;border:1px solid var(--rule)}
+.legend i.db{background:var(--horizon);border-color:var(--horizon)}
+.legend i.held{background:repeating-linear-gradient(45deg,var(--blocked) 0,var(--blocked) 3px,transparent 3px,transparent 6px)}
+.legend i.free{background:var(--paper-3)}
+
+/* --- 풀 --- */
+.pool{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.pool i{
+  width:15px;height:22px;border-radius:2px;display:inline-block;
+  border:1px solid var(--rule);background:var(--paper);
+}
+.pool i.busy{background:var(--blocked);border-color:var(--blocked)}
+.pool i.spare{background:var(--live);border-color:var(--live);opacity:.32}
+.queued{
+  font-family:var(--mono);font-size:11px;color:var(--blocked);margin-top:9px;
+}
+
+/* --- 계기 --- */
+.meters{display:flex;flex-wrap:wrap;gap:14px 24px;margin-top:14px;padding-top:12px;border-top:1px solid var(--rule)}
+.meters div{min-width:92px}
+.meters .k{font-family:var(--mono);font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);display:block}
+.meters .n{font-family:var(--mono);font-size:18px;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.35}
+.meters .e{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);display:block}
+.meters .bad .n{color:var(--blocked)}
+.meters .good .n{color:var(--live)}
+
+/* --- 누수 경고 --- */
+.leak{
+  border-left:2px solid var(--blocked);background:var(--paper);
+  padding:10px 0 10px 13px;margin-top:14px;
+  font-family:var(--mono);font-size:10.5px;line-height:1.75;color:var(--ink-2);
+}
+.leak b{color:var(--blocked);font-weight:500}
+.leak .at{color:var(--ink-3)}
+.leak .culprit{color:var(--horizon)}
+
+/* --- 구성 비교 --- */
+.cmp{width:100%;border-collapse:collapse;font-size:13px}
+.cmp th,.cmp td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.cmp th{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.cmp td:first-child{font-size:12.5px;width:1%;white-space:nowrap;padding-right:16px}
+.cmp td.num{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
+.cmp tr.on td{background:var(--paper-3)}
+.cmp td.bad{color:var(--blocked)}
+.cmp td.good{color:var(--live)}
+
+/* --- 조작대 --- */
+.transport{background:var(--paper-3);display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.transport .keys{display:flex;gap:6px;flex-wrap:wrap}
+.narration{flex:1;min-width:240px;font-family:var(--serif);font-size:14.5px;line-height:1.65;color:var(--ink)}
+.narration .n{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-3);display:block;margin-bottom:3px}
+
+/* --- 안내 --- */
+.recipe{border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);padding:14px 16px;margin:14px 0;max-width:68ch}
+.recipe h4{font-family:var(--sans);font-size:14px;font-weight:700;margin:0 0 4px}
+.recipe .seq{font-family:var(--mono);font-size:11px;line-height:1.9;background:var(--paper);border:1px solid var(--rule);
+  border-radius:2px;padding:9px 11px;margin:9px 0;white-space:pre-wrap;color:var(--ink-2)}
+.recipe .seq em{font-style:normal;color:var(--horizon)}
+.recipe .why{font-size:13.5px;color:var(--ink-2);margin:0}
+.keytable{width:100%;border-collapse:collapse;margin:12px 0;max-width:68ch;font-size:13.5px}
+.keytable th,.keytable td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.keytable th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.keytable td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap;width:1%;padding-right:18px;color:var(--ink)}

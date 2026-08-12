@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A 17-millisecond query drains the connection pool — OSIV and transaction boundaries</title>
+<meta name="description" content="The leak warning points at a 17ms query. That query is not the culprit. See how OSIV and transaction boundaries stretch connection hold time, and how Little's Law decides how many connections you actually need.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/connpool/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/connpool/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/connpool/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/connpool/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="A 17-millisecond query drains the connection pool — OSIV and transaction boundaries">
+<meta property="og:description" content="The query the leak warning names is not the culprit. Watch where the hold time actually goes.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/connpool/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="A 17-millisecond query drains the connection pool">
+<meta name="twitter:description" content="The top of the leak stack is not the culprit — it is the stack from when the connection was borrowed.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/connpool-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/connpool/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>A 17-millisecond query drains the pool</h1>
+  <p class="lede">A connection leak warning fires. You open the query at the top of the stack and it runs in 17 milliseconds, straight off an index. The pool keeps draining anyway — because that query is not the culprit.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>configuration</label>
+          <div class="seg" id="segMode">
+            <button data-mode="osiv" aria-pressed="true">OSIV on</button>
+            <button data-mode="txin" aria-pressed="false">OSIV off</button>
+            <button data-mode="txout" aria-pressed="false">OSIV off + I/O outside tx</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>requests / sec</label>
+          <span class="v" id="vRps">50<small> req/s</small></span>
+          <input type="range" id="sRps" min="5" max="300" step="5" value="50" aria-label="requests per second">
+        </div>
+        <div class="dial">
+          <label>external call</label>
+          <span class="v" id="vIo">300<small> ms</small></span>
+          <input type="range" id="sIo" min="0" max="5000" step="100" value="300" aria-label="external call duration in milliseconds">
+        </div>
+        <div class="dial">
+          <label>pool size</label>
+          <span class="v" id="vPool">10<small> conns</small></span>
+          <input type="range" id="sPool" min="5" max="60" step="5" value="10" aria-label="connection pool size">
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">one request passing through</span>
+      <div class="req">
+        <div class="bar" id="bar"></div>
+        <div class="hold" id="hold"></div>
+        <div class="legend">
+          <span><i class="db"></i>query — actually using the database</span>
+          <span><i class="held"></i>holding the connection without using it</span>
+          <span><i class="free"></i>not holding a connection</span>
+        </div>
+        <div class="leak" id="leak"></div>
+        <div class="meters" id="meters"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">the pool — concurrent hold from Little's Law</span>
+      <div class="pool" id="pool"></div>
+      <div class="queued" id="queued"></div>
+    </section>
+
+    <section>
+      <span class="cap">same load, only the configuration changes</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button class="solid" id="btnPlay">play walkthrough</button>
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>Drive it yourself</h2>
+    <p>Time does not run in this lab either. Move a control and the whole condition is recomputed. Query times are fixed — the queries were fast from the start.</p>
+    <table class="keytable">
+      <tr><th>fixed</th><th>value</th></tr>
+      <tr><td>pre-processing</td><td>5ms — validation and deserialisation. No database</td></tr>
+      <tr><td>query 1</td><td><strong>17ms</strong> — the query the leak warning names</td></tr>
+      <tr><td>query 2</td><td>8ms</td></tr>
+      <tr><td>response render</td><td>25ms — serialisation. No database</td></tr>
+    </table>
+    <p><strong>Actual database time is 25ms in every configuration.</strong> The only thing that changes on this page is <em>how long the connection is held</em>.</p>
+
+    <h2>Things to try</h2>
+
+    <div class="recipe">
+      <h4>1. Start with no external call</h4>
+      <div class="seq">OSIV on · 50 req/s · external call 0 · pool 10
+
+hold time         <em>50ms</em>   (25ms of it database)
+connections needed <em>2.5</em>
+utilisation       25%</div>
+      <p class="why">Nothing is wrong here. OSIV being on does not show when requests are short. <strong>Plenty of services live like this happily for years.</strong> The trouble starts the moment something slow moves into the request.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. Add a 300ms external call — one S3 upload</h4>
+      <div class="seq">external call 300ms
+
+hold time          <em>350ms</em>  (25ms of it database — 7%)
+connections needed <em>17.5</em>  ← the pool holds 10
+capacity           <em>28.6 req/s</em>  ← 50 req/s are arriving</div>
+      <p class="why">Not one query got slower and the pool is dry. Of the 350ms hold, <strong>only 25ms — 7% — actually touches the database</strong>. The other 93% is spent holding a connection while waiting on S3. That is the hatched band above.</p>
+      <p class="why" style="margin-top:9px">And what shows up in the logs at this point is a connection-acquisition timeout and the leak warning discussed below. <strong>Neither of them points at S3.</strong></p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. Turn OSIV off — it helps less than you expect</h4>
+      <div class="seq">OSIV off (external call still inside the transaction)
+
+hold time          350ms → <em>325ms</em>
+connections needed 17.5 → <em>16.25</em>  ← still more than the pool of 10</div>
+      <p class="why">Turning OSIV off removes the response rendering window — 25ms. <strong>And that is all it removes.</strong> While the external call sits inside the transaction the connection stays held. This is where it becomes clear that OSIV is only <em>part</em> of the problem.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. Move the external call outside the transaction</h4>
+      <div class="seq">OSIV off + I/O outside tx
+
+hold time          325ms → <em>25ms</em>
+connections needed 16.25 → <em>1.25</em>
+capacity           30.8 → <em>400 req/s</em>  (13×)</div>
+      <p class="why">This is the actual fix. Take a connection, run query 1, <strong>give it back</strong>, go to S3, take one again for query 2. Hold time becomes <strong>completely independent of the external call</strong> — push the slider to five seconds and it stays at 25ms. Try it.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. Raise the external call to 3s and read the leak warning</h4>
+      <div class="seq">OSIV on · external call 3000ms
+
+hold 3.05s → exceeds leak-detection-threshold
+top of the warning stack  <em>the 17ms query 1</em></div>
+      <p class="why">Here is the heart of this page. The leak warning names <strong>where the connection was borrowed</strong>, not where it is being held. The first query borrowed it, so the first query's stack is what got captured. Tune that query all you like and 17ms becomes 16ms while the pool keeps draining.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>6. Make the pool five times bigger</h4>
+      <div class="seq">OSIV on · external call 300ms · pool 10 → 50
+
+at 50 req/s   needs 17.5 → a pool of 50 copes
+at 200 req/s  needs <em>70</em> → exhausted again</div>
+      <p class="why">A bigger pool holds for now. Then load quadruples and you are back in the same place. <strong>Without shortening hold time, pool size only buys time</strong> — and connections are a database-side resource you cannot grow indefinitely anyway.</p>
+    </div>
+
+    <h2>Why the top of the stack is not the culprit</h2>
+    <p>HikariCP's leak detection works like this: when a connection is handed out it starts a timer, and if the connection is not returned within <code>leak-detection-threshold</code> it logs a warning.</p>
+    <p>The important part is that the stack in that warning was <strong>captured when the connection was borrowed, not when the timer fired</strong>. It has to be — the leak-detection thread has no way of knowing where the holding thread currently is. All it has is the stack it recorded at hand-out time.</p>
+    <pre><code>Connection leak detection triggered for conn0, stack trace follows
+    at com.example.repository.OrderRepository.findByUser(...)   ← the 17ms query
+    at com.example.service.OrderService.getOrders(...)
+    ...</code></pre>
+    <p>So <strong>whichever query ran first in the request is always the one named</strong>. Not because it is slow, but because it is the one that <em>borrowed</em> the connection.</p>
+    <div class="callout">Read the warning backwards. Instead of tuning the query it names, ask <strong>"what else did this thread do after it took the connection?"</strong> Finding the external call or heavy rendering later in the same request comes first.</div>
+
+    <h2>OSIV — what the convenience costs</h2>
+    <p><code>spring.jpa.open-in-view</code> <strong>defaults to <code>true</code></strong>. It keeps the persistence context open until the request finishes, so lazy loading still works after you leave the service layer. A genuinely convenient way never to see <code>LazyInitializationException</code>.</p>
+    <p>The price is <strong>connection hold time</strong>. While that context is open the connection stays attached, so serialisation and view rendering after the transaction has committed still occupy a slot in the pool.</p>
+    <p>Spring Boot knows this and warns you at startup.</p>
+    <pre><code>spring.jpa.open-in-view is enabled by default. Therefore, database
+queries may be performed during view rendering. Explicitly configure
+spring.jpa.open-in-view to disable this warning</code></pre>
+    <p>If you have seen that line, it is asking you to turn it off explicitly.</p>
+    <pre><code>spring:
+  jpa:
+    open-in-view: false</code></pre>
+    <p>With it off, lazy loading blows up outside the service layer. That is <strong>correct behaviour</strong> — it forces you to say what you need at query time. Move it to a DTO projection or a <code>fetch join</code> and your query count drops along the way.</p>
+    <div class="callout">Strictly speaking, exactly when a connection is acquired and released depends on Hibernate's <code>connection.handling_mode</code>. This lab draws the <strong>worst case: borrowed at the first query, held to the end of the request</strong> — which is also what tends to be observed in production. In your own environment, measure the real hold time rather than assuming.</div>
+
+    <h2>Little's Law is all you need</h2>
+    <p>Every number on this page comes from one line.</p>
+    <pre><code>connections needed = requests per second × hold time (seconds)</code></pre>
+    <p>At 50 req/s with a 350ms hold, <code>50 × 0.35 = 17.5</code> connections are needed <strong>at the same time</strong>. A pool of 10 is not enough. Invert it and you get capacity directly.</p>
+    <pre><code>capacity = pool size ÷ hold time (seconds)
+         = 10 ÷ 0.35 = 28.6 req/s</code></pre>
+    <p>Note what is missing from that formula: <strong>query time</strong>. What appears is <em>hold time</em>. Making the query twice as fast removes 7% of the hold. Which is precisely why query tuning does not fix this.</p>
+
+    <h2>Keep the network out of transaction boundaries</h2>
+    <p>This is the half that remains after OSIV is off. While a transaction is open the connection is necessarily held, so <strong>the transaction boundary is the hold window</strong>.</p>
+    <pre><code>@Transactional                       // ← starts here
+public void upload(MultipartFile f) {
+    Order o = repo.findById(id);      // 17ms
+    s3.putObject(bucket, key, f);     // 3 seconds, connection still held
+    o.markUploaded();                 // 8ms
+}                                     // ← returned here</code></pre>
+    <p>Put <code>@Transactional</code> at class level and methods like this appear quietly. Three ways out:</p>
+    <table class="keytable">
+      <tr><th>situation</th><th>approach</th></tr>
+      <tr><td>read-only external round trip</td><td><code>@Transactional(NOT_SUPPORTED)</code> — no connection held during the trip</td></tr>
+      <tr><td>publish or notify after commit</td><td><code>@TransactionalEventListener(AFTER_COMMIT)</code> — runs after commit and release</td></tr>
+      <tr><td>the external result must be persisted</td><td><strong>split the transaction in two.</strong> read → (release) → external call → write</td></tr>
+    </table>
+    <p>If the publish must not be lost, step up to the <strong>Outbox pattern</strong>: write the event to a table in the same transaction and let a separate process read and publish it. The work inside the transaction shrinks to one local INSERT.</p>
+    <div class="callout">You will find advice to split transactions by injecting the bean into itself and calling through the proxy. Do not. It creates a circular reference and only reads correctly to someone who knows AOP. <code>@TransactionalEventListener</code> is the standard tool built for exactly this.</div>
+
+    <h2>Can't we just grow the pool?</h2>
+    <p>For now, yes. Then three things catch up with you.</p>
+    <ul>
+      <li><strong>More load puts you right back.</strong> With hold time unchanged, connections needed grow in direct proportion to load (recipe 6)</li>
+      <li><strong>Connections are a database-side resource.</strong> PostgreSQL forks a process and allocates memory per connection. Once instances × pool size exceeds <code>max_connections</code>, the database starts refusing</li>
+      <li><strong>A bigger pool is not a faster one.</strong> HikariCP's own documentation argues for small pools. Concurrency beyond your core count buys context switching and lock contention, not throughput</li>
+    </ul>
+    <p>If you have so many instances that the raw connection count is the problem, a pooler like <strong>PgBouncer</strong> in front is an option. But that solves a <em>connection count</em> problem, not a <em>hold time</em> problem. Long holds stall behind the pooler just the same.</p>
+
+    <h2>What to check in production</h2>
+    <p><strong>Two things to turn on first.</strong> Without them this page's problem is invisible.</p>
+    <pre><code>spring:
+  jpa:
+    open-in-view: false
+  datasource:
+    hikari:
+      leak-detection-threshold: 20000   # 20s. 0 means disabled (the default)
+      # size it to your core count. Bigger is not the answer
+      maximum-pool-size: 10</code></pre>
+    <p><code>leak-detection-threshold</code> is <strong>off by default</strong>. Leave it off and a connection can be held for minutes with nothing in the logs.</p>
+
+    <p><strong>Metrics to watch.</strong> Hikari exports all of these through Micrometer.</p>
+    <table class="keytable">
+      <tr><th>metric</th><th>what it tells you</th></tr>
+      <tr><td><code>hikaricp_connections_active</code></td><td>connections in use right now. <strong>The left-hand side of Little's Law</strong></td></tr>
+      <tr><td><code>hikaricp_connections_pending</code></td><td>threads waiting for a connection. <strong>Anything but zero means already exhausted</strong></td></tr>
+      <tr><td><code>hikaricp_connections_usage</code></td><td>hold time distribution. <strong>The star of this page.</strong> A p99 far above query time is your answer</td></tr>
+      <tr><td><code>hikaricp_connections_acquire</code></td><td>time spent waiting to get a connection</td></tr>
+    </table>
+    <p>Putting <code>usage</code> next to actual query time is the whole trick. <strong>The gap between them is the "held but idle" time</strong>, and this page is just a drawing of that gap.</p>
+
+    <p><strong>From the database side.</strong></p>
+    <pre><code>-- sessions holding a transaction open and doing nothing
+SELECT pid, state, now() - state_change AS idle_for,
+       now() - xact_start AS xact_age, wait_event_type, wait_event, query
+FROM pg_stat_activity
+WHERE state = 'idle in transaction'
+ORDER BY xact_start
+LIMIT 20;</code></pre>
+    <p>A long-standing <code>idle in transaction</code> means that session is <strong>holding a connection while the application does something else</strong> — and that something else is usually an external call. The <code>query</code> column holds the <em>last</em> statement executed, so that statement is not the culprit; go find <strong>what happened after it</strong> in the code.</p>
+
+    <p><strong>The order.</strong> When you hit pool exhaustion, work through it like this.</p>
+    <ol>
+      <li>Find when <code>pending</code> stopped being zero — establish the start</li>
+      <li>Compare <code>usage</code> p99 against query p99 — a gap means a hold problem</li>
+      <li>Look in the code at what happens during that gap — external call, rendering, OSIV</li>
+      <li>Touch pool size <strong>last</strong></li>
+    </ol>
+
+    <div class="callout">This model is simplified for teaching. Real requests vary in query count and external call duration, and bursty arrivals create waiting even in short windows. Little's Law is a statement about <strong>averages</strong> — it tells you how many connections are needed on average, not the instantaneous peak. Size a real pool with headroom on top of this.</div>
+
+  </article>
+
+  <footer>Connection pool · OSIV · transaction boundaries · simplified teaching model · <a href="/connpool/" hreflang="ko" lang="ko">한국어</a> / English · <a href="mailto:contact@vermilion19.com">contact@vermilion19.com</a></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  play:'play walkthrough', pause:'pause',
+  uRps:'req/s', uConn:'conns', noIo:'none',
+  m_osiv:'OSIV on', m_txin:'OSIV off', m_txout:'OSIV off + I/O outside tx',
+  sPre:'pre', sQ1:'query 1 · 17ms', sQ2:'query 2 · 8ms',
+  sIoHeld:'external call — holding the connection', sIoFree:'external call — connection released',
+  sRender:'response render · 25ms', sHold:'connection held $1', sReleased:'released',
+  mHold:'hold time', mOfDb:'$1 of it database', mNeed:'connections needed', mLittle:'rps × hold',
+  mUtil:'utilisation', mCap:'capacity', mAt:'at pool $1',
+  qOk:'$1 needed at once · pool of $2 — room to spare',
+  qShort:'$1 needed at once but the pool holds $2 — short by $3, threads queue up',
+  cMode:'configuration', cHold:'hold', cDb:'of it db', cNeed:'needed', cCap:'capacity (req/s)',
+  leakBody:'<b>Connection leak detection triggered</b> — held $1, over the $2s threshold\\n' +
+           '    <span class="at">at</span> com.example.repository.OrderRepository.findByUser(...)   <span class="culprit">← query 1 · $3</span>\\n' +
+           '    <span class="at">at</span> com.example.service.OrderService.getOrders(...)\\n' +
+           'The stack is <b>where the connection was borrowed</b>, not where it is being held.',
+  hShort:'$1 needed > pool of $2 — threads pile up waiting for a connection',
+  hLeak:'hold time is over the leak threshold — the warning fires, naming the first query',
+  hGood:'hold time is now independent of the external call — $1',
+  hOk:'utilisation $1%',
+  scene:[
+    'No external call yet. Hold time 50ms, 2.5 connections needed. OSIV being on does not show when requests are short — plenty of services live like this happily for years.',
+    'A 300ms S3 upload goes in. Not one query got slower, yet hold time is now 350ms and connections needed jumped to 17.5, past the pool of 10. Look at the hatched band: that is time spent holding a connection purely to wait on S3. Of the 350ms, only 25ms — 7% — touches the database.',
+    'OSIV off. The response rendering window drops out, so 350ms becomes 325ms. That is the entire gain. While the external call sits inside the transaction the connection stays held, and 16.25 connections still exceed the pool. OSIV was only part of the problem.',
+    'The external call moves outside the transaction. Hold time is 25ms — exactly the time actually spent in the database. Connections needed drop to 1.25 and capacity goes from 28.6 to 400 req/s, a factor of fourteen. Push the external call slider to five seconds and this number does not move.',
+    'OSIV back on, external call raised to 3 seconds. The leak warning fires, and the top of the stack is the 17ms query 1 — because HikariCP captures the stack when it hands the connection out. Where it was borrowed, not where it is held. Tuning that query will never drain-proof this pool.',
+    'Same three-second external call, but outside the transaction: hold time 25ms, and the warning is gone. Whether the call takes 3 seconds or 30 stops mattering, because no connection is being held through it.',
+    'Finally, the pool grows from 10 to 50 while load rises to 200 req/s. Seventy connections needed. Five times the pool, four times the load, and it is exhausted again. Without shortening hold time, pool size only ever buys time.'
+  ],
+};
+</script>
+<script src="/shared/connpool-lab.js"></script>
+</body>
+</html>

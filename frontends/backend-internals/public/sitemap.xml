@@ -162,6 +162,26 @@
     <priority>0.8</priority>
   </url>
 
+  <url>
+    <loc>https://lab.vermilion19.com/connpool/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/connpool/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/connpool/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/connpool/"/>
+    <lastmod>2026-08-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/connpool/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/connpool/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/connpool/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/connpool/"/>
+    <lastmod>2026-08-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
   <!-- 시각화를 추가할 때마다 아래 두 블록(한국어/영어)을 복사해 넣고 <slug> 와 lastmod 를 갱신합니다.
        hreflang 세 줄은 양쪽 모두에 똑같이 들어가야 합니다 — 한쪽만 있으면 구글이 무시합니다.
   <url>
