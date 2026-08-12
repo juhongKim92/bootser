@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>둘 다 확인했고 둘 다 통과했다 — 격리 수준과 write skew</title>
+<meta name="description" content="당직자가 최소 한 명은 남아야 하는데 둘이 동시에 '나 말고 한 명 더 있네'를 확인하고 둘 다 빠집니다. Read Committed 와 Repeatable Read 가 왜 완전히 같은 결과를 내는지, Serializable 이 무엇을 대신 요구하는지 확인합니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/writeskew/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/writeskew/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/writeskew/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/writeskew/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="둘 다 확인했고 둘 다 통과했다">
+<meta property="og:description" content="Repeatable Read 가 막아줄 것 같은데 안 막습니다. 각자 자기 행만 건드리니까요.">
+<meta property="og:url" content="https://lab.vermilion19.com/writeskew/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="둘 다 확인했고 둘 다 통과했다">
+<meta name="twitter:description" content="write skew — 행 락으로 안 잡히고 Repeatable Read 로도 안 막히는 자리.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/writeskew-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/writeskew/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>둘 다 확인했고 둘 다 통과했다</h1>
+  <p class="lede">당직자는 최소 한 명 남아야 합니다. 빠지려는 사람은 먼저 확인해요 — "나 말고 한 명 더 있네." 두 사람이 동시에 확인하면 <strong>둘 다 한 명 더 있다고 보고 둘 다 빠집니다.</strong> 각자 자기 행만 건드렸으니 락도 안 걸리고 예외도 안 납니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>격리 수준</label>
+          <div class="seg" id="segLvl" role="group" aria-label="트랜잭션 격리 수준">
+            <button data-lvl="rc" aria-pressed="true">Read Committed</button>
+            <button data-lvl="rr">Repeatable Read</button>
+            <button data-lvl="ser">Serializable</button>
+            <button data-lvl="lock">FOR UPDATE</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sD">당직자 수</label>
+          <span class="v" id="vD">5<small> 명</small></span>
+          <input type="range" id="sD" min="2" max="8" step="1" value="5" aria-label="당직자 수">
+        </div>
+        <div class="dial">
+          <label for="sGap">읽기 → 쓰기 간격</label>
+          <span class="v" id="vGap">0.6<small> 초</small></span>
+          <input type="range" id="sGap" min="0" max="240" step="10" value="60" aria-label="세고 나서 쓰기까지의 간격">
+        </div>
+        <div class="dial">
+          <label>&nbsp;</label>
+          <button id="btnRun">일시정지</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">당직 명단</span>
+      <div class="board">
+        <div class="roster" id="roster"></div>
+        <div class="txs" id="txs"></div>
+        <div class="inv" id="inv"></div>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">네 가지 방식이 각각 무엇을 주고 무엇을 받나</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+        <div class="speed" id="segSpeed" role="group" aria-label="재생 속도">
+          <button data-speed="0.5">0.5&times;</button>
+          <button data-speed="1" aria-pressed="true">1&times;</button>
+          <button data-speed="2">2&times;</button>
+        </div>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 06</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>격리 수준</td><td>네 방식을 같은 난수 씨앗에서 다시 돌립니다. 그래서 <strong>같은 사건이 같은 순서로</strong> 일어나고, 결과 차이는 오직 방식 때문입니다.</td></tr>
+    <tr><td>당직자 수</td><td>많을수록 동시에 빠지려는 사람이 늘어 겹칠 일이 많아집니다.</td></tr>
+    <tr><td>읽기 → 쓰기 간격</td><td>세고 나서 실제로 쓰기까지 걸리는 시간. <strong>0이면 겹칠 수가 없습니다.</strong></td></tr>
+  </table>
+
+  <p>각 트랜잭션이 하는 일은 이게 전부입니다.</p>
+
+  <div class="recipe">
+    <div class="seq">BEGIN;
+  n = SELECT count(*) FROM oncall WHERE on_duty;   <em>-- 읽기는 한 번뿐</em>
+  if (n &gt;= 2)
+    UPDATE oncall SET on_duty = false WHERE id = :me;
+COMMIT;</div>
+    <p class="why">여기서 중요한 것은 <strong><code>WHERE id = :me</code></strong> 입니다. 각자 자기 행만 씁니다. 서로 다른 행이니 행 락이 겹치지 않고, 그래서 데이터베이스가 보기에 두 트랜잭션은 아무 관계가 없습니다.</p>
+  </div>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 간격이 0이면 네 방식이 구별되지 않는다</h4>
+    <div class="seq">읽기 → 쓰기 간격 0초
+겹친 트랜잭션 거의 0 · 불변식 깬 커밋 0건 · 최소 당직 1명</div>
+    <p class="why">세자마자 쓰면 다른 사람이 끼어들 틈이 없습니다. 격리 수준 버튼을 네 개 다 눌러보세요 — 숫자가 하나도 안 바뀝니다. <strong>충돌이 없으면 격리 수준은 아무 의미가 없어요.</strong> 개발 장비에서 재현이 안 되는 이유가 이겁니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 간격을 0.6초로 — 둘 다 세고 둘 다 빠진다</h4>
+    <div class="seq">Read Committed · 당직자 5명 · 간격 0.6초
+1,200초 동안 커밋 367건 · <em>불변식 깬 커밋 6건</em> · 최소 당직 <em>0명</em></div>
+    <p class="why">진행 중인 트랜잭션 줄을 보세요. 두 사람이 각각 "2명 봤음"을 들고 있는데 지금 당직은 이미 1명입니다. 둘 다 조건을 통과했고 둘 다 씁니다. <strong>예외도 롤백도 없습니다.</strong> 로그에는 정상 커밋 두 건만 남아요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Repeatable Read 로 바꾼다 — 숫자가 하나도 안 바뀐다</h4>
+    <div class="seq">Repeatable Read · 나머지 동일
+커밋 367건 · 불변식 깬 커밋 <em>6건</em> · 최소 당직 <em>0명</em>
+<em>Read Committed 와 완전히 동일</em></div>
+    <p class="why"><strong>이 페이지의 핵심이 여기입니다.</strong> 격리 수준을 올렸는데 결과가 소수점 하나까지 같습니다. 이유는 두 가지예요. 첫째, 앱이 <strong>한 번만 읽습니다</strong> — 반복 읽기를 안 하니 "반복 읽기 보장"이 쓸 자리가 없어요. 둘째, 각자 <strong>자기 행만 씁니다</strong> — 같은 행을 고쳤다면 PostgreSQL 의 Repeatable Read 가 <code>40001</code> 을 던졌을 텐데, 다른 행이라 먼저 쓴 사람이 이기고 말고 할 것도 없습니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. 당직자를 8명으로 늘린다</h4>
+    <div class="seq">Read Committed · 8명 · 간격 0.6초
+겹친 트랜잭션 57회 → <em>171회</em> · 불변식 깬 커밋 6건 → <em>10건</em></div>
+    <p class="why">사람이 늘면 동시에 빠지려는 조합이 늘고 겹침이 세 배가 됩니다. <strong>부하가 늘면 확률이 아니라 빈도가 늘어납니다.</strong> 스테이징에서 안 나던 게 프로덕션에서 나는 자리예요 — 코드는 같고 동시성만 다릅니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Serializable — 막아주는 대신 예외를 던진다</h4>
+    <div class="seq">Serializable · 나머지 동일
+불변식 깬 커밋 <em>0건</em> · 최소 당직 1명
+대신 <em>직렬화 실패 62번</em> (커밋 367 → 332)</div>
+    <p class="why">PostgreSQL 의 Serializable 은 락이 아니라 <strong>SSI</strong> 입니다. 내가 읽은 술어를 내가 커밋하기 전에 누가 바꿨으면 커밋 시점에 <code>40001 could not serialize access</code> 를 던져요. 불변식은 지켜집니다. 그런데 <strong>62번 던진 예외를 누가 받느냐</strong>가 남습니다. 재시도 코드가 없으면 정합성 문제가 500 에러로 형태만 바뀐 겁니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. SELECT ... FOR UPDATE — 충돌을 물질화한다</h4>
+    <div class="seq">Read Committed + FOR UPDATE
+불변식 깬 커밋 0건 · 직렬화 실패 0번
+겹친 트랜잭션 <em>0회</em> — 대신 줄을 선다</div>
+    <p class="why">세는 쿼리에서 <strong>읽는 행들을 잠그면</strong> 두 번째 사람은 첫 번째가 커밋할 때까지 아예 읽지 못합니다. 겹침 자체가 0이 돼요. 서로 관계없어 보이던 두 트랜잭션에 억지로 관계를 만들어준 겁니다 — 이걸 <em>충돌의 물질화</em>라고 부릅니다. 예외가 없어 재시도 코드도 필요 없지만, <strong>대기가 생기고 데드락 여지가 열립니다.</strong></p>
+  </div>
+
+  <h2>왜 Repeatable Read 가 안 막는가</h2>
+
+  <p>이름이 약속하는 것은 <strong>같은 것을 다시 읽으면 같은 값이 나온다</strong>는 것뿐입니다. 이 코드는 다시 읽지 않아요. 한 번 읽고, 그 값으로 판단하고, 씁니다. 반복 읽기 보장은 쓸 자리가 없습니다.</p>
+
+  <p>실험대의 트랜잭션 줄에 <em>"다시 세면"</em> 칸을 둔 이유가 그겁니다. Read Committed 에서는 그 값이 현재 커밋된 수라 처음 읽은 값과 <span style="color:var(--blocked)">달라져 있고</span>, Repeatable Read 에서는 스냅샷이 얼어 있어 처음 값 그대로예요. <strong>두 수준은 분명히 다르게 동작합니다. 그 차이가 이 버그를 막지 못할 뿐입니다.</strong></p>
+
+  <div class="callout">막아주는 것은 격리 수준의 <em>높이</em>가 아니라, 데이터베이스가 <strong>두 트랜잭션 사이에 관계가 있다는 걸 알 수 있느냐</strong>입니다. 자기 행만 쓰면 관계가 안 보입니다.</div>
+
+  <p>PostgreSQL 의 Repeatable Read 는 표준 RR 보다 오히려 강합니다 — 스냅샷 격리라서 팬텀도 안 보여요. 그런데도 write skew 는 못 막습니다. <strong>"MySQL 에서 되던 게 PostgreSQL 에서 안 된다"거나 그 반대의 이야기가 여기서 나오지만, 이 버그에 관해서는 둘 다 못 막습니다.</strong></p>
+
+  <h2>lost update 와 무엇이 다른가</h2>
+
+  <table class="keytable">
+    <tr><th></th><th>lost update</th><th>write skew</th></tr>
+    <tr><td>쓰는 행</td><td>같은 행</td><td><strong>서로 다른 행</strong></td></tr>
+    <tr><td>행 락</td><td>걸린다</td><td><strong>안 걸린다</strong></td></tr>
+    <tr><td>Repeatable Read</td><td>막는다 (<code>40001</code>)</td><td><strong>못 막는다</strong></td></tr>
+    <tr><td>깨지는 것</td><td>한 행의 값</td><td><strong>여러 행에 걸친 불변식</strong></td></tr>
+  </table>
+
+  <p>재고 차감처럼 같은 행을 두고 다투는 문제는 <a href="/jobclaim/">9번(작업 선점)</a>에서 다룬 구조 그대로입니다. write skew 가 어려운 건 <strong>다투는 지점이 행이 아니라 조건</strong>이라서예요. 그래서 락을 걸 대상이 눈에 안 보입니다.</p>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>Spring</td><td><code>@Transactional(isolation = Isolation.SERIALIZABLE)</code> 로 올렸다면, <strong>같은 커밋에 재시도가 들어갔는지</strong> 확인하세요. 안 들어갔으면 정합성 문제를 500 으로 바꾼 겁니다.</td></tr>
+    <tr><td>재시도 위치</td><td><code>@Retryable</code> 은 <strong>트랜잭션 바깥</strong>에 있어야 합니다. 안쪽에 두면 이미 죽은 트랜잭션 안에서 재시도합니다. 프록시 순서 함정이에요.</td></tr>
+    <tr><td>잡을 예외</td><td><code>SQLState 40001</code>. Spring 에서는 <code>CannotAcquireLockException</code> · <code>ConcurrencyFailureException</code> 으로 올라옵니다.</td></tr>
+    <tr><td>제약으로 막기</td><td>가능하면 <strong>DB 제약</strong>으로 표현하세요. 개수 불변식은 대개 별도 집계 행 하나에 <code>CHECK</code> 를 걸고 그 행을 함께 갱신하는 식으로 물질화합니다.</td></tr>
+    <tr><td>비용</td><td>Serializable 은 읽기 술어를 추적하므로 공짜가 아닙니다. 경합이 심하면 40001 이 늘고, 그러면 재시도가 늘고, <a href="/retrystorm/">14번</a>의 증폭이 여기서도 시작됩니다.</td></tr>
+    <tr><td>테스트</td><td>간격 0에서는 절대 재현되지 않습니다. <strong>읽기와 쓰기 사이에 일부러 지연을 넣는 테스트</strong>가 아니면 이 버그는 CI 를 그냥 통과합니다.</td></tr>
+  </table>
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/writeskew/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  pause:'일시정지', resume:'다시 시작',
+  uPeople:'명', uSec:'초',
+  names:['한지원','서민재','오세훈','임하늘','강도윤','유채원','박준서','나겨울'],
+  pOn:'당직 중', pOff:'빠짐 · $1초', pTx:'빠지는 중…',
+  txRead:'세어보니 $1명', txAgain:'다시 세면 $1명',
+  txWrite:'빠진다', txBreak:'0명이 된다', txSkip:'못 빠진다', txNone:'진행 중인 트랜잭션 없음',
+  invOn:'명 당직 중', invRule:'규칙: 최소 1명', invBroken:'규칙이 깨졌다 — 당직자가 없다',
+  mCommit:'커밋', mAbort:'직렬화 실패 40001', mBroke:'불변식 깬 커밋', mMin:'최소 당직', mPairs:'겹친 트랜잭션',
+  n_rc:'Read Committed', n_rr:'Repeatable Read', n_ser:'Serializable', n_lock:'RC + FOR UPDATE',
+  cLvl:'방식', cSkew:'write skew', c40001:'40001', cCost:'대가',
+  cYes:'막지 못한다', cNo:'막는다', cThrows:'던진다', cNone:'없음',
+  cost_rc:'없음 — 그래서 조용히 틀린다', cost_rr:'없음 — 그래서 조용히 틀린다',
+  cost_ser:'재시도 코드가 반드시 필요하다', cost_lock:'대기 · 데드락 여지',
+  vBroke:'<b>불변식이 깨졌다.</b> $2 에서 당직자가 0명이 된 커밋이 <b>$1건</b>.<br>예외도 롤백도 없었다 — 로그에는 정상 커밋만 남는다.',
+  vSer:'<b>불변식은 지켜졌다.</b> 대신 <b>40001 을 $1번</b> 던졌다 <span class="at">— 이 예외를 받는 코드가 있어야 한다</span>',
+  vLock:'<b>불변식은 지켜졌다.</b> 읽는 행을 잠가 겹침을 0으로 만들었다 <span class="at">— 대신 줄을 선다</span>',
+  vYet:'<b>$1.</b> 아직 겹치지 않았을 뿐이다 — 겹치는 순간 통과한다',
+  hNoOverlap:'겹친 트랜잭션이 없다 — 지금은 네 방식이 구별되지 않는다',
+  hBroke:'둘 다 확인했고 둘 다 통과했다 — 당직자가 0명이 됐다',
+  hSafe:'겹치는 트랜잭션이 있지만 불변식은 지켜지고 있다',
+  hWaiting:'겹치는 트랜잭션이 있다 — 조건을 함께 통과하는 순간 깨진다',
+  scene:[
+    '읽기와 쓰기 사이 간격을 0으로 뒀습니다. 세자마자 쓰니 다른 사람이 끼어들 틈이 없어요. 겹친 트랜잭션이 거의 없고 불변식도 안 깨집니다. 격리 수준 버튼을 네 개 다 눌러보세요 — 숫자가 하나도 안 바뀝니다. 충돌이 없으면 격리 수준은 아무 의미가 없습니다.',
+    '간격을 0.6초로 벌렸습니다. 트랜잭션 줄을 보세요 — 두 사람이 각각 "2명 봤음"을 들고 있는데 지금 당직은 이미 1명입니다. 둘 다 조건을 통과했고 둘 다 씁니다. 예외도 롤백도 없어요. 1,200초 동안 불변식을 깬 커밋이 6건 쌓이고, 최소 당직이 0명까지 내려갑니다.',
+    'Repeatable Read 로 올렸습니다. 같은 씨앗이라 같은 사건이 같은 순서로 일어나요. 커밋 367건, 불변식 깬 커밋 6건 — 방금과 완전히 같습니다. 격리 수준을 올렸는데 아무것도 안 바뀌었어요. 앱이 한 번만 읽으니 반복 읽기 보장이 쓸 자리가 없고, 각자 자기 행만 쓰니 행 락도 안 겹칩니다.',
+    '당직자를 8명으로 늘렸습니다. 동시에 빠지려는 조합이 늘어 겹친 트랜잭션이 57회에서 171회로 뜁니다. 불변식 깬 커밋도 6건에서 10건이 돼요. 코드는 그대로고 동시성만 달라졌습니다. 스테이징에서 안 나던 게 프로덕션에서 나는 자리가 정확히 여깁니다.',
+    'Serializable 입니다. 불변식 깬 커밋이 0건이 됐어요. PostgreSQL 은 락이 아니라 SSI 로 막습니다 — 내가 읽은 술어를 내 커밋 전에 누가 바꿨으면 40001 을 던져요. 그런데 그게 62번입니다. 커밋이 367건에서 332건으로 줄었고요. 이 예외를 받아 재시도하는 코드가 없으면, 정합성 문제를 500 에러로 바꾼 것뿐입니다.',
+    '마지막으로 세는 쿼리에 FOR UPDATE 를 붙였습니다. 읽는 행이 잠기니 두 번째 사람은 첫 번째가 커밋할 때까지 아예 읽지 못해요. 겹친 트랜잭션이 0회가 됐습니다. 예외가 없어 재시도 코드도 필요 없지만, 공짜는 아닙니다 — 대기가 생기고 잠그는 순서가 엇갈리면 데드락이 열립니다.'
+  ],
+};
+</script>
+<script src="/shared/writeskew-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>
