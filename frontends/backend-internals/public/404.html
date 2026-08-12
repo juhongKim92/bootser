@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>404 — 없는 주소입니다 · Backend Internals</title>
+<meta name="robots" content="noindex, follow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<style>
+  .code{
+    font-family:var(--mono);font-size:12px;letter-spacing:.22em;
+    color:var(--ink-3);margin-top:52px;
+  }
+  .msg{font-family:var(--serif);font-size:19px;line-height:1.6;color:var(--ink-2);margin-top:14px;max-width:54ch}
+  .msg[lang="en"]{margin-top:10px;color:var(--ink-3);font-size:17px}
+  .ways{margin-top:34px;border-top:1px solid var(--rule)}
+  .way{
+    display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+    padding:16px 0;border-bottom:1px solid var(--rule);
+    text-decoration:none;color:inherit;transition:background .15s;
+  }
+  .way:hover{background:var(--paper-2)}
+  .way h2{font-family:var(--serif);font-size:17px;font-weight:700;margin:0;padding:0;border:none;line-height:1.35}
+  .way p{font-size:13.5px;color:var(--ink-2);margin-top:4px}
+  .way .go{
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-3);border:1px solid var(--rule);padding:3px 7px;border-radius:2px;white-space:nowrap;
+  }
+  .asked{
+    font-family:var(--mono);font-size:11px;color:var(--ink-3);
+    margin-top:26px;word-break:break-all;
+  }
+  .asked b{color:var(--ink-2);font-weight:400}
+  @media (max-width:600px){
+    .way{flex-direction:column;gap:6px}
+    .way .go{align-self:flex-start}
+  }
+</style>
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">Backend Internals</a>
+  <nav><a class="btn" href="/en/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <p class="code">404 · NOT FOUND</p>
+  <h1>없는 주소입니다</h1>
+  <p class="msg">주소를 잘못 입력했거나, 있던 페이지가 옮겨졌을 수 있습니다.</p>
+  <p class="msg" lang="en">This address does not exist. It may have been mistyped, or the page may have moved.</p>
+
+  <div class="ways">
+    <a class="way" href="/">
+      <span>
+        <h2>목록으로</h2>
+        <p>공개된 시각화 전부를 한 화면에서 봅니다.</p>
+      </span>
+      <span class="go">한국어</span>
+    </a>
+    <a class="way" href="/en/" hreflang="en" lang="en">
+      <span>
+        <h2>Back to the index</h2>
+        <p>Every published visualization, on one page.</p>
+      </span>
+      <span class="go">English</span>
+    </a>
+  </div>
+
+  <p class="asked">요청한 주소 · requested — <b id="asked"></b></p>
+
+  <footer>백엔드 내부 동작 인터랙티브 시각화 · <a href="/">한국어</a> / <a href="/en/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+</main>
+
+<script>
+  // 어떤 주소로 왔는지 그대로 보여준다 — 오타인지 옮겨진 페이지인지 판단할 단서
+  document.getElementById('asked').textContent = location.pathname + location.search;
+</script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>
