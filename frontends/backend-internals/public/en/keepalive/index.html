@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keep-alive and dead connections — your server believes it for two hours</title>
+<meta name="description" content="When does a server notice a client that lost power? With default TCP keepalive, two hours and eleven minutes. And if the application hangs instead, never. Work through when a Last Will fires and when it does not.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/keepalive/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/keepalive/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/keepalive/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/keepalive/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="Keep-alive and dead connections — your server believes it for two hours">
+<meta property="og:description" content="Default TCP keepalive takes 2h11m to notice a dead connection. If the app hangs instead, it never notices at all.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/keepalive/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Keep-alive and dead connections — your server believes it for two hours">
+<meta name="twitter:description" content="When a dead connection is noticed, and when a Last Will fires.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/keepalive-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/keepalive/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>Your server believes it for two hours</h1>
+  <p class="lede">A client just lost power. The socket on your server is still <code>ESTABLISHED</code>. It is still in the connected list. When will the server find out — and where did the messages you sent in the meantime go?</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>how it ended</label>
+          <div class="seg" id="segKind">
+            <button data-kind="clean" aria-pressed="false">clean close</button>
+            <button data-kind="abrupt" aria-pressed="true">power cut</button>
+            <button data-kind="hang" aria-pressed="false">app hang</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>detection</label>
+          <div class="seg" id="segMode">
+            <button data-mode="tcpDefault" aria-pressed="true">TCP default</button>
+            <button data-mode="tcpTuned" aria-pressed="false">TCP tuned</button>
+            <button data-mode="app" aria-pressed="false">app keep-alive</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>keep-alive interval</label>
+          <span class="v" id="vKa">60<small> s</small></span>
+          <input type="range" id="sKa" min="5" max="300" step="5" value="60" aria-label="keep-alive interval in seconds">
+        </div>
+        <div class="dial">
+          <label>will delay</label>
+          <span class="v" id="vWill">0<small> s</small></span>
+          <input type="range" id="sWill" min="0" max="120" step="10" value="0" aria-label="Will Delay Interval in seconds">
+        </div>
+        <div class="dial">
+          <label>reconnects after</label>
+          <span class="v" id="vBack"><small>never returns</small></span>
+          <input type="range" id="sBack" min="0" max="300" step="10" value="0" aria-label="time until the client reconnects, in seconds">
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">from the moment the client died</span>
+      <div class="tl">
+        <div class="bar" id="bar"></div>
+        <div class="axis" id="axis"></div>
+        <div class="marks" id="marks"></div>
+        <div class="verdict" id="verdict"></div>
+        <div class="meters" id="meters"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">same conditions, only the detection method changes</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section>
+      <span class="cap">sequence of events</span>
+      <div class="events" id="events"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button class="solid" id="btnPlay">play walkthrough</button>
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>Drive it yourself</h2>
+    <p>Time does not run in this lab. Move a control and it recomputes the whole sequence of events for those conditions — there is no waiting out two hours and eleven minutes in real time.</p>
+    <table class="keytable">
+      <tr><th>control</th><th>what happens</th></tr>
+      <tr><td>how it ended</td><td>clean close (sends FIN) / power cut (sends nothing) / app hang (kernel answers, application does not)</td></tr>
+      <tr><td>detection</td><td>TCP default / TCP tuned / application keep-alive</td></tr>
+      <tr><td>keep-alive interval</td><td>Both <code>tcp_keepalive_time</code> for the tuned case and the interval for app keep-alive. It <strong>greys out under TCP default</strong> — that is an OS setting, not something the app picks</td></tr>
+      <tr><td>will delay</td><td>MQTT 5's <code>Will Delay Interval</code>. The broker waits this long after detection before publishing the Will</td></tr>
+      <tr><td>reconnects after</td><td>How long until the client returns on the same session. Come back before the Will fires and it is cancelled</td></tr>
+    </table>
+
+    <h2>Things to try</h2>
+
+    <div class="recipe">
+      <h4>1. Toggle between clean close and power cut</h4>
+      <div class="seq">leave detection on TCP default
+
+clean close  detected <em>immediately</em>   Will <em>not published</em>
+power cut    detected <em>2h 11m 15s</em>     Will published</div>
+      <p class="why">One button apart, and completely different outcomes. A clean close works because the client <strong>sends a FIN</strong>, so the server knows at once. Cut the power and nobody says anything. The only way the server can find out is <strong>to go and ask.</strong></p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. Look at what the TCP defaults actually are</h4>
+      <div class="seq">power cut + TCP default
+
+tcp_keepalive_time    7200s  (2 hours)
+tcp_keepalive_intvl     75s
+tcp_keepalive_probes      9
+
+7200 + 75 × 9 = <em>7875s = 2h 11m 15s</em></div>
+      <p class="why"><strong>Two hours</strong> before the first probe even goes out. That is the Linux default, and most servers run it untouched. For those two hours a dead client sits happily in the connected list.</p>
+      <p class="why" style="margin-top:9px">Worse: <strong>TCP keepalive is off by default.</strong> Without <code>SO_KEEPALIVE</code> on the socket, even that two-hour timer never starts, and detection <em>never happens at all</em>.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. Switch to app hang — the heart of this page</h4>
+      <div class="seq">app hang + TCP default or TCP tuned
+
+detected  <em>never</em>
+Will      <em>never published</em>
+
+switch the same case to app keep-alive → 1m 30s</div>
+      <p class="why">This is the important one. A process can deadlock, sit in a long GC pause, or exhaust its thread pool, and <strong>the kernel's TCP stack is entirely fine.</strong> A keepalive probe arrives and the kernel ACKs it on its own. TCP reports, quite correctly, that the connection is alive.</p>
+      <p class="why" style="margin-top:9px">The trouble is that this is not what we wanted to know. <strong>TCP keepalive checks whether the wire is alive, not whether the application can do any work.</strong> For that, the application itself has to answer.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. Push the keep-alive interval up</h4>
+      <div class="seq">power cut + app keep-alive
+
+interval  10s  → detected in <em>15s</em>
+interval  60s  → detected in <em>1m 30s</em>
+interval 120s  → detected in <em>3m</em>       (ties with TCP tuned)
+interval 300s  → detected in <em>7m 30s</em>    (slower than TCP tuned)</div>
+      <p class="why">MQTT disconnects when nothing arrives within <strong>one and a half times</strong> the interval. A longer interval means proportionally later detection. Past two minutes it becomes <strong>slower than a tuned OS setting</strong> (<code>interval + 60s</code>). Stretching the interval to save battery is not always the win it looks like.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. Use Will Delay to stop phantom alerts</h4>
+      <div class="seq">power cut + app keep-alive (60s)
+will delay 60s, reconnects after 100s
+
+detected            1m 30s
+Will scheduled for  2m 30s
+reconnected at      1m 40s  ← back before it fired
+
+Will  <em>cancelled</em></div>
+      <p class="why">Fire an "offline" alert every time a client goes through a tunnel and nobody trusts the alerts any more. MQTT 5's <code>Will Delay Interval</code> makes the broker <strong>wait a moment after detecting</strong> before publishing. Return on the same session in that window and the Will is quietly cancelled. Push the reconnect slider past the scheduled time and watch it fire after all.</p>
+    </div>
+
+    <h2>Half-open connections</h2>
+    <p>The normal way a TCP connection ends is <strong>an exchange of FINs</strong>. The catch is that this only happens <em>when both sides cooperate</em>.</p>
+    <table class="keytable">
+      <tr><th>situation</th><th>FIN</th><th>what the server sees</th></tr>
+      <tr><td>clean close</td><td>arrives</td><td>knows immediately</td></tr>
+      <tr><td>process killed</td><td>arrives (the kernel sends it)</td><td>knows immediately — usually an RST</td></tr>
+      <tr><td>power cut</td><td>never</td><td>nothing at all</td></tr>
+      <tr><td>link goes down</td><td>never</td><td>nothing at all</td></tr>
+      <tr><td>NAT or firewall entry expires</td><td>never</td><td>nothing at all</td></tr>
+    </table>
+    <p>The bottom three are <strong>half-open connections</strong>. The server-side socket stays <code>ESTABLISHED</code>, shows up perfectly healthy in <code>ss -tn</code>, and counts toward your connection total. There is simply nobody on the other end.</p>
+    <div class="callout">Worth noticing: <strong><code>kill</code>ing a process and cutting power are not the same thing at all.</strong> When a process dies the kernel survives it, cleans up the socket and sends a FIN or RST. Which means testing by hitting <code>Ctrl+C</code> on your dev server reproduces <em>none</em> of the problems on this page.</div>
+
+    <h2>Wouldn't writing to it tell us?</h2>
+    <p>It would. Write to a dead peer and TCP starts retransmitting, eventually gives up and surfaces an error. Just not quickly: with Linux's default <code>tcp_retries2</code> of 15, that takes <strong>roughly fifteen minutes</strong>.</p>
+    <p>And it comes with a condition — <strong>you have to have something to send.</strong> A quiet chat room goes hours with nobody sending anything, and dead connections keep counting as live the whole time. That is exactly why keep-alive exists: <strong>to ask periodically even when there is nothing to say.</strong></p>
+
+    <h2>Three layers of keep-alive</h2>
+    <p>The names are similar enough to blur together, but they sit at different layers and check different things.</p>
+    <table class="keytable">
+      <tr><th>layer</th><th>what it verifies</th><th>catches an app hang?</th></tr>
+      <tr><td>TCP keepalive</td><td>the wire and the peer's kernel are alive</td><td><strong>no</strong></td></tr>
+      <tr><td>MQTT PINGREQ<br>WebSocket ping</td><td>the protocol layer responds</td><td>depends on the implementation</td></tr>
+      <tr><td>application heartbeat</td><td>the application can actually do work</td><td>yes</td></tr>
+    </table>
+    <p>Watch that middle row. <strong>Browsers answer WebSocket ping frames with a pong automatically</strong>, even when the JavaScript is completely frozen. So a server that judges "client healthy" from ping/pong <em>counts frozen tabs as healthy</em>. On top of that, browser JavaScript has no API for sending ping frames at all, so the client-to-server direction has to be an application message anyway.</p>
+    <div class="callout">Which is why production converges on an <strong>application-level heartbeat</strong> — literally exchanging something like <code>{"type":"ping"}</code>. It looks crude, but it is the only way to verify that the application is alive and processing messages. For it to mean anything, the reply has to travel <strong>the same thread pool and the same event loop as real message handling.</strong></div>
+
+    <h2>Last Will and Testament</h2>
+    <p>A Will is <strong>a note you leave with the broker</strong> when you connect: "if I disappear without saying goodbye, publish this for me."</p>
+    <pre><code>MqttConnectOptions o = new MqttConnectOptions();
+o.setWill("status/device-42", "offline".getBytes(), 1, true);
+o.setKeepAliveInterval(60);
+o.setCleanSession(false);</code></pre>
+    <p>What matters is <strong>when it fires and when it does not</strong>.</p>
+    <table class="keytable">
+      <tr><th>situation</th><th>Will</th></tr>
+      <tr><td>disconnects with a proper <code>DISCONNECT</code></td><td><strong>not published</strong></td></tr>
+      <tr><td>keep-alive timeout</td><td>published</td></tr>
+      <tr><td>network error or power cut</td><td>published</td></tr>
+      <tr><td>broker closes it on a protocol error</td><td>published</td></tr>
+      <tr><td>the broker itself goes down</td><td><strong>not published</strong> — the one holding the note died</td></tr>
+    </table>
+    <p>That first row is the design intent. A client shutting down cleanly can tidy up its own state, so it needs no will. <strong>The fact that a Will was published is itself the signal that something ended abnormally.</strong></p>
+    <p>The last row is the trap people miss. When a broker dies every client disconnects, and <strong>not a single Will goes out</strong> — the executor of the will went down with them. Manage device presence purely through LWT and every device stays frozen as "online" through a broker restart.</p>
+    <div class="callout">MQTT 5 adds one exception. Send a <code>DISCONNECT</code> with reason code <code>0x04</code> (Disconnect with Will Message) and the Will is <strong>published despite the clean close</strong> — for the case where the shutdown is planned but the status message is still wanted.</div>
+
+    <h2>Building presence that actually works</h2>
+    <p>A Will is <strong>an event</strong>, not <strong>a state</strong>. Try to reconstruct state from events alone and it drifts. A combination that holds up in production looks like this.</p>
+    <ul>
+      <li><strong>On connect</strong> — publish <code>online</code> retained, so anyone subscribing later immediately gets the current state</li>
+      <li><strong>Will</strong> — register <code>offline</code> retained, so the broker overwrites it for you on an abnormal end</li>
+      <li><strong>On clean shutdown</strong> — publish <code>offline</code> yourself, then <code>DISCONNECT</code>. No Will fires, so this is on you</li>
+      <li><strong>Carry a timestamp</strong> so an out-of-order delivery cannot let a stale value overwrite a fresh one</li>
+      <li><strong>Plan for broker restarts</strong> — the real source of truth is <em>when something was last heard from</em>. You need a sweeper that periodically ages stale entries out to offline</li>
+    </ul>
+
+    <h2>What to check in production</h2>
+    <p><strong>See whether connection counts exceed real users.</strong> Accumulating half-open connections show up here first. If your connected count creeps upward and drops sharply on restart, this page is your problem.</p>
+    <pre><code># connections the server is holding
+ss -tn state established '( sport = :8080 )' | wc -l
+
+# whether keepalive is actually on, and how much timer is left
+ss -tno state established '( sport = :8080 )' | grep -o 'timer:([^)]*)' | sort | uniq -c
+
+# current kernel settings
+sysctl net.ipv4.tcp_keepalive_time net.ipv4.tcp_keepalive_intvl net.ipv4.tcp_keepalive_probes</code></pre>
+    <p>No <code>timer:(keepalive,...)</code> on a socket means <strong><code>SO_KEEPALIVE</code> is off</strong> for it, and no amount of kernel tuning will apply.</p>
+
+    <p><strong>Check the idle timeouts of everything in the path.</strong> This is the most common real-world trap.</p>
+    <table class="keytable">
+      <tr><th>device</th><th>default idle timeout</th></tr>
+      <tr><td>AWS ALB</td><td>60s (configurable)</td></tr>
+      <tr><td>AWS NLB</td><td>350s — <strong>not configurable</strong></td></tr>
+      <tr><td>nginx <code>proxy_read_timeout</code></td><td>60s</td></tr>
+      <tr><td>carrier NAT</td><td>usually minutes, never announced</td></tr>
+    </table>
+    <p>If your keep-alive interval is longer than any of these, <strong>the middlebox closes the connection first</strong>. And plenty of them drop it silently, leaving a half-open connection neither side knows about. The rule is simple: <strong>your keep-alive interval must be comfortably shorter than the tightest idle timeout on the path.</strong> Behind an NLB that means well under 350s — 30 to 60 seconds is the usual choice.</p>
+
+    <p><strong>Derive detection time backwards from your SLA.</strong> Start from "how fast do we need to know", put that into <code>1.5 × interval</code> and solve. Need to know within 30 seconds? The interval is 20.</p>
+    <p><strong>Then price it.</strong> A hundred thousand devices pinging every 30 seconds is 3,300 packets per second. On battery-powered devices, a shorter interval is battery burn. <strong>Fast detection and idle cost pull directly against each other, and the interval slider in this lab is that trade.</strong></p>
+
+    <div class="callout">This model is simplified for teaching. Real detection times depend on when the last packet actually went out, how retransmission backoff overlaps, and whether a middlebox closes things first. Read the numbers here as <strong>the worst case, assuming the connection was active right up until the moment of death.</strong></div>
+
+  </article>
+
+  <footer>Keep-alive and LWT · simplified teaching model · <a href="/keepalive/" hreflang="ko" lang="ko">한국어</a> / English · <a href="mailto:contact@vermilion19.com">contact@vermilion19.com</a></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  play:'play walkthrough', pause:'pause',
+  uSec:'s', noBack:'never returns',
+  fNow:'immediately', fH:'$1h', fM:'$1m', fS:'$1s',
+  bGhost:'server still believes it is alive · $1', bDelay:'will delay · $1',
+  bClean:'FIN received, closed at once', bNever:'never detected',
+  aDied:'client died', aBack:'reconnect',
+  vLwt:'Last Will',
+  lwt_none:'not published — it was a clean close',
+  lwt_never:'never published — the broker cannot close the connection',
+  lwt_cancelled:'cancelled — the client came back first',
+  lwt_published:'published',
+  mGhost:'ghost window', mWill:'time to Will',
+  mdDefault:'TCP default', mdTuned:'TCP tuned', mdApp:'app keep-alive',
+  cMode:'method', cCalc:'calculation', cGhost:'ghost window', cNever:'never detected',
+  eClean:'client sends DISCONNECT and exits',
+  eAbrupt:'client loses power — no FIN',
+  eHang:'application hangs — the kernel is still alive',
+  eCleanSeen:'server: FIN received, connection torn down',
+  eNoWill:'no Will is published — this was a clean close',
+  eStillOnline:'server: socket ESTABLISHED — still sitting in the connected list',
+  eProbe1:'first keepalive probe sent (after $1s idle)',
+  eProbeOut:'$1 probes unanswered ($2s apart) → kernel closes the connection',
+  ePingMissed:'the $1s interval passes with no packet at all',
+  eKaOut:'1.5 × the $1s interval elapsed → broker closes the connection',
+  eKernelAnswers:'the kernel ACKs the probe — TCP reports the connection as healthy',
+  eNeverDetected:'the app is unresponsive but the connection stays up',
+  eOffline:'server: connection closed, marked offline',
+  eBack:'reconnected on the same session (after $1)',
+  eWillPublished:'broker publishes the Last Will (delay $1)',
+  eWillCancelled:'Will cancelled — the session resumed before the delay expired',
+  hClean:'a FIN arrives, so it is known at once. No Will is published in this case',
+  hDefault:'Linux defaults: 7200 + 75×9 = 7875s. And SO_KEEPALIVE must be on for even that timer to run',
+  hHang:'the kernel answers on its behalf — TCP keepalive can never catch a hung app',
+  hCancelled:'the reconnect beat the Will — this is how phantom offline alerts are avoided',
+  hSlow:'past a 120s interval the 1.5× rule makes this slower than a tuned OS setting',
+  hOk:'detected in $1',
+  scene:[
+    'A clean close. The client sends DISCONNECT on its way out, so the server knows immediately. And no Will is published — a client that said goodbye has no need for a last will.',
+    'Now a power cut. No FIN arrives. On TCP defaults the server takes 2 hours 11 minutes 15 seconds to notice, because the first probe alone is two hours away. All that time the dead client sits happily in the connected list.',
+    'TCP tuned. Drop tcp_keepalive_time to 60 seconds and use six probes ten seconds apart, and detection takes two minutes. Down from 2h11m. The catch is that this is an OS setting, so it means touching every host in the deployment.',
+    'Application keep-alive. MQTT disconnects when nothing arrives within 1.5 times the interval — 1 minute 30 seconds at a 60-second interval. Slightly faster than the tuned OS setting, and more importantly, something the application itself controls.',
+    'Here is the heart of the page. The app has hung — a deadlock, or a long GC pause. The process is still alive, so the kernel dutifully ACKs every keepalive probe. TCP reports "connection healthy", quite correctly, and the server never finds out.',
+    'Same hang, but on application keep-alive it is caught in 1 minute 30 seconds. Because now the thing producing the reply is the application, not the kernel. TCP keepalive checks whether the wire is alive; it does not check whether the application can work.',
+    'Finally, a 60-second will delay with a reconnect at 100 seconds. Detection lands at 90 seconds and the Will is scheduled for 150 — but the client is back at 100. The Will is cancelled. This is what MQTT 5 added so that devices going in and out of tunnels do not fire an offline alert every time.'
+  ],
+};
+</script>
+<script src="/shared/keepalive-lab.js"></script>
+</body>
+</html>
