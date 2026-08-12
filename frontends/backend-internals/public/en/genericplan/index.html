@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slow from the sixth execution — generic plans and parameter skew</title>
+<meta name="description" content="The same query is fast five times and slow from the sixth. PostgreSQL's plan cache picks a plan from an average because it cannot see the parameter. Drive plan_cache_mode and parameter skew yourself and watch it happen.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/genericplan/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/genericplan/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/genericplan/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/genericplan/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="Slow from the sixth execution">
+<meta property="og:description" content="The optimizer plans for the average, and the outage happens in the tail.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/genericplan/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Slow from the sixth execution">
+<meta name="twitter:description" content="Watch the plan cache decide from an average it can never observe.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/genericplan-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/genericplan/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>Slow from the sixth execution</h1>
+  <p class="lede">Long after the deploy, one query starts running slowly. You pull its plan and it looks fine. From the application it is still slow — because <strong>the parameter the optimizer is looking at is not the value you passed.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>common value share</label>
+          <span class="v" id="vQ">25<small> %</small></span>
+          <input type="range" id="sQ" min="0" max="40" step="5" value="25" aria-label="share of executions using the value that covers 60% of rows">
+        </div>
+        <div class="dial">
+          <label>n_distinct</label>
+          <span class="v" id="vNd">200<small> vals</small></span>
+          <input type="range" id="sNd" min="20" max="500" step="20" value="200" aria-label="distinct values recorded in statistics">
+        </div>
+        <div class="dial">
+          <label>plan_cache_mode</label>
+          <div class="seg" id="segMode">
+            <button data-mode="auto" aria-pressed="true">auto</button>
+            <button data-mode="custom" aria-pressed="false">force_custom_plan</button>
+            <button data-mode="generic" aria-pressed="false">force_generic_plan</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>simulation</label>
+          <button id="btnRun">pause</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">time taken per execution</span>
+      <div class="board">
+        <div class="hist" id="hist"></div>
+        <div class="histx" id="histx"></div>
+        <div class="plan" id="plan"></div>
+        <div class="alert" id="verdict"></div>
+        <div class="meters" id="meters"></div>
+      </div>
+      <p class="boardnote">Each bar is one execution. The vertical scale is <strong>logarithmic</strong> — without it a single exploded execution flattens everything else to the floor. Green is a custom plan, amber is a custom plan choosing a sequential scan, and <strong>red is a generic plan meeting a common value</strong>. The table holds a million rows; index scan cost is proportional to matched rows and a sequential scan is a flat 150ms.</p>
+    </section>
+
+    <section>
+      <span class="cap">both plans under these conditions</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">previous</button>
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+        <div class="speed" id="segSpeed" role="group" aria-label="playback speed">
+          <button data-speed="0.5">0.5&times;</button>
+          <button data-speed="1" aria-pressed="true">1&times;</button>
+          <button data-speed="2">2&times;</button>
+        </div>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 06</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>Drive it yourself</h2>
+    <p>The same prepared statement runs over and over. Parameters come in two kinds — a <strong>common value covering 60% of the table</strong>, and a <strong>rare value covering 0.1%</strong>.</p>
+    <table class="keytable">
+      <tr><th>control</th><th>what happens</th></tr>
+      <tr><td>common value share</td><td>How often the common value is queried. The rest use the rare value</td></tr>
+      <tr><td>n_distinct</td><td>Distinct values recorded in statistics. <strong>The generic plan's estimated selectivity is <code>1/n_distinct</code></strong></td></tr>
+      <tr><td>plan_cache_mode</td><td>A setting available from PostgreSQL 12. <code>auto</code> is the default</td></tr>
+    </table>
+    <p>The costs used here:</p>
+    <pre><code>table            1,000,000 rows
+index scan       0.004ms per matched row   → scales with selectivity
+sequential scan  150ms flat                → independent of selectivity
+planning         0.4ms                     → a custom plan pays it every time
+
+crossover  s* = 150 / (0.004 × 1,000,000) = 3.75%
+           below it the index wins, above it the sequential scan does</code></pre>
+
+    <h2>Things to try</h2>
+
+    <div class="recipe">
+      <h4>1. Set the common value share to zero — the generic plan wins</h4>
+      <div class="seq">common value 0% · auto
+
+custom    4.4ms  (index 4.0 + planning 0.4)
+generic   <em>4.0ms</em>  (no replanning)</div>
+      <p class="why">When parameters are always similar the generic plan is <strong>faster</strong>, because it plans once. On short queries planning can exceed 10% of total time — this is exactly why prepared statements and a plan cache exist.</p>
+      <p class="why" style="margin-top:9px">Starting here matters. <strong>"Generic plans are bad" is not the lesson.</strong> What is bad is a skewed distribution.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. Raise it to 25% — a step appears at the sixth</h4>
+      <div class="seq">common value 25% · auto
+
+runs 1-5   custom — the value is visible, so the plan fits it
+run 6      <em>locks to generic</em>
+run 7+     the bars rise as a block
+
+average  40.9ms → <em>603ms</em>   (15×)
+
+no step? hit reset and try again — it is a coin toss</div>
+      <p class="why">Watch the step form in the graph. For the first five executions PostgreSQL plans <strong>with the value in hand</strong>. On the sixth it builds a generic plan, compares costs, and if the generic looks cheaper it keeps using it.</p>
+      <p class="why" style="margin-top:9px">The red bars are the price. The generic plan estimated <code>1/n_distinct = 0.5%</code> and chose an index scan; when a value covering 60% arrives, that means <strong>walking 600,000 of a million rows through the index.</strong> 2.4 seconds — for work a custom plan would have finished sequentially in 150ms.</p>
+      <p class="why" style="margin-top:9px">Sometimes it does not switch. If all five warm-up executions happen to be rare values, the custom average is recorded cheaply and the generic looks expensive — about one time in four at a 25% share. <strong>Hit reset to draw again.</strong> That this is not a bug but the nature of the problem is what recipe 6 is about.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. Switch to force_custom_plan</h4>
+      <div class="seq">plan_cache_mode = force_custom_plan
+
+average  603ms → <em>40.9ms</em>
+worst    2.4s → <em>150ms</em>
+cost     0.4ms of planning on every execution</div>
+      <p class="why">The problem disappears. Planning with the value in hand puts a sequential scan on the common value and an index scan on the rare one. <strong>You pay 0.4ms and buy back a factor of fifteen.</strong></p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. Use force_generic_plan to see the worst case immediately</h4>
+      <div class="seq">plan_cache_mode = force_generic_plan
+
+only red bars remain
+every common-value execution takes <em>2.4 seconds</em></div>
+      <p class="why">A way to see it without waiting for the switch — and the same trick works in production. Turn on <code>SET plan_cache_mode = force_generic_plan;</code> and run <code>EXPLAIN</code>, and you get <strong>the plan your application actually uses</strong>. Substituting a literal and running <code>EXPLAIN</code> never shows you that plan.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. Drop n_distinct to 20 — no switch happens</h4>
+      <div class="seq">n_distinct 200 → 20 (estimated selectivity 5%)
+
+generic estimate  20ms → <em>150ms</em>  (it picks a sequential scan)
+custom average    40.9ms
+150 &gt; 40.9  →  <em>it does not switch</em></div>
+      <p class="why">Once the estimated selectivity passes the 3.75% crossover, the generic plan also chooses a sequential scan. Its estimated cost of 150ms then looks more expensive than the custom average, and PostgreSQL <strong>keeps the custom plan.</strong> That is correct behaviour — the optimizer is judging correctly with the information it has.</p>
+      <p class="why" style="margin-top:9px">Inverted, this says something useful. <strong>A generic plan is dangerous when its estimate is smaller than reality</strong> — that is when it chooses an index, and that is when large values blow up.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>6. Drop the common value share to 5% — again no switch</h4>
+      <div class="seq">common value 5% · n_distinct 200
+
+custom average    <em>11.7ms</em>  (mostly rare values, so it is cheap)
+generic estimate  20ms
+20 &gt; 11.7  →  it does not switch</div>
+      <p class="why">This is the subtle one. When the common value arrives <em>rarely</em>, the first five executions are almost certainly rare values, the custom average is recorded as very cheap, and the generic plan looks expensive by comparison.</p>
+      <p class="why" style="margin-top:9px">But that is <strong>luck.</strong> Let a couple of common values land in the first five and the custom average rises and the generic wins. <strong>Same code, same data, different behaviour per connection.</strong> Whatever traffic warmed a connection decides how it behaves for the rest of its life.</p>
+    </div>
+
+    <h2>Why the sixth</h2>
+    <p>PostgreSQL's plan cache works like this.</p>
+    <pre><code>runs 1-5   custom plans — replanned each time with the parameter value
+           the estimated cost of each is recorded
+
+run 6      build a generic plan once and estimate its cost
+           generic estimate &lt;= custom average  →  generic from now on
+           otherwise                           →  stay custom</code></pre>
+    <p>Five is a constant. It is not tunable. Which is why <strong>the symptom appears exactly on the sixth execution</strong> — run your load test five times and nothing is wrong.</p>
+    <div class="callout">Once it locks to generic it <strong>never goes back.</strong> That prepared statement stays generic for its whole life; only closing the connection or <code>DEALLOCATE</code> restarts the count.</div>
+
+    <h2>The optimizer decides from an average</h2>
+    <p>The axis of this page is one line.</p>
+    <pre><code>cost(E[s])  ≠  E[cost(s)]
+
+the cost computed from the average selectivity
+  ≠  the average of the actual costs</code></pre>
+    <p>When it builds a generic plan the optimizer <strong>cannot see the parameter.</strong> So it estimates the selectivity of <code>WHERE col = $1</code> as <code>1/n_distinct</code> — an assumption that <em>every value occurs equally often</em>.</p>
+    <p>On a skewed column that assumption <strong>matches no execution at all.</strong> With 200 distinct values where one covers 60% of the table, the "average" 0.5% value does not exist. The optimizer plans for a value that never arrives, and every execution runs that plan.</p>
+    <div class="callout">Which means <strong>the better the average looks, the more dangerous it is.</strong> The further the estimate falls below the crossover, the more confidently the generic plan reaches for an index, and the harder the tail breaks. Recipe 5 shows the opposite direction — a larger estimate is safer.</div>
+
+    <h2>Seeing the plan that is really used</h2>
+    <p>This is where the most common misdiagnosis happens. You chase a slow query with <code>EXPLAIN ANALYZE</code>, but <strong>substituting a literal gives you a custom plan.</strong> That is not what the application runs.</p>
+    <pre><code>-- this is a custom plan. It may not be what the application uses
+EXPLAIN ANALYZE SELECT * FROM orders WHERE status = 'PENDING';
+
+-- this is what the application actually runs
+SET plan_cache_mode = force_generic_plan;
+PREPARE p(text) AS SELECT * FROM orders WHERE status = $1;
+EXPLAIN ANALYZE EXECUTE p('PENDING');
+RESET plan_cache_mode;</code></pre>
+    <p>If the two plans differ, this page is your problem. <code>force_generic_plan</code> exists from PostgreSQL 12; on older versions you have to <code>PREPARE</code> and <strong><code>EXECUTE</code> six times</strong> to see it.</p>
+
+    <h2>When Java actually gets a prepared statement</h2>
+    <p>There is one more layer here. <strong>A JDBC <code>PreparedStatement</code> is not automatically a server-side prepared statement.</strong></p>
+    <table class="keytable">
+      <tr><th>condition</th><th>what changes</th></tr>
+      <tr><td>PgJDBC <code>prepareThreshold</code></td><td>Defaults to 5. <strong>The same SQL on the same connection five times</strong> before it becomes server-prepared; until then it is parsed every time</td></tr>
+      <tr><td>connection turnover</td><td>When HikariCP's <code>maxLifetime</code> or similar replaces a connection, <strong>the counter restarts from zero</strong></td></tr>
+      <tr><td>PgBouncer transaction mode</td><td>Connections change per transaction, so server-side prepared statements <strong>never take hold.</strong> The problem cannot occur — and neither can the benefit</td></tr>
+      <tr><td>Hibernate</td><td>Reuse requires an identical SQL string. <code>IN (?, ?, ?)</code> with a different parameter count is a different statement</td></tr>
+    </table>
+    <p>Put together: <strong>five in PgJDBC × five in PostgreSQL</strong>. Roughly ten executions of the same query on one connection before a generic plan appears. Which is why <strong>it never shows under light traffic and arrives suddenly as traffic grows.</strong></p>
+
+    <h2>What to check in production</h2>
+    <p><strong>Start with this question.</strong> "Is this query's parameter distribution even?" Status values, types, tenant ids, country codes — these are usually not even. If it is not, you have a candidate.</p>
+
+    <pre><code>-- look at the skew directly. What share does the top value hold?
+SELECT status, count(*),
+       round(count(*) * 100.0 / sum(count(*)) OVER (), 2) AS pct
+FROM orders GROUP BY status ORDER BY 2 DESC LIMIT 10;
+
+-- what do the statistics know?
+SELECT attname, n_distinct, most_common_vals, most_common_freqs
+FROM pg_stats WHERE tablename = 'orders' AND attname = 'status';</code></pre>
+    <p>Read <code>n_distinct</code> alongside <code>most_common_freqs</code>. When the top frequency is far above <code>1/n_distinct</code>, <strong>that is exactly how far the generic estimate is off.</strong></p>
+
+    <p><strong>Capture the slow executions.</strong> Averages hide this.</p>
+    <pre><code># postgresql.conf — log the real plan of slow executions
+auto_explain.log_min_duration = '500ms'
+auto_explain.log_analyze = on
+auto_explain.log_parameter_max_length = 0   # do not log values (sensitive data)</code></pre>
+    <p><code>pg_stat_statements</code> and its <code>mean_exec_time</code> respond poorly to this problem: one statement mixing 4ms and 2,400ms still has a plausible-looking mean. <strong>Read <code>max_exec_time</code> and <code>stddev_exec_time</code> next to it.</strong></p>
+
+    <p><strong>The order to fix it.</strong></p>
+    <ol>
+      <li><strong>Look at statistics first.</strong> A stale <code>ANALYZE</code> or a low <code>default_statistics_target</code> leaving too few MCVs is common</li>
+      <li><strong>Confirm the plans really differ</strong> by running EXPLAIN under <code>force_generic_plan</code></li>
+      <li><strong>See whether the query can be fixed.</strong> If an unnecessary sort or derived table is what blocks index use, removing it beats any setting</li>
+      <li><strong>Then <code>plan_cache_mode</code>.</strong> <code>force_custom_plan</code> can be set per session. You are paying planning cost again, which can lose on short queries</li>
+      <li><strong>Route the heavily skewed value separately.</strong> Sometimes the common value deserves its own query entirely</li>
+    </ol>
+    <p>Step 4 sits after step 3 deliberately. <code>force_custom_plan</code> <strong>removes the symptom, not the cause.</strong> If the reason the plans diverge lives in the query's shape, that is what to fix.</p>
+
+    <div class="callout">This model is simplified for teaching. Real PostgreSQL costs account for page counts, correlation, cache hit rates and parallelism, and the generic plan's selectivity estimate uses null fraction and the MCV sum alongside <code>1/n_distinct</code>. The switch decision here compares execution times, where PostgreSQL compares <strong>estimated costs</strong>. <strong>What matters is the structure, not the numbers</strong> — a plan built without seeing the value is used for every execution.</div>
+
+  </article>
+
+  <footer>Plan cache and parameter skew · simplified teaching model · <a href="/genericplan/" hreflang="ko" lang="ko">한국어</a> / English · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  pause:'pause', resume:'resume',
+  uKinds:'vals',
+  m_auto:'auto', m_custom:'force_custom_plan', m_generic:'force_generic_plan',
+  sc_index:'index scan', sc_seq:'sequential scan', sc_perValue:'chosen per value',
+  xOld:'older runs', xTop:'ceiling $1 · log scale', xNow:'latest',
+  pNow:'plan in use', pCustom:'custom plan', pGeneric:'generic plan',
+  pScan:'· $1', pEst:'estimated selectivity $1% · estimated cost $2', pPerRun:'$1 of planning per execution',
+  vWarm:'<b>$1 of $2 runs</b> — still a custom plan, replanned with each value.',
+  vLocked:'<b>Locked to the generic plan on run $1.</b> Its estimate of $2 looked cheaper than the custom average of $3.\n' +
+          'It will not go back while this prepared statement lives.',
+  vKept:'<b>Keeping the custom plan.</b> The generic estimate of $1 looks more expensive than the custom average of $2 — the optimizer is judging correctly.',
+  vForced:'Pinned to <b>$1</b>. The switch decision is skipped.',
+  mRuns:'runs', mLocked:'locked at $1', mAvg:'average', mExp:'expected here',
+  mWorst:'worst', mHi:'on a common value', mCommon:'typical', mLo:'on a rare value',
+  cPlan:'plan', cAvg:'average', cLo:'rare value', cHi:'common value',
+  hRun:'let executions accumulate — the decision happens on the sixth',
+  hUniform:'even parameters make the generic plan faster — $1 vs $2 (no replanning)',
+  hBad:'the generic plan is $1× slower on average — planning for an average that never arrives',
+  hKept:'keeping the custom plan — the generic looked expensive, so it did not switch',
+  hSeq:'an estimate of $1% is past the $2% crossover, so the generic plan also picks a sequential scan',
+  scene:[
+    'The common value share is zero. With parameters always similar the generic plan is actually faster, because it plans only once. Starting here matters: generic plans are not the problem. A skewed distribution is.',
+    'Common values raised to 25%. Watch the step form in the graph. The first five executions plan with the value in hand; on the sixth it locks to generic. The red bars are the price — the generic plan estimated 1/n_distinct and chose an index, so a value covering 60% means walking 600,000 of a million rows through that index. 2.4 seconds. No step? Hit reset — if all five warm-up runs were rare values it does not switch, and that happens about one time in four.',
+    'Pinned to force_custom_plan. Planning with the value in hand puts a sequential scan on the common value and an index scan on the rare one, and the average returns from 603ms to 40.9ms. The cost is 0.4ms of planning on every execution — pay that, buy back a factor of fifteen.',
+    'force_generic_plan shows the worst case immediately: only red bars. The same trick works in production — turn this on, run EXPLAIN, and you see the plan your application actually uses. Substituting a literal never reveals it.',
+    'n_distinct dropped to 20. The estimated selectivity becomes 5%, past the 3.75% crossover, so the generic plan also picks a sequential scan; its 150ms estimate looks more expensive than the custom average and it does not switch. The optimizer is judging correctly with what it knows. Inverted: a generic plan is dangerous when its estimate is smaller than reality.',
+    'Common values dropped to 5%. The first five executions are almost certainly rare values, so the custom average is recorded as cheap and the generic looks expensive — no switch. But that is luck. A couple of common values in the first five and it switches. Same code, same data, different behaviour per connection.'
+  ],
+};
+</script>
+<script src="/shared/genericplan-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>

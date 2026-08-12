@@ -1,0 +1,82 @@
+/* ============================================================
+   13. 계획 캐시 · generic plan 과 파라미터 편향 — 실험대
+   ============================================================ */
+
+.lab{margin:32px 0 8px;border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);overflow:hidden}
+.lab section{border-bottom:1px solid var(--rule);padding:16px 18px}
+.lab section:last-child{border-bottom:none}
+.cap{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;display:block}
+
+/* --- 손잡이 --- */
+.dials{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-end}
+.dial label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
+.dial input[type=range]{width:145px;max-width:44vw;accent-color:var(--horizon);vertical-align:middle}
+.dial .v{font-family:var(--mono);font-size:17px;color:var(--ink);font-variant-numeric:tabular-nums;min-width:76px;display:inline-block}
+.dial .v small{font-size:11px;color:var(--ink-3)}
+.seg{display:flex;gap:0;border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+.seg button{border:none;border-right:1px solid var(--rule);border-radius:0;padding:6px 12px;font-size:11px;white-space:nowrap}
+.seg button:last-child{border-right:none}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.hint{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:8px;min-height:14px}
+.hint.warn{color:var(--blocked)}
+
+/* --- 실행 히스토그램 --- */
+.board{border:1px solid var(--rule);border-radius:3px;background:var(--paper);padding:13px 14px 11px}
+.hist{display:flex;align-items:flex-end;gap:2px;height:132px;border-bottom:1px solid var(--rule);padding-bottom:1px}
+.hist i{
+  flex:1;min-width:3px;display:block;border-radius:1px 1px 0 0;
+  background:var(--live);transition:height .08s linear;position:relative;
+}
+.hist i.generic{background:var(--blocked)}
+.hist i.seq{background:var(--free)}
+.hist .cut{width:0;flex:0 0 0;border-left:1px dashed var(--ink-3);align-self:stretch;margin:0 2px}
+.histx{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:5px}
+
+.plan{
+  display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;
+  border:1px solid var(--rule);border-radius:2px;background:var(--paper-2);
+  padding:8px 11px;margin-top:12px;
+  font-family:var(--mono);font-size:11px;color:var(--ink-2);
+}
+.plan b{font-weight:500}
+.plan.custom b{color:var(--live)}
+.plan.generic b{color:var(--blocked)}
+.plan .est{margin-left:auto;color:var(--ink-3)}
+
+/* --- 전환 판정 --- */
+.leak{
+  border-left:2px solid var(--blocked);background:var(--paper);
+  padding:10px 0 10px 13px;margin-top:14px;
+  font-family:var(--mono);font-size:10.5px;line-height:1.75;color:var(--ink-2);
+}
+.leak b{color:var(--blocked);font-weight:500}
+.leak .at{color:var(--ink-3)}
+.leak .culprit{color:var(--horizon)}
+
+/* --- 구성 비교 --- */
+.cmp{width:100%;border-collapse:collapse;font-size:13px}
+.cmp th,.cmp td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.cmp th{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.cmp td:first-child{font-size:12.5px;width:1%;white-space:nowrap;padding-right:16px}
+.cmp td.num{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
+.cmp tr.on td{background:var(--paper-3)}
+.cmp td.bad{color:var(--blocked)}
+.cmp td.good{color:var(--live)}
+
+/* --- 조작대 --- */
+.transport{background:var(--paper-3);display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.transport .keys{display:flex;gap:6px;flex-wrap:wrap}
+.narration{flex:1;min-width:240px;font-family:var(--serif);font-size:14.5px;line-height:1.65;color:var(--ink)}
+.narration .n{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-3);display:block;margin-bottom:3px}
+
+/* --- 안내 --- */
+.recipe{border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);padding:14px 16px;margin:14px 0;max-width:68ch}
+.recipe h4{font-family:var(--sans);font-size:14px;font-weight:700;margin:0 0 4px}
+.recipe .seq{font-family:var(--mono);font-size:11px;line-height:1.9;background:var(--paper);border:1px solid var(--rule);
+  border-radius:2px;padding:9px 11px;margin:9px 0;white-space:pre-wrap;color:var(--ink-2)}
+.recipe .seq em{font-style:normal;color:var(--horizon)}
+.recipe .why{font-size:13.5px;color:var(--ink-2);margin:0}
+.keytable{width:100%;border-collapse:collapse;margin:12px 0;max-width:68ch;font-size:13.5px}
+.keytable th,.keytable td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.keytable th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.keytable td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap;width:1%;padding-right:18px;color:var(--ink)}

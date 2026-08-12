@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>여섯 번째 실행부터 느려진다 — generic plan 과 파라미터 편향</title>
+<meta name="description" content="같은 쿼리가 처음 다섯 번은 빠르고 여섯 번째부터 느려집니다. PostgreSQL 의 계획 캐시가 파라미터를 모른 채 평균으로 계획을 고르기 때문입니다. plan_cache_mode 와 파라미터 편향을 직접 조작하며 확인합니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/genericplan/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/genericplan/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/genericplan/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/genericplan/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="여섯 번째 실행부터 느려진다">
+<meta property="og:description" content="옵티마이저는 평균으로 계획을 고르고, 장애는 꼬리에서 납니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/genericplan/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="여섯 번째 실행부터 느려진다">
+<meta name="twitter:description" content="계획 캐시가 파라미터를 모른 채 평균으로 판단하는 과정을 직접 봅니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/genericplan-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/genericplan/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>여섯 번째 실행부터 느려진다</h1>
+  <p class="lede">배포하고 한참 뒤에 특정 쿼리만 느려집니다. 실행 계획을 떠보면 멀쩡해요. 그런데 애플리케이션에서는 느립니다 — <strong>옵티마이저가 보고 있는 파라미터가 여러분이 넣은 값이 아니기 때문</strong>입니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>흔한 값 비율</label>
+          <span class="v" id="vQ">25<small> %</small></span>
+          <input type="range" id="sQ" min="0" max="40" step="5" value="25" aria-label="전체 행의 60%를 차지하는 값이 조회되는 비율">
+        </div>
+        <div class="dial">
+          <label>n_distinct</label>
+          <span class="v" id="vNd">200<small> 종</small></span>
+          <input type="range" id="sNd" min="20" max="500" step="20" value="200" aria-label="통계상 서로 다른 값의 개수">
+        </div>
+        <div class="dial">
+          <label>plan_cache_mode</label>
+          <div class="seg" id="segMode">
+            <button data-mode="auto" aria-pressed="true">auto</button>
+            <button data-mode="custom" aria-pressed="false">force_custom_plan</button>
+            <button data-mode="generic" aria-pressed="false">force_generic_plan</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>시뮬레이션</label>
+          <button id="btnRun">일시정지</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">실행별 소요 시간</span>
+      <div class="board">
+        <div class="hist" id="hist"></div>
+        <div class="histx" id="histx"></div>
+        <div class="plan" id="plan"></div>
+        <div class="alert" id="verdict"></div>
+        <div class="meters" id="meters"></div>
+      </div>
+      <p class="boardnote">막대 하나가 실행 한 번입니다. 세로는 <strong>로그 눈금</strong>이에요 — 안 그러면 폭발한 실행 하나가 나머지를 전부 바닥에 눕힙니다. 초록은 커스텀 계획, 노랑은 커스텀이 고른 시퀀셜 스캔, <strong>빨강은 제네릭 계획이 흔한 값을 만난 실행</strong>입니다. 테이블은 100만 행, 인덱스 스캔은 매칭 행에 비례하고 시퀀셜 스캔은 150ms 고정입니다.</p>
+    </section>
+
+    <section>
+      <span class="cap">지금 조건에서 두 계획이 각각</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+        <div class="speed" id="segSpeed" role="group" aria-label="재생 속도">
+          <button data-speed="0.5">0.5&times;</button>
+          <button data-speed="1" aria-pressed="true">1&times;</button>
+          <button data-speed="2">2&times;</button>
+        </div>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 06</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>직접 조작하기</h2>
+    <p>같은 프리페어드 문을 계속 실행합니다. 파라미터는 두 종류예요 — 테이블의 <strong>60%를 차지하는 흔한 값</strong>과, <strong>0.1%뿐인 드문 값</strong>.</p>
+    <table class="keytable">
+      <tr><th>조작</th><th>무엇이 일어나나</th></tr>
+      <tr><td>흔한 값 비율</td><td>전체 실행 중 흔한 값으로 조회하는 비율. 나머지는 드문 값입니다</td></tr>
+      <tr><td>n_distinct</td><td>통계에 기록된 서로 다른 값의 개수. <strong>제네릭 계획의 추정 선택도가 <code>1/n_distinct</code></strong> 로 정해집니다</td></tr>
+      <tr><td>plan_cache_mode</td><td>PostgreSQL 12 부터 있는 설정. auto 가 기본입니다</td></tr>
+    </table>
+    <p>비용은 이렇게 잡았습니다.</p>
+    <pre><code>테이블         100만 행
+인덱스 스캔     매칭 행 하나당 0.004ms   → 선택도에 비례
+시퀀셜 스캔     150ms 고정              → 선택도와 무관
+계획 수립       0.4ms                   → 커스텀은 실행마다 문다
+
+교차점  s* = 150 / (0.004 × 1,000,000) = 3.75%
+        이 아래면 인덱스가 싸고, 위면 시퀀셜이 싸다</code></pre>
+
+    <h2>이렇게 해보세요</h2>
+
+    <div class="recipe">
+      <h4>1. 흔한 값 비율을 0으로 둔다 — 제네릭이 이긴다</h4>
+      <div class="seq">흔한 값 0% · auto
+
+커스텀   4.4ms  (인덱스 4.0 + 계획 0.4)
+제네릭   <em>4.0ms</em>  (계획을 다시 안 세운다)</div>
+      <p class="why">파라미터가 늘 비슷하면 제네릭이 <strong>더 빠릅니다.</strong> 계획을 한 번만 세우니까요. 짧은 쿼리에서는 계획 수립이 전체의 10%를 넘기도 합니다 — 프리페어드 문과 계획 캐시가 존재하는 이유가 이겁니다.</p>
+      <p class="why" style="margin-top:9px">여기서 출발하는 게 중요합니다. <strong>"제네릭 계획이 나쁘다"가 아니에요.</strong> 나쁜 건 편향된 분포입니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. 흔한 값 비율을 25%로 올린다 — 여섯 번째에 계단이 생긴다</h4>
+      <div class="seq">흔한 값 25% · auto
+
+1~5회   커스텀 — 값을 보고 계획을 고른다
+6회째   <em>제네릭으로 굳는다</em>
+7회~    막대가 통째로 올라간다
+
+평균  40.9ms → <em>603ms</em>   (15배)
+
+계단이 안 생기면 초기화를 눌러 다시 — 확률이 있다</div>
+      <p class="why">그래프에 계단이 생기는 걸 보세요. 처음 다섯 번은 PostgreSQL 이 <strong>값을 보고</strong> 계획을 세웁니다. 여섯 번째에 제네릭 계획을 만들어 비용을 비교하고, 싸 보이면 그 뒤로 계속 씁니다.</p>
+      <p class="why" style="margin-top:9px">빨간 막대가 그 대가예요. 제네릭은 <code>1/n_distinct = 0.5%</code> 로 추정해 인덱스 스캔을 골랐는데, 실제로 60%짜리 값이 들어오면 <strong>100만 행 중 60만 행을 인덱스로 훑습니다.</strong> 2.4초예요. 커스텀이었다면 시퀀셜로 150ms 에 끝냈을 일입니다.</p>
+      <p class="why" style="margin-top:9px">전환이 안 되는 경우도 있습니다. 처음 다섯 번이 전부 드문 값이면 커스텀 평균이 싸게 잡혀 제네릭이 비싸 보이거든요 — 흔한 값 25%에서 넷 중 한 번쯤 그렇습니다. <strong>초기화를 누르면 다시 뽑습니다.</strong> 이게 버그가 아니라 이 문제의 성질이라는 게 레시피 6의 이야기입니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. force_custom_plan 으로 바꾼다</h4>
+      <div class="seq">plan_cache_mode = force_custom_plan
+
+평균   603ms → <em>40.9ms</em>
+최악   2.4s → <em>150ms</em>
+대신   실행마다 계획 수립 0.4ms</div>
+      <p class="why">문제가 사라집니다. 매번 값을 보고 계획을 세우니 흔한 값에는 시퀀셜, 드문 값에는 인덱스가 붙어요. <strong>0.4ms 를 내고 15배를 사는 거래</strong>입니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. force_generic_plan 으로 바꿔 최악을 본다</h4>
+      <div class="seq">plan_cache_mode = force_generic_plan
+
+빨간 막대만 남는다
+흔한 값 실행이 전부 <em>2.4초</em></div>
+      <p class="why">전환을 기다리지 않고 바로 확인하는 방법입니다. 현장에서도 이렇게 씁니다 — <code>SET plan_cache_mode = force_generic_plan;</code> 을 켜고 <code>EXPLAIN</code> 을 떠보면 <strong>애플리케이션이 실제로 쓰는 계획</strong>이 나옵니다. 값을 박아 넣고 <code>EXPLAIN</code> 을 뜨면 절대 안 보이는 계획이에요.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. n_distinct 를 20으로 내린다 — 전환이 안 일어난다</h4>
+      <div class="seq">n_distinct 200 → 20 (추정 선택도 5%)
+
+제네릭 추정  20ms → <em>150ms</em>  (시퀀셜을 고른다)
+커스텀 평균  40.9ms
+150 &gt; 40.9  →  <em>전환하지 않는다</em></div>
+      <p class="why">추정 선택도가 교차점 3.75%를 넘으면 제네릭도 시퀀셜을 고릅니다. 그러면 추정 비용이 150ms 라 커스텀 평균보다 비싸 보이고, PostgreSQL 은 <strong>전환하지 않습니다.</strong> 이게 정상 동작이에요 — 옵티마이저는 자기가 아는 정보로는 옳게 판단하고 있습니다.</p>
+      <p class="why" style="margin-top:9px">뒤집으면 이런 뜻입니다. <strong>제네릭이 위험한 건 추정이 실제보다 작을 때</strong>예요. 그래야 인덱스를 고르고, 그래야 큰 값에서 터집니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>6. 흔한 값 비율을 5%로 내린다 — 또 전환이 안 된다</h4>
+      <div class="seq">흔한 값 5% · n_distinct 200
+
+커스텀 평균  <em>11.7ms</em>  (대부분 드문 값이라 싸다)
+제네릭 추정  20ms
+20 &gt; 11.7  →  전환하지 않는다</div>
+      <p class="why">여기가 미묘한 지점입니다. 흔한 값이 <em>드물게</em> 들어오면 처음 다섯 번은 거의 확실히 드문 값이고, 커스텀 평균이 아주 싸게 잡혀 제네릭이 비싸 보입니다.</p>
+      <p class="why" style="margin-top:9px">그런데 이건 <strong>운입니다.</strong> 처음 다섯 번에 흔한 값이 몇 개 섞이면 커스텀 평균이 올라가고 제네릭이 이깁니다. <strong>같은 코드, 같은 데이터인데 커넥션마다 다르게 동작해요.</strong> 초기화 트래픽이 무엇이었냐가 그 커넥션의 남은 수명을 정합니다.</p>
+    </div>
+
+    <h2>왜 여섯 번째인가</h2>
+    <p>PostgreSQL 의 계획 캐시는 이렇게 동작합니다.</p>
+    <pre><code>1~5회    커스텀 계획 — 파라미터 값을 보고 매번 새로 세운다
+         이때 각 계획의 추정 비용을 기록해 둔다
+
+6회째    제네릭 계획을 한 번 만들어 추정 비용을 낸다
+         제네릭 추정 &lt;= 커스텀 평균  →  그 뒤로 계속 제네릭
+         아니면                      →  계속 커스텀</code></pre>
+    <p>다섯 번이라는 숫자는 상수입니다. 튜닝할 수 없어요. 그래서 <strong>증상이 여섯 번째 실행에 정확히 맞춰 나타납니다.</strong> 부하 테스트를 다섯 번만 돌리면 아무 문제도 안 보입니다.</p>
+    <div class="callout">한번 제네릭으로 굳으면 <strong>되돌아가지 않습니다.</strong> 그 프리페어드 문이 살아 있는 동안 계속 제네릭이에요. 커넥션이 끊기거나 <code>DEALLOCATE</code> 되어야 처음부터 다시 셉니다.</div>
+
+    <h2>옵티마이저는 평균으로 판단한다</h2>
+    <p>이 페이지의 축은 한 줄입니다.</p>
+    <pre><code>cost(E[s])  ≠  E[cost(s)]
+
+평균 선택도로 계산한 비용  ≠  실제 비용의 평균</code></pre>
+    <p>제네릭 계획을 세울 때 옵티마이저는 파라미터 값을 <strong>모릅니다.</strong> 그래서 <code>WHERE col = $1</code> 의 선택도를 <code>1/n_distinct</code> 로 잡아요 — <em>모든 값이 고르게 분포한다</em>는 가정입니다.</p>
+    <p>편향된 컬럼에서 이 가정은 <strong>어느 실행과도 맞지 않습니다.</strong> 값이 200종인데 그중 하나가 전체의 60%라면, 평균인 0.5%짜리 값은 실제로 존재하지도 않아요. 옵티마이저는 있지도 않은 값을 위한 계획을 세우고, 모든 실행이 그 계획으로 돌아갑니다.</p>
+    <div class="callout">그래서 <strong>평균이 좋아 보일수록 위험합니다.</strong> 추정 선택도가 교차점 아래로 내려갈수록 제네릭은 자신 있게 인덱스를 고르고, 꼬리에서 더 크게 터집니다. 레시피 5가 그 반대 방향을 보여줍니다 — 추정이 클수록 오히려 안전해요.</div>
+
+    <h2>진짜로 쓰이는 계획을 보는 법</h2>
+    <p>가장 흔한 오진이 여기서 나옵니다. 느린 쿼리를 잡으려고 <code>EXPLAIN ANALYZE</code> 를 뜨는데, <strong>값을 박아 넣고 뜨면 커스텀 계획이 나옵니다.</strong> 애플리케이션이 쓰는 계획이 아니에요.</p>
+    <pre><code>-- 이건 커스텀 계획이다. 애플리케이션이 쓰는 게 아닐 수 있다
+EXPLAIN ANALYZE SELECT * FROM orders WHERE status = 'PENDING';
+
+-- 애플리케이션이 실제로 쓰는 계획
+SET plan_cache_mode = force_generic_plan;
+PREPARE p(text) AS SELECT * FROM orders WHERE status = $1;
+EXPLAIN ANALYZE EXECUTE p('PENDING');
+RESET plan_cache_mode;</code></pre>
+    <p>둘의 계획이 다르면 이 페이지의 문제입니다. <code>force_generic_plan</code> 은 PostgreSQL 12 부터 쓸 수 있고, 그 전 버전이라면 <code>PREPARE</code> 후 <strong>여섯 번 <code>EXECUTE</code></strong> 해서 확인해야 합니다.</p>
+
+    <h2>자바에서는 언제 프리페어드가 되나</h2>
+    <p>여기에 층이 하나 더 있습니다. <strong>JDBC 의 <code>PreparedStatement</code> 가 곧 서버 프리페어드는 아닙니다.</strong></p>
+    <table class="keytable">
+      <tr><th>조건</th><th>무엇이 달라지나</th></tr>
+      <tr><td>PgJDBC <code>prepareThreshold</code></td><td>기본 5. <strong>같은 SQL 을 같은 커넥션에서 5번</strong> 실행해야 서버 프리페어드가 됩니다. 그 전까지는 매번 파싱합니다</td></tr>
+      <tr><td>커넥션 교체</td><td>HikariCP <code>maxLifetime</code> 등으로 커넥션이 갈리면 <strong>카운터가 0부터 다시</strong>입니다</td></tr>
+      <tr><td>PgBouncer transaction 모드</td><td>커넥션이 트랜잭션마다 바뀌므로 서버 프리페어드가 <strong>잡히지 않습니다.</strong> 이 문제 자체가 안 생기는 대신 계획 재사용 이득도 없습니다</td></tr>
+      <tr><td>Hibernate</td><td>SQL 문자열이 같아야 재사용됩니다. <code>IN (?, ?, ?)</code> 처럼 파라미터 개수가 바뀌면 다른 문입니다</td></tr>
+    </table>
+    <p>합치면 이렇습니다 — <strong>PgJDBC 5회 × PostgreSQL 5회</strong>. 커넥션 하나에서 같은 쿼리를 열 번쯤 돌려야 제네릭 계획이 나옵니다. 그래서 <strong>트래픽이 적을 때는 영영 안 나타나다가, 트래픽이 늘면서 갑자기 나타납니다.</strong></p>
+
+    <h2>현장에서 확인할 것</h2>
+    <p><strong>먼저 이 질문.</strong> "이 쿼리의 파라미터 분포가 고른가?" 상태값, 타입, 테넌트 id, 국가 코드 — 이런 컬럼은 대개 안 고릅니다. 고르지 않으면 후보입니다.</p>
+
+    <pre><code>-- 편향을 직접 본다. 상위 값이 전체의 몇 %인가
+SELECT status, count(*),
+       round(count(*) * 100.0 / sum(count(*)) OVER (), 2) AS pct
+FROM orders GROUP BY status ORDER BY 2 DESC LIMIT 10;
+
+-- 통계가 무엇을 알고 있나
+SELECT attname, n_distinct, most_common_vals, most_common_freqs
+FROM pg_stats WHERE tablename = 'orders' AND attname = 'status';</code></pre>
+    <p><code>n_distinct</code> 와 <code>most_common_freqs</code> 를 나란히 보세요. 상위 값의 빈도가 <code>1/n_distinct</code> 보다 훨씬 크면 <strong>제네릭 추정이 그만큼 빗나갑니다.</strong></p>
+
+    <p><strong>느린 실행을 잡아두세요.</strong> 평균만 보면 안 보입니다.</p>
+    <pre><code># postgresql.conf — 느린 실행의 실제 계획을 로그로 남긴다
+auto_explain.log_min_duration = '500ms'
+auto_explain.log_analyze = on
+auto_explain.log_parameter_max_length = 0   # 값은 남기지 않는다(민감정보)</code></pre>
+    <p><code>pg_stat_statements</code> 의 <code>mean_exec_time</code> 은 이 문제에 무디게 반응합니다. 같은 문 하나에 4ms 와 2,400ms 가 섞여 있어도 평균은 그럴듯해 보이거든요. <strong><code>max_exec_time</code> 과 <code>stddev_exec_time</code> 을 같이 보세요.</strong></p>
+
+    <p><strong>고치는 순서.</strong></p>
+    <ol>
+      <li><strong>통계를 먼저 본다.</strong> <code>ANALYZE</code> 가 오래됐거나 <code>default_statistics_target</code> 이 낮아 MCV 가 부족한 경우가 있습니다</li>
+      <li><strong>계획이 정말 갈리는지 확인한다.</strong> <code>force_generic_plan</code> 으로 EXPLAIN 을 떠 비교합니다</li>
+      <li><strong>쿼리를 고칠 수 있는지 본다.</strong> 불필요한 정렬이나 파생 테이블이 인덱스 사용을 막고 있으면, 그걸 걷어내는 게 설정보다 낫습니다</li>
+      <li><strong>그래도면 <code>plan_cache_mode</code>.</strong> 세션 단위로 <code>force_custom_plan</code> 을 걸 수 있습니다. 계획 수립 비용을 다시 내는 것이니 짧은 쿼리에서는 손해일 수 있어요</li>
+      <li><strong>편향이 심한 값만 별도 경로로.</strong> 흔한 값은 아예 다른 쿼리를 쓰는 것도 방법입니다</li>
+    </ol>
+    <p>4번을 3번보다 뒤에 둔 이유가 있습니다. <code>force_custom_plan</code> 은 <strong>증상을 없애지 원인을 없애지 않습니다.</strong> 계획이 갈리는 근본 이유가 쿼리 구조에 있으면 그걸 고치는 게 먼저예요.</p>
+
+    <div class="callout">이 페이지의 모델은 개념을 보여주기 위해 단순화한 것입니다. 실제 PostgreSQL 의 비용은 페이지 수·상관도·캐시 적중률·병렬 실행까지 반영하고, 제네릭 계획의 선택도 추정도 <code>1/n_distinct</code> 외에 널 비율과 MCV 합을 함께 씁니다. 전환 판정도 여기서는 실행 시간으로 비교했지만 실제로는 옵티마이저의 <strong>추정 비용</strong>끼리 비교합니다. <strong>중요한 건 숫자가 아니라 구조입니다</strong> — 값을 모른 채 세운 계획이 모든 실행에 쓰인다는 것.</div>
+
+  </article>
+
+  <footer>계획 캐시와 파라미터 편향 · 교육용 단순화 모델 · 한국어 / <a href="/en/genericplan/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  pause:'일시정지', resume:'다시 시작',
+  uKinds:'종',
+  m_auto:'auto', m_custom:'force_custom_plan', m_generic:'force_generic_plan',
+  sc_index:'인덱스 스캔', sc_seq:'시퀀셜 스캔', sc_perValue:'값마다 고른다',
+  xOld:'오래된 실행', xTop:'천장 $1 · 로그 눈금', xNow:'최근',
+  pNow:'지금 쓰는 계획', pCustom:'커스텀 계획', pGeneric:'제네릭 계획',
+  pScan:'· $1', pEst:'추정 선택도 $1% · 추정 비용 $2', pPerRun:'실행마다 계획 수립 $1',
+  vWarm:'<b>$1 / $2 회</b> — 아직 커스텀 계획이다. 값을 보고 매번 새로 세운다.',
+  vLocked:'<b>$1회째에 제네릭 계획으로 굳었다.</b> 추정 $2 가 커스텀 평균 $3 보다 싸 보였다.\n' +
+          '이 프리페어드 문이 살아 있는 동안 되돌아가지 않는다.',
+  vKept:'<b>커스텀 계획을 유지한다.</b> 제네릭 추정 $1 이 커스텀 평균 $2 보다 비싸 보인다 — 옵티마이저가 옳게 판단하고 있다.',
+  vForced:'<b>$1</b> 로 고정했다. 전환 판정을 건너뛴다.',
+  mRuns:'실행', mLocked:'전환 $1회째', mAvg:'평균', mExp:'이 조건의 기대값',
+  mWorst:'최악', mHi:'흔한 값일 때', mCommon:'평상시', mLo:'드문 값일 때',
+  cPlan:'계획', cAvg:'평균', cLo:'드문 값', cHi:'흔한 값',
+  hRun:'실행을 쌓아보세요 — 여섯 번째에 판정이 일어납니다',
+  hUniform:'파라미터가 고르면 제네릭이 더 빠르다 — $1 vs $2 (계획을 다시 안 세운다)',
+  hBad:'제네릭이 평균 $1배 느리다 — 있지도 않은 평균값을 위한 계획으로 돌고 있다',
+  hKept:'커스텀을 유지한다 — 제네릭이 비싸 보여 전환하지 않았다',
+  hSeq:'추정 선택도 $1% 가 교차점 $2% 를 넘어 제네릭도 시퀀셜을 고른다',
+  scene:[
+    '흔한 값 비율이 0입니다. 파라미터가 늘 비슷하니 제네릭 계획이 오히려 빠릅니다 — 계획을 한 번만 세우니까요. 여기서 출발하는 게 중요합니다. 제네릭 계획이 나쁜 게 아니라, 나쁜 건 편향된 분포입니다.',
+    '흔한 값을 25%로 올렸습니다. 그래프에 계단이 생기는 걸 보세요. 처음 다섯 번은 값을 보고 계획을 세우고, 여섯 번째에 제네릭으로 굳습니다. 빨간 막대가 그 대가예요 — 제네릭은 1/n_distinct 로 추정해 인덱스를 골랐는데, 60%짜리 값이 들어오면 100만 행 중 60만 행을 인덱스로 훑습니다. 2.4초입니다. 계단이 안 보이면 초기화를 눌러보세요 — 처음 다섯 번이 전부 드문 값이면 전환되지 않고, 넷 중 한 번쯤 그렇습니다.',
+    'force_custom_plan 으로 고정했습니다. 매번 값을 보고 계획을 세우니 흔한 값에는 시퀀셜, 드문 값에는 인덱스가 붙습니다. 평균이 603ms 에서 40.9ms 로 돌아왔어요. 대신 실행마다 계획 수립 0.4ms 를 냅니다 — 그걸 내고 15배를 사는 거래입니다.',
+    'force_generic_plan 으로 최악을 바로 봅니다. 빨간 막대만 남죠. 현장에서도 이렇게 씁니다 — 이 설정을 켜고 EXPLAIN 을 뜨면 애플리케이션이 실제로 쓰는 계획이 나옵니다. 값을 박아 넣고 EXPLAIN 을 뜨면 절대 안 보이는 계획이에요.',
+    'n_distinct 를 20으로 내렸습니다. 추정 선택도가 5%가 되어 교차점 3.75%를 넘으니 제네릭도 시퀀셜을 고르고, 추정 비용 150ms 가 커스텀 평균보다 비싸 보여 전환하지 않습니다. 옵티마이저는 자기가 아는 정보로는 옳게 판단하고 있어요. 뒤집으면 — 제네릭이 위험한 건 추정이 실제보다 작을 때입니다.',
+    '흔한 값을 5%로 내렸습니다. 처음 다섯 번이 거의 확실히 드문 값이라 커스텀 평균이 싸게 잡히고, 제네릭이 비싸 보여 전환하지 않습니다. 그런데 이건 운이에요. 처음 다섯 번에 흔한 값이 몇 개 섞이면 전환됩니다. 같은 코드, 같은 데이터인데 커넥션마다 다르게 동작합니다.'
+  ],
+};
+</script>
+<script src="/shared/genericplan-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>
