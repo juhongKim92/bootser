@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rejection is a signal, not a bug — what an unbounded queue really costs</title>
+<meta name="description" content="RejectedExecutionException flooded the logs, so you made the queue unbounded. The exception disappears and an OutOfMemoryError arrives minutes later. Run bounded+Abort, CallerRuns and unbounded under the same load and see what backpressure actually trades.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/backpressure/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/backpressure/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/backpressure/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/backpressure/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="Rejection is a signal, not a bug">
+<meta property="og:description" content="Open the queue up and rejection does not go away — it turns into an OOM.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/backpressure/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Rejection is a signal, not a bug">
+<meta name="twitter:description" content="Three queue policies under the same load, and what backpressure actually trades.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/backpressure-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/backpressure/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>Rejection is a signal, not a bug</h1>
+  <p class="lede"><code>RejectedExecutionException</code> is flooding the logs. Remove the queue bound and it goes quiet. Then, minutes later, <code>OutOfMemoryError</code> — you did not remove the rejection, you <strong>traded it for an OOM</strong>.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>produced</label>
+          <span class="v" id="vRate">200<small> /s</small></span>
+          <input type="range" id="sRate" min="10" max="500" step="10" value="200" aria-label="tasks produced per second">
+        </div>
+        <div class="dial">
+          <label>consumer threads</label>
+          <span class="v" id="vCons">8<small> thr</small></span>
+          <input type="range" id="sCons" min="1" max="64" step="1" value="8" aria-label="consumer threads">
+        </div>
+        <div class="dial">
+          <label>work type</label>
+          <div class="seg" id="segKind">
+            <button data-kind="io" aria-pressed="true">I/O wait</button>
+            <button data-kind="cpu" aria-pressed="false">CPU · external process</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>queue policy</label>
+          <div class="seg" id="segPolicy">
+            <button data-policy="abort" aria-pressed="true">bounded + Abort</button>
+            <button data-policy="callerRuns" aria-pressed="false">bounded + CallerRuns</button>
+            <button data-policy="unbounded" aria-pressed="false">unbounded</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>queue bound</label>
+          <span class="v" id="vQmax">500<small> tasks</small></span>
+          <input type="range" id="sQmax" min="100" max="3000" step="100" value="500" aria-label="queue bound">
+        </div>
+        <div class="dial">
+          <label>simulation</label>
+          <button id="btnRun">pause</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">producer → queue → consumer threads</span>
+      <div class="pipe">
+        <div class="stage">
+          <div class="box" id="boxIn"><span class="k">in</span><span class="n" id="nIn">200</span><span class="k">/s</span></div>
+          <div class="qwrap">
+            <div class="qbar"><div class="fill" id="qFill"></div><div class="lim" id="qLim"></div></div>
+            <div class="qmeta"><span id="qNow"></span><span id="qScale"></span></div>
+            <div class="workers" id="workers"></div>
+          </div>
+          <div class="box" id="boxOut"><span class="k">out</span><span class="n" id="nOut">0</span><span class="k">/s · capacity <span id="nCap">0</span></span></div>
+        </div>
+        <div class="alert" id="alert"></div>
+        <div class="meters" id="meters"></div>
+      </div>
+      <p class="boardnote">The middle bar is the queue. The vertical line is the bound; go unbounded and it disappears while the scale switches to the <strong>OOM threshold</strong>. The cells underneath are consumer threads — green is working, amber means CallerRuns has the <strong>producer thread doing the work itself</strong>. Each queued task holds 256KB and free heap is set to 512MB.</p>
+    </section>
+
+    <section>
+      <span class="cap">all three policies at this load</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section>
+      <span class="cap">event log</span>
+      <div class="events" id="events"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>Drive it yourself</h2>
+    <p>One task takes <strong>120ms</strong>. There are 8 cores. Those two numbers set your capacity.</p>
+    <table class="keytable">
+      <tr><th>control</th><th>what happens</th></tr>
+      <tr><td>produced</td><td>How many tasks per second enter the queue</td></tr>
+      <tr><td>consumer threads</td><td>How many run concurrently. <strong>The effect depends entirely on the work type</strong></td></tr>
+      <tr><td>work type</td><td>I/O wait (capacity = <code>threads ÷ 0.12</code>) / CPU · external process (capacity = <code>min(threads, 8) ÷ 0.12</code>)</td></tr>
+      <tr><td>queue policy</td><td>What to do when it fills. The subject of this page</td></tr>
+      <tr><td>queue bound</td><td>Greys out when unbounded</td></tr>
+    </table>
+
+    <h2>Things to try</h2>
+
+    <div class="recipe">
+      <h4>1. Start inside capacity</h4>
+      <div class="seq">50/s produced · 8 threads · I/O · bounded+Abort
+
+capacity  <em>66.7/s</em>
+queue     <em>around 0</em>
+rejected  0</div>
+      <p class="why">Produce less than capacity and nothing queues up. <strong>The policy makes no difference at all.</strong> Cycle through all three and the screen is identical. Queue policy only starts to mean something <em>once load exceeds capacity</em>.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. Raise production to 200/s</h4>
+      <div class="seq">200/s produced · 66.7/s capacity
+
+queue     <em>stops at 500</em>
+rejected  <em>133.3/s</em>  ← 133 tasks a second are dropped
+throughput 66.7/s</div>
+      <p class="why">The queue fills in 3.8 seconds and rejection starts. The logs go red. <strong>But this is the system telling you the truth</strong> — that 200 are arriving where only 66.7 can be handled.</p>
+      <p class="why" style="margin-top:9px">Look at <code>completed tasks</code> in the rejection panel. If that number is not climbing, consumption is <strong>not progressing at all</strong>, and that is not a queue problem — it means the consumer is blocked somewhere.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. Make the queue unbounded — silence</h4>
+      <div class="seq">unbounded queue
+
+rejected  133.3/s → <em>0</em>
+queue     500 → <em>climbing</em>
+heap      <em>0 → 512MB</em>
+          <em>OutOfMemoryError after 15.4s</em></div>
+      <p class="why">The exception is gone. The logs are clean. And the queue grows by 133 a second, eating the heap. <strong>Fifteen seconds later the process dies.</strong></p>
+      <p class="why" style="margin-top:9px">All that changed is <strong>how the failure presents</strong>. Rejection tells you which task failed and when; an OOM kills the <em>whole process</em> and points its stack at whatever innocent code happened to ask for memory next.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. Switch to CallerRuns</h4>
+      <div class="seq">bounded + CallerRuns
+
+rejected   <em>0</em>
+queue      <em>steady at 500</em>
+throughput 66.7 → <em>75.0/s</em>  (the producer pitches in)
+produced   200 → <em>capped at 75.0/s</em></div>
+      <p class="why">No rejection and no OOM. When the queue is full <strong>the producer thread runs the task itself</strong>, and while it does that it cannot produce anything new. That is backpressure — <strong>pushing back by slowing down</strong>.</p>
+      <p class="why" style="margin-top:9px">Not free, though. Production dropped from 200 to 75. No work was lost, but <strong>uploads are now nearly three times slower</strong>. That is the honest outcome, and it is right that users see it.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. Raise threads to 32 — works for I/O</h4>
+      <div class="seq">I/O wait · threads 8 → 32
+
+capacity  66.7 → <em>266.7/s</em>
+queue     500 → <em>0</em></div>
+      <p class="why">For work dominated by <strong>waiting</strong>, like an S3 upload, capacity grows with the thread count because those threads spend most of their time idle on a response. This is exactly where virtual threads earn their keep.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>6. Change only the work type to CPU · process</h4>
+      <div class="seq">still 32 threads, only the type changes
+
+capacity  266.7 → <em>66.7/s</em>  ← same as with 8
+queue     0 → <em>saturated at 500</em></div>
+      <p class="why">Here is the second reversal. <strong>Four times the threads and capacity did not move.</strong> Spawning FFmpeg or encoding an image genuinely uses a core. With 8 cores only 8 things progress at once, and extra threads simply <strong>take CPU from each other</strong>.</p>
+      <p class="why" style="margin-top:9px">Throwing virtual threads at this makes it worse. Threads being cheap means <strong>the number of concurrent processes explodes</strong>, and that is memory and context switching.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>7. Drop production to 50/s</h4>
+      <div class="seq">CPU work · 8 threads · 200 → 50 produced
+
+queue     <em>0</em>
+rejected  <em>0</em>
+policy    <em>does not matter</em></div>
+      <p class="why">This is the real fix. Queue policy decides <strong>what happens when you overflow</strong>, not <strong>whether</strong> you overflow. Bring production under capacity and the three policies become indistinguishable again — you are back at recipe 1.</p>
+    </div>
+
+    <h2>How to read a rejection</h2>
+    <p>The exception looks like this, and everything you need is inside it.</p>
+    <pre><code>Task rejected from ThreadPoolExecutor
+  [Running, pool size = 8, active threads = 8,
+   queued tasks = 500, completed tasks = 0]</code></pre>
+    <table class="keytable">
+      <tr><th>field</th><th>what it tells you</th></tr>
+      <tr><td><code>pool size</code></td><td>threads created</td></tr>
+      <tr><td><code>active threads</code></td><td>currently working. Equal to pool size means nothing is idle</td></tr>
+      <tr><td><code>queued tasks</code></td><td>waiting. Equal to the bound means full</td></tr>
+      <tr><td><code>completed tasks</code></td><td><strong>the number that matters most.</strong> Not climbing means consumption is not progressing at all</td></tr>
+    </table>
+    <p><code>completed tasks = 0</code> is an especially bad sign. It means the queue is not overflowing because things are <em>slow</em> but because <strong>the consumer is blocked</strong> — a deadlock, an external call with no timeout, an exhausted connection pool. Enlarging the queue does nothing for that.</p>
+    <div class="callout">Turn rejection into <strong>a metric</strong>. Stop swallowing the exception, increment a counter and put it on a dashboard, and rejection stops being an incident signal and becomes a <em>capacity</em> signal. "How many are rejected per second" is the same question as "how much capacity are we short".</div>
+
+    <h2>What each policy trades</h2>
+    <table class="keytable">
+      <tr><th>policy</th><th>gives up</th><th>protects</th></tr>
+      <tr><td>bounded + Abort</td><td><strong>discards</strong> the excess</td><td>memory, latency</td></tr>
+      <tr><td>bounded + CallerRuns</td><td>the producer <strong>slows down</strong></td><td>memory, completeness of work</td></tr>
+      <tr><td>unbounded</td><td><strong>the process</strong></td><td>—</td></tr>
+    </table>
+    <p>That third row is the point. An unbounded queue looks like it gives up nothing, but <strong>as long as load exceeds capacity it will fill the heap eventually.</strong> It defers; it does not prevent.</p>
+    <pre><code>// bounded + default policy (Abort) — overflow throws RejectedExecutionException
+new ThreadPoolExecutor(8, 8, 0L, MILLISECONDS,
+        new ArrayBlockingQueue&lt;&gt;(500));
+
+// bounded + CallerRuns — overflow is run by whoever submitted it
+new ThreadPoolExecutor(8, 8, 0L, MILLISECONDS,
+        new ArrayBlockingQueue&lt;&gt;(500),
+        new ThreadPoolExecutor.CallerRunsPolicy());
+
+// unbounded — rejection disappears and an OOM arrives
+new ThreadPoolExecutor(8, 8, 0L, MILLISECONDS,
+        new LinkedBlockingQueue&lt;&gt;());</code></pre>
+
+    <h2>The defaults are already unbounded</h2>
+    <p>You can be in this state without ever having written <code>LinkedBlockingQueue</code>, because the standard factory methods are built that way.</p>
+    <table class="keytable">
+      <tr><th>factory</th><th>what is unbounded</th></tr>
+      <tr><td><code>newFixedThreadPool(n)</code></td><td><strong>the queue.</strong> Threads are fixed at n; the backlog grows as far as the heap allows</td></tr>
+      <tr><td><code>newSingleThreadExecutor()</code></td><td>the same. No queue bound</td></tr>
+      <tr><td><code>newCachedThreadPool()</code></td><td>the opposite — <strong>threads</strong> are unbounded. There is effectively no queue; it makes a thread per task</td></tr>
+      <tr><td><code>newVirtualThreadPerTaskExecutor()</code></td><td>a virtual thread per task, with no cap</td></tr>
+    </table>
+    <p>"Fixed" sounds safe, but the only fixed thing is the thread count. <strong>Bounding the queue means constructing <code>ThreadPoolExecutor</code> yourself.</strong></p>
+
+    <h2>Can't we just add threads?</h2>
+    <p>Recipes 5 and 6 are the answer. <strong>It depends on what the work is waiting for.</strong></p>
+    <table class="keytable">
+      <tr><th>work</th><th>adding threads</th><th>why</th></tr>
+      <tr><td>S3 uploads, external APIs, database reads</td><td>raises capacity</td><td>most of the time is spent waiting on a response; the CPU is idle</td></tr>
+      <tr><td>image encoding, compression, encryption</td><td>up to the core count</td><td>it genuinely uses CPU. Beyond that they take it from each other</td></tr>
+      <tr><td>external processes like FFmpeg</td><td><strong>makes it worse</strong></td><td>process creation cost plus memory. Concurrency is bounded by physical resources</td></tr>
+    </table>
+    <p>That last row is the classic misuse of virtual threads. Their benefit is <strong>releasing the carrier thread while blocked on I/O</strong>, and spawning a process through <code>ProcessBuilder</code> gets none of it. What you get instead is <strong>an explosion in concurrent processes</strong>, because threads became cheap.</p>
+    <div class="callout">Put external process execution behind a <strong>fixed-size pool with a bounded queue</strong>. Concurrency there is pinned to a physical resource — core count, GPU sessions — not something cheap threads can raise.</div>
+
+    <h2>The real fix is on the production side</h2>
+    <p>Recipe 7 shows it. Queue policy decides <strong>what happens on overflow</strong>; it does not stop the overflow. While load exceeds capacity, every policy pays something.</p>
+    <p>So the order is:</p>
+    <ol>
+      <li><strong>Can production be reduced?</strong> Is there a way to get the same result from fewer tasks — this is usually where the answer is</li>
+      <li><strong>Can service time be reduced?</strong> Take a task from 120ms to 30ms and capacity quadruples</li>
+      <li><strong>Can consumer capacity grow?</strong> Subject to the ceiling in the table above, which depends on the work type</li>
+      <li><strong>Still overflowing? Then backpressure.</strong> It makes overflow <em>safe</em>; it does not remove it</li>
+    </ol>
+    <p>Step one is the most overlooked and the most effective. Change spawning one external process per frame into <strong>spawning one and streaming the frames out</strong>, and the task count drops by a factor of N outright. Then the queue policy stops mattering — you are back at recipe 1.</p>
+
+    <h2>Using CallerRuns carefully</h2>
+    <p>It is a reasonable default, but know the side effects. They all come from one fact: <strong>it blocks the producer.</strong></p>
+    <ul>
+      <li><strong>If the producer is an HTTP request thread</strong>, that request slows down. Propagating backpressure to the client is usually right, but the request thread pool can be exhausted</li>
+      <li><strong>If the producer is a scheduler thread</strong>, <strong>every other scheduled job stops</strong> while it is busy. Especially dangerous with a scheduler pool size of one</li>
+      <li><strong>Ordering is not preserved</strong> — a task the producer runs itself finishes ahead of what is already queued</li>
+      <li><strong>If the producer holds a lock</strong>, it now runs a task while holding it. This is where deadlock risk comes from</li>
+    </ul>
+    <p>When any of those bite, bounding in-flight work with a <code>Semaphore</code> is better. The producer waits in <code>acquire()</code>, so the effect is the same and what it is waiting on is explicit in the code.</p>
+    <pre><code>private final Semaphore inFlight = new Semaphore(500);
+
+void submit(Task task) throws InterruptedException {
+    inFlight.acquire();                       // blocks here when there is no room
+    executor.execute(() -> {
+        try { task.run(); }
+        finally { inFlight.release(); }
+    });
+}</code></pre>
+
+    <h2>What to check in production</h2>
+    <p><strong>Metrics first.</strong> Without them you find out the queue was filling when the OOM lands.</p>
+    <table class="keytable">
+      <tr><th>metric</th><th>what it tells you</th></tr>
+      <tr><td>queue depth</td><td>pinned to the bound means already saturated. <strong>Monotonic growth means an unbounded queue</strong></td></tr>
+      <tr><td>rejection count</td><td>the size of your capacity shortfall. The goal is not zero, it is <em>observed</em></td></tr>
+      <tr><td>completed-task rate</td><td>flat means the consumer is blocked. Not a queue problem</td></tr>
+      <tr><td>active threads / pool size</td><td>equal means saturated. Low active with a full queue means the block is elsewhere</td></tr>
+      <tr><td>heap trend</td><td>rising without a sawtooth means something is accumulating</td></tr>
+    </table>
+    <p>On Spring, <code>ThreadPoolTaskExecutor</code> exports <code>executor.queued</code>, <code>executor.active</code> and <code>executor.completed</code> through Micrometer already. You only have to name it.</p>
+
+    <p><strong>A heap dump makes it obvious.</strong> If the OOM already happened, look at the dominators. <code>LinkedBlockingQueue$Node</code> near the top is this page's problem. Check what the queued tasks reference, too — the task object may be small, but <strong>holding an image buffer or a request context</strong> makes the real footprint far larger.</p>
+
+    <p><strong>Load-test above capacity.</strong> Below it, all three policies look identical (recipe 1). Validating a policy means <strong>deliberately overflowing</strong>.</p>
+
+    <p><strong>The order.</strong> When you find a queue overflowing:</p>
+    <ol>
+      <li>Is <code>completed tasks</code> climbing? If not, the consumer is blocked and this is not about the queue</li>
+      <li>Compare production rate and capacity <strong>as numbers</strong>. Without knowing the shortfall you cannot decide anything</li>
+      <li>Look for a way to produce less first</li>
+      <li>Touch the queue policy <strong>last</strong> — and unbounded is not one of the options</li>
+    </ol>
+
+    <div class="callout">This model is simplified for teaching. Service time is fixed at 120ms, cores at 8, and heap per queued task at 256KB; in reality service time has a distribution and the GC moves alongside it. In particular, <strong>the OOM timing depends heavily on what the tasks reference</strong> — what matters is not the number of seconds but that <em>with an unbounded queue it always comes</em>.</div>
+
+  </article>
+
+  <footer>Backpressure and queue policy · simplified teaching model · <a href="/backpressure/" hreflang="ko" lang="ko">한국어</a> / English · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  pause:'pause', resume:'resume',
+  uPs:'/s', uThr:'thr', uTask:'tasks', uSec:'s', noLimit:'none',
+  p_abort:'bounded + Abort', p_callerRuns:'bounded + CallerRuns', p_unbounded:'unbounded',
+  qNow:'$1 waiting', qMax:'bound $1', qOomAt:'OOM at $1 tasks · heap $2MB',
+  wCaller:'producer thread running a task',
+  mQueue:'queue depth', mOf:'bound $1', mHeap:'heap held by queue', mOfHeap:'of $1MB free',
+  mRej:'rejected total', mPerSec:'$1 per second', mThr:'throughput', mCap:'capacity $1/s',
+  mElapsed:'elapsed',
+  cPol:'policy', cDepth:'queue', cRej:'rejected/s', cThr:'through/s', cRisk:'cost',
+  rOom:'OOM in $1s', rLoss:'excess is lost', rSlow:'producer slows', rNone:'none',
+  rejBody:'<b>Task rejected from ThreadPoolExecutor</b>\n' +
+          '  [Running, pool size = $1, active threads = $2,\n' +
+          '   queued tasks = $3, <span class="z">completed tasks = $4</span>]\n' +
+          '$5 tasks a second are being dropped. This exception is not a bug — it is a capacity report.',
+  oomBody:'<b>java.lang.OutOfMemoryError: Java heap space</b> — process terminated.\n' +
+          '$1 tasks piled up and consumed all $2MB of free heap. Not one task was rejected.\n' +
+          'Rejection did not go away; the process died in its place.',
+  hHealthy:'production is under the $1/s capacity — the policy makes no difference',
+  hAbort:'the queue is full — $1 tasks a second are dropped. That number is your capacity shortfall',
+  hCaller:'the producer pitches in for $1/s throughput — and its own rate is capped there',
+  hUnbounded:'no rejection, but the queue is eating the heap — OOM in $1s',
+  hCpu:'CPU work is capped by $1 cores — more threads leave capacity at $2/s',
+  hOom:'the process died — this is what trading rejection for an unbounded queue buys',
+  lgFirstReject:'queue reached its bound of $1 — rejection begins',
+  lgHalf:'$1 tasks queued — half the free heap is gone',
+  lgOom:'OutOfMemoryError — $1 queued tasks filled $2MB of heap',
+  lgHealthy:'production is under capacity — the queue is empty',
+  scene:[
+    'Producing 50/s against a capacity of 66.7/s. Nothing queues up, so the policy makes no difference — cycle through all three and the screen is identical. Queue policy only starts to mean something once load exceeds capacity.',
+    'Production raised to 200/s while capacity stays at 66.7/s. The queue hits its bound of 500 in 3.8 seconds and 133 tasks a second start being rejected. The logs go red. But this is the system being honest — reporting that it cannot do what it cannot do.',
+    'Queue made unbounded. Rejection is zero and the logs are quiet. Instead the queue grows by 133 a second and eats the heap. Watch the bar march toward the OOM threshold — the process dies in fifteen seconds. Rejection was not removed; it was traded for an OOM.',
+    'Switched to CallerRuns. No rejection, no OOM. When the queue is full the producer thread runs the task itself, and while it does it cannot produce. Throughput ticks up to 75/s and the production rate is capped there. That is backpressure — pushing back by slowing down.',
+    'Threads raised to 32. Capacity becomes 266.7/s, comfortably above the 200/s arriving, and the queue empties. For work dominated by waiting, like an S3 upload, capacity grows with the thread count — this is exactly where virtual threads earn their keep.',
+    'Still 32 threads, but the work type is now CPU and external processes. Capacity is back to 66.7/s — identical to 8 threads. With 8 cores only 8 things progress at once, and extra threads just take CPU from each other. This is not a resource cheap threads can raise.',
+    'Finally, production dropped to 50/s. Queue and rejection are both zero. This is the real fix — queue policy decides what happens when you overflow, not whether you overflow. Turn one process per frame into one process streaming all the frames and the task count drops outright, and then the policy stops mattering again.'
+  ],
+};
+</script>
+<script src="/shared/backpressure-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>

@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>거부는 버그가 아니라 신호다 — 큐를 무제한으로 열면 생기는 일</title>
+<meta name="description" content="RejectedExecutionException 이 떠서 큐를 무제한으로 바꿨습니다. 예외는 사라지고 몇 분 뒤 OOM 이 옵니다. 유계+Abort, CallerRuns, 무제한 세 정책을 같은 부하에서 돌려보며 백프레셔가 무엇을 사고파는지 확인합니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/backpressure/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/backpressure/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/backpressure/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/backpressure/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="거부는 버그가 아니라 신호다">
+<meta property="og:description" content="큐를 무제한으로 열면 거부가 사라지는 게 아니라 OOM 으로 바뀝니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/backpressure/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="거부는 버그가 아니라 신호다">
+<meta name="twitter:description" content="큐 정책 셋을 같은 부하에서 돌려보며 백프레셔가 무엇을 사고파는지 봅니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/backpressure-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/backpressure/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>거부는 버그가 아니라 신호다</h1>
+  <p class="lede">로그에 <code>RejectedExecutionException</code> 이 쏟아집니다. 큐 상한을 없애면 조용해지죠. 그리고 몇 분 뒤 <code>OutOfMemoryError</code> 가 옵니다 — 거부를 없앤 게 아니라 <strong>거부를 OOM 과 맞바꾼</strong> 겁니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>생산 속도</label>
+          <span class="v" id="vRate">200<small> /s</small></span>
+          <input type="range" id="sRate" min="10" max="500" step="10" value="200" aria-label="초당 생산되는 태스크 수">
+        </div>
+        <div class="dial">
+          <label>소비 스레드</label>
+          <span class="v" id="vCons">8<small> 개</small></span>
+          <input type="range" id="sCons" min="1" max="64" step="1" value="8" aria-label="소비 스레드 수">
+        </div>
+        <div class="dial">
+          <label>작업 성격</label>
+          <div class="seg" id="segKind">
+            <button data-kind="io" aria-pressed="true">I/O 대기</button>
+            <button data-kind="cpu" aria-pressed="false">CPU · 외부 프로세스</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>큐 정책</label>
+          <div class="seg" id="segPolicy">
+            <button data-policy="abort" aria-pressed="true">유계 + Abort</button>
+            <button data-policy="callerRuns" aria-pressed="false">유계 + CallerRuns</button>
+            <button data-policy="unbounded" aria-pressed="false">무제한</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>큐 상한</label>
+          <span class="v" id="vQmax">500<small> 건</small></span>
+          <input type="range" id="sQmax" min="100" max="3000" step="100" value="500" aria-label="큐 상한">
+        </div>
+        <div class="dial">
+          <label>시뮬레이션</label>
+          <button id="btnRun">일시정지</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">생산자 → 큐 → 소비 스레드</span>
+      <div class="pipe">
+        <div class="stage">
+          <div class="box" id="boxIn"><span class="k">들어옴</span><span class="n" id="nIn">200</span><span class="k">/s</span></div>
+          <div class="qwrap">
+            <div class="qbar"><div class="fill" id="qFill"></div><div class="lim" id="qLim"></div></div>
+            <div class="qmeta"><span id="qNow"></span><span id="qScale"></span></div>
+            <div class="workers" id="workers"></div>
+          </div>
+          <div class="box" id="boxOut"><span class="k">나감</span><span class="n" id="nOut">0</span><span class="k">/s · 용량 <span id="nCap">0</span></span></div>
+        </div>
+        <div class="alert" id="alert"></div>
+        <div class="meters" id="meters"></div>
+      </div>
+      <p class="boardnote">가운데 막대가 큐입니다. 세로선은 상한이고, 무제한일 때는 사라지면서 눈금이 <strong>OOM 임계</strong>로 바뀝니다. 아래 칸은 소비 스레드예요 — 초록은 일하는 중, 노란 칸은 CallerRuns 로 <strong>생산자 스레드가 직접 처리하는 중</strong>입니다. 태스크 하나가 큐에서 256KB 를 잡고 있고 여유 힙은 512MB 로 뒀습니다.</p>
+    </section>
+
+    <section>
+      <span class="cap">지금 부하에서 세 정책이 각각</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section>
+      <span class="cap">사건 기록</span>
+      <div class="events" id="events"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>직접 조작하기</h2>
+    <p>태스크 하나에 <strong>120ms</strong> 가 걸립니다. 코어는 8개예요. 이 두 값이 처리 용량을 정합니다.</p>
+    <table class="keytable">
+      <tr><th>조작</th><th>무엇이 일어나나</th></tr>
+      <tr><td>생산 속도</td><td>초당 몇 개가 큐로 들어오는지</td></tr>
+      <tr><td>소비 스레드</td><td>몇 개가 동시에 처리하는지. <strong>작업 성격에 따라 효과가 완전히 다릅니다</strong></td></tr>
+      <tr><td>작업 성격</td><td>I/O 대기(용량 = <code>스레드 ÷ 0.12</code>) / CPU·외부 프로세스(용량 = <code>min(스레드, 8) ÷ 0.12</code>)</td></tr>
+      <tr><td>큐 정책</td><td>가득 찼을 때 무엇을 할지. 이 페이지의 주인공입니다</td></tr>
+      <tr><td>큐 상한</td><td>무제한일 때는 회색으로 죽습니다</td></tr>
+    </table>
+
+    <h2>이렇게 해보세요</h2>
+
+    <div class="recipe">
+      <h4>1. 용량 안에서 시작한다</h4>
+      <div class="seq">생산 50/s · 스레드 8 · I/O · 유계+Abort
+
+용량   <em>66.7/s</em>
+큐     <em>0 부근</em>
+거부   0</div>
+      <p class="why">생산이 용량보다 적으면 큐가 안 쌓입니다. <strong>정책이 무엇이든 아무 차이가 없어요.</strong> 세 정책을 번갈아 눌러봐도 화면이 똑같습니다. 큐 정책은 <em>부하가 용량을 넘을 때만</em> 의미가 생깁니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. 생산을 200/s 로 올린다</h4>
+      <div class="seq">생산 200/s · 용량 66.7/s
+
+큐    <em>500 에서 멈춤</em>
+거부  <em>133.3/s</em>  ← 초당 133건이 버려진다
+처리  66.7/s</div>
+      <p class="why">큐가 3.8초 만에 차고 그때부터 거부가 시작됩니다. 로그가 시뻘개지죠. <strong>그런데 이건 시스템이 정직하게 말하고 있는 겁니다</strong> — "초당 66.7건밖에 못 하는데 200건이 들어온다"고요.</p>
+      <p class="why" style="margin-top:9px">거부 패널의 <code>completed tasks</code> 를 보세요. 이 숫자가 안 늘고 있다면 소비가 <strong>아예 진행되지 않고 있다</strong>는 뜻이고, 그건 큐 문제가 아니라 소비자가 막혔다는 신호입니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. 큐를 무제한으로 바꾼다 — 조용해진다</h4>
+      <div class="seq">무제한 큐
+
+거부  133.3/s → <em>0</em>
+큐    500 → <em>계속 증가</em>
+힙    <em>0 → 512MB</em>
+       <em>15.4초 뒤 OutOfMemoryError</em></div>
+      <p class="why">예외가 사라졌습니다. 로그가 깨끗해졌어요. 그리고 큐가 초당 133건씩 쌓이면서 힙을 먹습니다. <strong>15초 뒤 프로세스가 죽습니다.</strong></p>
+      <p class="why" style="margin-top:9px">바뀐 건 <strong>실패가 드러나는 방식</strong>뿐입니다. 거부는 어느 태스크가 언제 실패했는지 알려주지만, OOM 은 <em>프로세스 전체</em>를 죽이고 스택은 하필 그때 메모리를 요청한 애먼 코드를 가리킵니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. CallerRuns 로 바꾼다</h4>
+      <div class="seq">유계 + CallerRuns
+
+거부  <em>0</em>
+큐    <em>500 에서 안정</em>
+처리  66.7 → <em>75.0/s</em>  (생산자가 한 몫 거든다)
+생산  200 → <em>75.0/s 로 묶인다</em></div>
+      <p class="why">거부도 없고 OOM 도 없습니다. 큐가 가득 차면 <strong>생산자 스레드가 태스크를 직접 처리</strong>하거든요. 그동안 생산자는 새 태스크를 못 만듭니다. 그게 백프레셔예요 — <strong>느려지는 것으로 밀어내는 것</strong>입니다.</p>
+      <p class="why" style="margin-top:9px">공짜는 아닙니다. 생산 속도가 200에서 75로 묶였어요. 일이 사라지진 않았지만 <strong>업로드가 세 배 가까이 느려집니다.</strong> 그게 정직한 결과이고, 사용자에게도 그렇게 보이는 게 맞습니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. 스레드를 32개로 늘린다 — I/O 라면 통한다</h4>
+      <div class="seq">I/O 대기 · 스레드 8 → 32
+
+용량  66.7 → <em>266.7/s</em>
+큐    500 → <em>0</em></div>
+      <p class="why">S3 업로드처럼 <strong>대기가 지배적인</strong> 작업이면 스레드를 늘린 만큼 용량이 늡니다. 스레드가 대부분의 시간을 응답을 기다리며 놀고 있으니까요. 여기서는 Virtual Thread 가 정확히 제 역할을 합니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>6. 작업 성격만 CPU·프로세스로 바꾼다</h4>
+      <div class="seq">스레드는 32개 그대로, 성격만 변경
+
+용량  266.7 → <em>66.7/s</em>  ← 8개일 때와 똑같다
+큐    0 → <em>500 포화</em></div>
+      <p class="why">여기가 이 페이지의 두 번째 반전입니다. <strong>스레드를 네 배로 늘렸는데 용량이 그대로예요.</strong> FFmpeg 를 띄우거나 이미지를 인코딩하는 일은 코어를 실제로 씁니다. 코어가 8개면 동시에 진행되는 건 8개뿐이고, 스레드를 더 만들어봐야 <strong>서로 CPU 를 뺏을 뿐</strong>입니다.</p>
+      <p class="why" style="margin-top:9px">Virtual Thread 로 이런 일을 뿌리면 더 나빠집니다. 스레드가 값싸니 <strong>동시 프로세스 수만 폭증</strong>하고, 그건 곧 메모리와 컨텍스트 스위칭이에요.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>7. 생산 속도를 50/s 로 내린다</h4>
+      <div class="seq">CPU 작업 · 스레드 8 · 생산 200 → 50
+
+큐    <em>0</em>
+거부  <em>0</em>
+정책  <em>무엇이든 상관없다</em></div>
+      <p class="why">이게 진짜 해법입니다. 큐 정책은 <strong>넘칠 때 무엇을 할지</strong>를 정하는 것이지 <strong>넘치지 않게</strong> 하는 게 아니에요. 생산이 용량 아래로 내려오면 세 정책이 다시 구별되지 않습니다 — 레시피 1로 돌아온 겁니다.</p>
+    </div>
+
+    <h2>거부를 읽는 법</h2>
+    <p>이 예외는 이렇게 생겼습니다. 안에 필요한 정보가 다 들어 있어요.</p>
+    <pre><code>Task rejected from ThreadPoolExecutor
+  [Running, pool size = 8, active threads = 8,
+   queued tasks = 500, completed tasks = 0]</code></pre>
+    <table class="keytable">
+      <tr><th>항목</th><th>무엇을 말해주나</th></tr>
+      <tr><td><code>pool size</code></td><td>만들어진 스레드 수</td></tr>
+      <tr><td><code>active threads</code></td><td>지금 일하는 수. <code>pool size</code> 와 같으면 스레드는 놀고 있지 않다</td></tr>
+      <tr><td><code>queued tasks</code></td><td>대기 중. 상한과 같으면 가득 찬 것</td></tr>
+      <tr><td><code>completed tasks</code></td><td><strong>가장 중요한 숫자.</strong> 이게 안 늘면 소비가 아예 진행되지 않고 있다</td></tr>
+    </table>
+    <p><code>completed tasks = 0</code> 은 특히 나쁜 신호입니다. 큐가 넘치는 게 <em>느려서</em>가 아니라 <strong>소비자가 어딘가에서 막혀 있다</strong>는 뜻이거든요 — 데드락, 외부 호출 무한 대기, 커넥션 고갈 같은 것들이요. 이 경우 큐를 키우는 건 아무 의미가 없습니다.</p>
+    <div class="callout">거부를 <strong>지표로 만드세요.</strong> 예외를 삼키지 말고 카운터를 올려서 대시보드에 띄우면, 그때부터 거부는 장애 신호가 아니라 <em>용량 지표</em>가 됩니다. "초당 몇 건이 거부되는가"는 "얼마나 부족한가"와 같은 말이에요.</div>
+
+    <h2>세 가지 정책이 사고파는 것</h2>
+    <table class="keytable">
+      <tr><th>정책</th><th>포기하는 것</th><th>지키는 것</th></tr>
+      <tr><td>유계 + Abort</td><td>초과분을 <strong>버린다</strong></td><td>메모리, 지연 시간</td></tr>
+      <tr><td>유계 + CallerRuns</td><td>생산자가 <strong>느려진다</strong></td><td>메모리, 일의 완결성</td></tr>
+      <tr><td>무제한</td><td><strong>프로세스</strong></td><td>—</td></tr>
+    </table>
+    <p>세 번째 줄이 요점입니다. 무제한 큐는 아무것도 포기하지 않는 것처럼 보이지만, <strong>부하가 용량을 넘는 한 언젠가 반드시 힙을 채웁니다.</strong> 미루는 것이지 막는 게 아니에요.</p>
+    <pre><code>// 유계 + 기본 정책(Abort) — 넘치면 RejectedExecutionException
+new ThreadPoolExecutor(8, 8, 0L, MILLISECONDS,
+        new ArrayBlockingQueue&lt;&gt;(500));
+
+// 유계 + CallerRuns — 넘치면 부른 쪽이 직접 처리한다
+new ThreadPoolExecutor(8, 8, 0L, MILLISECONDS,
+        new ArrayBlockingQueue&lt;&gt;(500),
+        new ThreadPoolExecutor.CallerRunsPolicy());
+
+// 무제한 — 거부는 사라지고 OOM 이 온다
+new ThreadPoolExecutor(8, 8, 0L, MILLISECONDS,
+        new LinkedBlockingQueue&lt;&gt;());</code></pre>
+
+    <h2>기본값이 이미 무제한이다</h2>
+    <p>직접 <code>LinkedBlockingQueue</code> 를 쓴 적이 없어도 이 상태일 수 있습니다. 표준 팩토리 메서드들이 그렇게 만들어져 있거든요.</p>
+    <table class="keytable">
+      <tr><th>팩토리</th><th>무엇이 무제한인가</th></tr>
+      <tr><td><code>newFixedThreadPool(n)</code></td><td><strong>큐가 무제한</strong>입니다. 스레드는 n개로 고정되지만 대기열은 힙이 허락하는 만큼</td></tr>
+      <tr><td><code>newSingleThreadExecutor()</code></td><td>같습니다. 큐 상한이 없습니다</td></tr>
+      <tr><td><code>newCachedThreadPool()</code></td><td>반대로 <strong>스레드가 무제한</strong>입니다. 큐는 사실상 없고 태스크마다 스레드를 만듭니다</td></tr>
+      <tr><td><code>newVirtualThreadPerTaskExecutor()</code></td><td>태스크마다 가상 스레드. 상한이 없습니다</td></tr>
+    </table>
+    <p>이름이 "fixed" 라 안전해 보이지만 고정된 건 스레드 수뿐입니다. <strong>상한을 두려면 <code>ThreadPoolExecutor</code> 를 직접 만드는 수밖에 없어요.</strong></p>
+
+    <h2>스레드를 늘리면 되지 않나</h2>
+    <p>레시피 5와 6이 그 답입니다. <strong>작업이 무엇을 기다리느냐에 달려 있습니다.</strong></p>
+    <table class="keytable">
+      <tr><th>작업</th><th>스레드를 늘리면</th><th>왜</th></tr>
+      <tr><td>S3 업로드, 외부 API, DB 조회</td><td>용량이 는다</td><td>대부분의 시간을 응답 대기로 보낸다. CPU 는 놀고 있다</td></tr>
+      <tr><td>이미지 인코딩, 압축, 암호화</td><td>코어 수까지만</td><td>CPU 를 실제로 쓴다. 그 이상은 서로 뺏는다</td></tr>
+      <tr><td>FFmpeg 같은 외부 프로세스</td><td><strong>오히려 나빠진다</strong></td><td>프로세스 생성 비용 + 메모리. 동시 실행 수는 물리 자원에 묶인다</td></tr>
+    </table>
+    <p>마지막 줄이 Virtual Thread 를 잘못 쓰는 전형입니다. 가상 스레드의 이점은 <strong>블로킹 I/O 대기 중에 캐리어 스레드를 반납</strong>하는 것인데, <code>ProcessBuilder</code> 로 프로세스를 띄우는 일에는 그 이점이 없습니다. 오히려 스레드가 값싸진 만큼 <strong>동시 프로세스 수만 폭증</strong>해요.</p>
+    <div class="callout">외부 프로세스 실행은 <strong>고정 크기 풀 + 유계 큐</strong> 뒤에 두세요. 동시 실행 수는 코어 수나 GPU 세션 수 같은 물리 자원에 묶이는 값이지, 값싼 스레드로 늘릴 수 있는 대상이 아닙니다.</div>
+
+    <h2>진짜 해법은 생산 쪽에 있다</h2>
+    <p>레시피 7이 보여주는 것입니다. 큐 정책은 <strong>넘칠 때 무엇을 할지</strong>를 정할 뿐, 넘치지 않게 해주지 않아요. 부하가 용량을 넘는 상태가 계속되면 어느 정책이든 대가를 치릅니다.</p>
+    <p>그래서 순서는 이렇습니다.</p>
+    <ol>
+      <li><strong>생산량을 줄일 수 있는가.</strong> 같은 결과를 더 적은 태스크로 낼 방법이 있는지 — 대개 여기에 답이 있습니다</li>
+      <li><strong>서비스 시간을 줄일 수 있는가.</strong> 태스크 하나가 120ms 에서 30ms 가 되면 용량이 네 배입니다</li>
+      <li><strong>소비 용량을 늘릴 수 있는가.</strong> 다만 위 표대로, 작업 성격에 따라 천장이 다릅니다</li>
+      <li><strong>그래도 넘친다면 백프레셔.</strong> 이건 넘침을 <em>안전하게</em> 만드는 장치이지 없애는 장치가 아닙니다</li>
+    </ol>
+    <p>1번이 가장 자주 간과되고 가장 효과가 큽니다. 프레임마다 외부 프로세스를 한 번씩 띄우던 것을 <strong>한 번 띄워 스트림으로 받는</strong> 식으로 바꾸면 태스크 수가 통째로 1/N 이 됩니다. 그러면 큐 정책을 무엇으로 하든 상관없어져요 — 레시피 1의 상태로 돌아가니까요.</p>
+
+    <h2>CallerRuns 를 쓸 때 주의할 것</h2>
+    <p>기본값으로 삼을 만한 정책이지만 부작용을 알고 써야 합니다. <strong>생산자를 블로킹한다</strong>는 게 전부거든요.</p>
+    <ul>
+      <li><strong>생산자가 HTTP 요청 스레드라면</strong> — 그 요청이 느려집니다. 백프레셔가 클라이언트까지 전달되는 거라 대체로 옳지만, 요청 스레드 풀이 고갈될 수 있습니다</li>
+      <li><strong>생산자가 스케줄러 스레드라면</strong> — 그 스레드가 막히는 동안 <strong>다른 스케줄 작업도 전부 멈춥니다.</strong> 스케줄러 풀 크기가 1이면 특히 위험해요</li>
+      <li><strong>순서가 보장되지 않습니다</strong> — 생산자가 직접 처리한 태스크가 큐에 있는 것보다 먼저 끝납니다</li>
+      <li><strong>생산자가 락을 쥐고 있다면</strong> — 그 락을 쥔 채로 태스크를 처리하게 됩니다. 데드락 위험이 여기서 나옵니다</li>
+    </ul>
+    <p>이런 게 걸리면 <code>Semaphore</code> 로 인플라이트 수를 제한하는 쪽이 낫습니다. 생산자가 <code>acquire()</code> 에서 기다리게 되므로 효과는 같고, 무엇을 기다리는지가 코드에 명시적으로 드러나요.</p>
+    <pre><code>private final Semaphore inFlight = new Semaphore(500);
+
+void submit(Task task) throws InterruptedException {
+    inFlight.acquire();                       // 자리가 없으면 여기서 막힌다
+    executor.execute(() -> {
+        try { task.run(); }
+        finally { inFlight.release(); }
+    });
+}</code></pre>
+
+    <h2>현장에서 확인할 것</h2>
+    <p><strong>먼저 지표부터.</strong> 이게 없으면 큐가 차오르는 걸 OOM 이 나서야 압니다.</p>
+    <table class="keytable">
+      <tr><th>지표</th><th>무엇을 말해주나</th></tr>
+      <tr><td>큐 깊이</td><td>상한에 붙어 있으면 이미 포화. <strong>단조 증가하면 무제한 큐다</strong></td></tr>
+      <tr><td>거부 건수</td><td>용량 부족의 크기. 0이 목표가 아니라 <em>관측되는 것</em>이 목표</td></tr>
+      <tr><td>completed tasks 증가율</td><td>안 늘면 소비자가 막힌 것. 큐 문제가 아니다</td></tr>
+      <tr><td>활성 스레드 / 풀 크기</td><td>같으면 포화. 활성이 낮은데 큐가 차면 다른 데서 막힌 것</td></tr>
+      <tr><td>힙 사용량 추세</td><td>톱니 없이 우상향이면 어딘가 쌓이고 있다</td></tr>
+    </table>
+    <p>Spring 이라면 <code>ThreadPoolTaskExecutor</code> 가 Micrometer 로 <code>executor.queued</code>, <code>executor.active</code>, <code>executor.completed</code> 를 다 내보냅니다. 이름만 붙여주면 됩니다.</p>
+
+    <p><strong>힙 덤프를 뜨면 바로 보입니다.</strong> OOM 이 이미 났다면 지배 객체(dominator)를 보세요. <code>LinkedBlockingQueue$Node</code> 가 상위에 있으면 이 페이지의 문제입니다. 큐에 매달린 태스크가 무엇을 참조하고 있는지도 같이 확인하세요 — 태스크 자체는 작아도 <strong>이미지 버퍼나 요청 컨텍스트를 붙들고 있으면</strong> 실제 점유는 훨씬 큽니다.</p>
+
+    <p><strong>부하 테스트는 용량 위에서 하세요.</strong> 용량 아래에서 돌리면 세 정책이 전부 똑같이 보입니다(레시피 1). 정책을 검증하려면 <strong>일부러 넘겨야</strong> 합니다.</p>
+
+    <p><strong>순서.</strong> 큐가 넘치는 걸 발견하면 이렇게 봅니다.</p>
+    <ol>
+      <li><code>completed tasks</code> 가 늘고 있는가 — 안 늘면 소비자가 막힌 것이고 큐 이야기가 아니다</li>
+      <li>생산 속도와 처리 용량을 <strong>숫자로</strong> 비교한다. 얼마나 부족한지 모르면 아무것도 못 정한다</li>
+      <li>생산량을 줄일 방법을 먼저 찾는다</li>
+      <li>큐 정책은 <strong>마지막에</strong> 만진다. 그리고 무제한은 선택지가 아니다</li>
+    </ol>
+
+    <div class="callout">이 페이지의 모델은 개념을 보여주기 위해 단순화한 것입니다. 서비스 시간 120ms 고정, 코어 8개, 태스크당 힙 256KB 로 뒀고, 실제로는 서비스 시간이 분포를 갖고 GC 도 함께 움직입니다. 특히 <strong>OOM 시점은 태스크가 무엇을 참조하느냐에 따라 크게 달라집니다</strong> — 중요한 건 몇 초냐가 아니라 <em>무제한 큐에서는 반드시 온다</em>는 것입니다.</div>
+
+  </article>
+
+  <footer>백프레셔와 큐 정책 · 교육용 단순화 모델 · 한국어 / <a href="/en/backpressure/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  pause:'일시정지', resume:'다시 시작',
+  uPs:'/s', uThr:'개', uTask:'건', uSec:'초', noLimit:'없음',
+  p_abort:'유계 + Abort', p_callerRuns:'유계 + CallerRuns', p_unbounded:'무제한',
+  qNow:'대기 $1건', qMax:'상한 $1', qOomAt:'OOM 임계 $1건 · 힙 $2MB',
+  wCaller:'생산자 스레드가 직접 처리 중',
+  mQueue:'큐 깊이', mOf:'상한 $1', mHeap:'큐가 잡은 힙', mOfHeap:'여유 $1MB',
+  mRej:'누적 거부', mPerSec:'초당 $1', mThr:'처리', mCap:'용량 $1/s',
+  mElapsed:'경과',
+  cPol:'정책', cDepth:'큐 깊이', cRej:'거부/s', cThr:'처리/s', cRisk:'대가',
+  rOom:'$1초 뒤 OOM', rLoss:'초과분 유실', rSlow:'생산자가 느려짐', rNone:'없음',
+  rejBody:'<b>Task rejected from ThreadPoolExecutor</b>\n' +
+          '  [Running, pool size = $1, active threads = $2,\n' +
+          '   queued tasks = $3, <span class="z">completed tasks = $4</span>]\n' +
+          '초당 $5건이 버려지고 있다. 이 예외는 버그가 아니라 용량이 모자란다는 보고다.',
+  oomBody:'<b>java.lang.OutOfMemoryError: Java heap space</b> — 프로세스 종료.\n' +
+          '큐에 $1건이 쌓여 여유 힙 $2MB 를 다 먹었다. 거부는 한 건도 없었다.\n' +
+          '거부가 사라진 게 아니라 거부 대신 프로세스가 죽은 것이다.',
+  hHealthy:'생산이 용량 $1/s 아래다 — 정책이 무엇이든 차이가 없다',
+  hAbort:'큐가 가득 찼다 — 초당 $1건이 버려진다. 이 숫자가 곧 부족한 용량이다',
+  hCaller:'생산자가 직접 거들어 처리 $1/s — 대신 생산 속도가 그만큼으로 묶인다',
+  hUnbounded:'거부는 없지만 큐가 힙을 먹고 있다 — $1초 뒤 OOM',
+  hCpu:'CPU 작업은 코어 $1개가 천장이다 — 스레드를 늘려도 용량은 $2/s 그대로',
+  hOom:'프로세스가 죽었다 — 무제한 큐가 거부를 OOM 과 맞바꾼 결과',
+  lgFirstReject:'큐가 상한 $1 에 도달 — 거부 시작',
+  lgHalf:'큐 $1건 — 여유 힙 절반을 먹었다',
+  lgOom:'OutOfMemoryError — 큐 $1건이 힙 $2MB 를 채웠다',
+  lgHealthy:'생산이 용량 아래 — 큐가 비어 있다',
+  scene:[
+    '생산 50/s, 용량 66.7/s 입니다. 큐가 안 쌓이니 정책이 무엇이든 화면이 똑같아요. 세 정책을 번갈아 눌러보세요 — 아무 차이가 없습니다. 큐 정책은 부하가 용량을 넘을 때만 의미가 생깁니다.',
+    '생산을 200/s 로 올렸습니다. 용량은 그대로 66.7/s 예요. 큐가 3.8초 만에 상한 500 에 닿고 그때부터 초당 133건이 거부됩니다. 로그가 시뻘개지죠. 그런데 이건 시스템이 정직하게 말하는 겁니다 — 못 하는 만큼을 못 한다고요.',
+    '큐를 무제한으로 바꿨습니다. 거부가 0이 됐어요. 로그가 조용해졌습니다. 대신 큐가 초당 133건씩 자라면서 힙을 먹습니다. 막대가 OOM 임계를 향해 가는 걸 보세요 — 15초 뒤에 프로세스가 죽습니다. 거부를 없앤 게 아니라 거부를 OOM 과 맞바꾼 겁니다.',
+    'CallerRuns 로 바꿨습니다. 거부도 0, OOM 도 없어요. 큐가 가득 차면 생산자 스레드가 태스크를 직접 처리하고, 그동안 새 태스크를 못 만듭니다. 처리가 75/s 로 조금 늘고 생산 속도가 거기에 묶였어요. 이게 백프레셔입니다 — 느려지는 것으로 밀어내는 것.',
+    '스레드를 32개로 늘렸습니다. 용량이 266.7/s 가 되어 200/s 를 넉넉히 받아냅니다. 큐가 비었어요. S3 업로드처럼 대기가 지배적인 작업에서는 스레드를 늘린 만큼 용량이 늘고, Virtual Thread 가 정확히 제 역할을 하는 자리입니다.',
+    '스레드는 32개 그대로 두고 작업 성격만 CPU·외부 프로세스로 바꿨습니다. 용량이 66.7/s 로 돌아왔어요 — 8개일 때와 똑같습니다. 코어가 8개면 동시에 진행되는 건 8개뿐이고, 스레드를 더 만들어봐야 서로 CPU 를 뺏을 뿐입니다. 값싼 스레드로 늘릴 수 있는 자원이 아니에요.',
+    '마지막으로 생산 속도를 50/s 로 내렸습니다. 큐도 거부도 0입니다. 이게 진짜 해법이에요 — 큐 정책은 넘칠 때 무엇을 할지를 정할 뿐 넘치지 않게 해주지 않습니다. 프레임마다 프로세스를 띄우던 걸 한 번 띄워 스트림으로 받는 식으로 바꾸면 태스크 수가 통째로 줄고, 그러면 정책이 다시 무의미해집니다.'
+  ],
+};
+</script>
+<script src="/shared/backpressure-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>
