@@ -224,22 +224,6 @@ B  COMMIT        <em>→ 3 old versions finally die</em>
     </div>
   </article>
 
-  <!-- ────────────────────────────────────────────────────────────────
-       A real incident dropped in here changes the weight of the whole piece.
-       Uncomment the block below and fill it in. The styling is already applied.
-       Keep this in sync with the Korean page.
-
-  <article class="prose">
-    <h2>What actually happened</h2>
-    <p>When it was, how large the table was, and the symptom that surfaced it.</p>
-    <p>How the cause was narrowed down — which queries were run, and what gave it away.</p>
-    <pre><code>-- the query actually run at the time</code></pre>
-    <p>How it was resolved, and what changed to keep it from recurring.</p>
-    <div class="callout">One line on what was missed in hindsight.</div>
-  </article>
-
-       ──────────────────────────────────────────────────────────────── -->
-
   <article class="prose">
     <h2>PostgreSQL does not modify rows</h2>
     <p>This trips up almost everyone arriving from another database. An <code>UPDATE</code> in PostgreSQL does not change the existing row. <strong>It stamps a death marker on the old version and writes a new version somewhere else.</strong> A <code>DELETE</code> likewise removes nothing — it only marks.</p>
