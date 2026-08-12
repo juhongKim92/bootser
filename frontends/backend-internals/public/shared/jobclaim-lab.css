@@ -1,0 +1,101 @@
+/* ============================================================
+   09. 작업 선점 — 실험대
+   ============================================================ */
+
+.lab{margin:32px 0 8px;border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);overflow:hidden}
+.lab section{border-bottom:1px solid var(--rule);padding:16px 18px}
+.lab section:last-child{border-bottom:none}
+.cap{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;display:block}
+
+/* --- 손잡이 --- */
+.dials{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-end}
+.dial label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
+.dial input[type=range]{width:130px;max-width:42vw;accent-color:var(--horizon);vertical-align:middle}
+.dial .v{font-family:var(--mono);font-size:17px;color:var(--ink);font-variant-numeric:tabular-nums;min-width:60px;display:inline-block}
+.dial .v small{font-size:11px;color:var(--ink-3)}
+.dial .v.off{color:var(--ink-3)}
+.seg{display:flex;gap:0;border:1px solid var(--rule);border-radius:2px;overflow:hidden;flex-wrap:wrap}
+.seg button{border:none;border-right:1px solid var(--rule);border-radius:0;padding:6px 11px;font-size:11px;white-space:nowrap}
+.seg button:last-child{border-right:none}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.hint{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:8px;min-height:14px}
+.hint.warn{color:var(--blocked)}
+
+/* --- 인스턴스 --- */
+.nodes{display:grid;grid-template-columns:repeat(auto-fit,minmax(124px,1fr));gap:9px}
+.node{
+  border:1px solid var(--rule);border-radius:3px;background:var(--paper);
+  padding:9px 10px;min-width:0;
+}
+.node.won{border-color:var(--live)}
+.node.dup{border-color:var(--blocked)}
+.node.lost{border-color:var(--free);border-style:dashed}
+.node .nm{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--ink-3);
+  display:flex;justify-content:space-between;gap:6px;align-items:baseline}
+.node .nm em{font-style:normal;font-size:9px}
+.node.won .nm em{color:var(--live)}
+.node.dup .nm em{color:var(--blocked)}
+.node.lost .nm em{color:var(--free)}
+.node .rows{margin:8px 0 6px;display:flex;flex-direction:column;gap:3px}
+.node .rows span{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);display:flex;justify-content:space-between;gap:8px}
+.node .rows b{color:var(--ink);font-weight:400;font-variant-numeric:tabular-nums}
+.node .rows span.bad b{color:var(--blocked)}
+
+/* --- 작업 결과 --- */
+.jobs{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
+.jobs i{
+  width:16px;height:16px;border-radius:2px;display:inline-block;
+  border:1px solid var(--rule);background:var(--paper-2);
+  font-style:normal;font-family:var(--mono);font-size:9px;line-height:14px;text-align:center;color:var(--ink-3);
+}
+.jobs i.ok{border-color:var(--live);color:var(--live)}
+.jobs i.dup{border-color:var(--blocked);background:var(--blocked);color:var(--paper)}
+.jobs i.zombie{border-color:var(--free);border-style:dashed;color:var(--free)}
+
+/* --- 계기 --- */
+.meters{display:flex;flex-wrap:wrap;gap:14px 22px;margin-top:14px;padding-top:12px;border-top:1px solid var(--rule)}
+.meters div{min-width:92px}
+.meters .k{font-family:var(--mono);font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);display:block}
+.meters .n{font-family:var(--mono);font-size:18px;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.35}
+.meters .e{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);display:block}
+.meters .bad .n{color:var(--blocked)}
+.meters .good .n{color:var(--live)}
+.meters .warn .n{color:var(--free)}
+
+.boardnote{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:12px;line-height:1.7}
+
+/* --- 방식 비교 --- */
+.cmp{width:100%;border-collapse:collapse;font-size:13px}
+.cmp th,.cmp td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.cmp th{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.cmp td:first-child{font-size:12.5px;width:1%;white-space:nowrap;padding-right:16px}
+.cmp td.num{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
+.cmp tr.on td{background:var(--paper-3)}
+.cmp td.bad{color:var(--blocked)}
+.cmp td.good{color:var(--live)}
+.cmp td.warn{color:var(--free)}
+
+/* --- 사건 기록 --- */
+.events{font-family:var(--mono);font-size:11px;line-height:1.8;color:var(--ink-2);max-height:132px;overflow-y:auto;scrollbar-width:thin}
+.events div{white-space:pre-wrap}
+.events .up{color:var(--live)}
+.events .down{color:var(--blocked)}
+.events .warn{color:var(--free)}
+
+/* --- 조작대 --- */
+.transport{background:var(--paper-3);display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.transport .keys{display:flex;gap:6px;flex-wrap:wrap}
+.narration{flex:1;min-width:240px;font-family:var(--serif);font-size:14.5px;line-height:1.65;color:var(--ink)}
+.narration .n{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-3);display:block;margin-bottom:3px}
+
+/* --- 안내 --- */
+.recipe{border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);padding:14px 16px;margin:14px 0;max-width:68ch}
+.recipe h4{font-family:var(--sans);font-size:14px;font-weight:700;margin:0 0 4px}
+.recipe .seq{font-family:var(--mono);font-size:11px;line-height:1.9;background:var(--paper);border:1px solid var(--rule);
+  border-radius:2px;padding:9px 11px;margin:9px 0;white-space:pre-wrap;color:var(--ink-2)}
+.recipe .seq em{font-style:normal;color:var(--horizon)}
+.recipe .why{font-size:13.5px;color:var(--ink-2);margin:0}
+.keytable{width:100%;border-collapse:collapse;margin:12px 0;max-width:68ch;font-size:13.5px}
+.keytable th,.keytable td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.keytable th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.keytable td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap;width:1%;padding-right:18px;color:var(--ink)}

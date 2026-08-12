@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add a second instance and the same job runs twice — claiming work safely</title>
+<meta name="description" content="On one instance all four claiming strategies look identical. Add a second and the first two break. Run in-memory locks, read-then-write, conditional UPDATE and SELECT FOR UPDATE SKIP LOCKED side by side to see where duplicates and contention come from.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/jobclaim/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/jobclaim/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/jobclaim/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/jobclaim/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="Add a second instance and the same job runs twice">
+<meta property="og:description" content="On one instance all four strategies look identical. Add a second and the first two break.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/jobclaim/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Add a second instance and the same job runs twice">
+<meta name="twitter:description" content="A defect that never reproduces on a single instance, exposed with one slider.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/jobclaim-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/jobclaim/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>Add a second instance and the same job runs twice</h1>
+  <p class="lede">The batch ran fine for months. Traffic grew, you started one more instance, and from that day the same file gets processed twice. Nothing in the code changed. This defect <strong>never reproduces on a single instance.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>instances</label>
+          <span class="v" id="vN">1<small> ×</small></span>
+          <input type="range" id="sN" min="1" max="6" step="1" value="1" aria-label="number of instances">
+        </div>
+        <div class="dial">
+          <label>claiming</label>
+          <div class="seg" id="segMode">
+            <button data-mode="memory" aria-pressed="true">in-memory</button>
+            <button data-mode="readwrite" aria-pressed="false">read-then-write</button>
+            <button data-mode="conditional" aria-pressed="false">conditional UPDATE</button>
+            <button data-mode="skiplocked" aria-pressed="false">SKIP LOCKED</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>dies mid-job</label>
+          <span class="v" id="vDie"><small>never</small></span>
+          <input type="range" id="sDie" min="0" max="30" step="5" value="0" aria-label="rate at which an instance dies mid-job">
+        </div>
+        <div class="dial">
+          <label>reclaim timeout</label>
+          <div class="seg" id="segReclaim">
+            <button data-reclaim="off" aria-pressed="true">none</button>
+            <button data-reclaim="on" aria-pressed="false">on</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>simulation</label>
+          <button id="btnRun">pause</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">competing for one job</span>
+      <div class="nodes" id="nodes"></div>
+      <p class="boardnote">A green border marks the instance that claimed the job; a red one marks an instance that <strong>claimed something already taken</strong>. Amber dashed means it lost the race and did the work for nothing.</p>
+    </section>
+
+    <section>
+      <span class="cap">per-job outcome</span>
+      <div class="jobs" id="jobs"></div>
+      <div class="meters" id="meters"></div>
+      <p class="boardnote">An empty green cell is a job that ran once; the number in a red cell is <strong>how many times it ran</strong>; an amber dashed cell is a zombie row — claimed but never finished. Grey numbers in the readouts are the expected values for these conditions.</p>
+    </section>
+
+    <section>
+      <span class="cap">same instance count, only the strategy changes</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section>
+      <span class="cap">event log</span>
+      <div class="events" id="events"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 08</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>Drive it yourself</h2>
+    <table class="keytable">
+      <tr><th>control</th><th>what happens</th></tr>
+      <tr><td>instances</td><td>How many application instances poll the same job table. <strong>Moving from 1 to 2 is the whole point of this page</strong></td></tr>
+      <tr><td>claiming</td><td>in-memory → read-then-write → conditional UPDATE → SKIP LOCKED. The order a real project went through</td></tr>
+      <tr><td>dies mid-job</td><td>How often the claiming instance dies while processing. It greys out for in-memory — that strategy writes no state, so it leaves no trace either</td></tr>
+      <tr><td>reclaim timeout</td><td>Whether rows claimed long ago and never finished get returned</td></tr>
+    </table>
+
+    <h2>Things to try</h2>
+
+    <div class="recipe">
+      <h4>1. On one instance, press all four</h4>
+      <div class="seq">1 instance
+
+in-memory           excess runs <em>0%</em>
+read-then-write     excess runs <em>0%</em>
+conditional UPDATE  excess runs <em>0%</em>
+SKIP LOCKED         excess runs <em>0%</em></div>
+      <p class="why">All four are flawless. No amount of testing separates them. <strong>This is why the defect survives into production</strong> — with one instance in dev and one in staging, the tests cannot tell these apart.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. Go to two — in-memory collapses</h4>
+      <div class="seq">2 instances · in-memory
+
+excess runs  0% → <em>100%</em>
+every job runs twice</div>
+      <p class="why"><code>synchronized</code> is only meaningful <strong>inside one JVM</strong>. The other instance does not know that collection exists. And because this strategy never changes the database state, the row keeps looking <code>PENDING</code>, so <strong>every polling instance claims it.</strong> Push to six instances and it becomes 500%.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. Write the state — it looks fixed</h4>
+      <div class="seq">2 instances · read-then-write
+
+excess runs  100% → <em>0.5%</em>
+
+push to 6 instances → <em>2.5%</em></div>
+      <p class="why">This is the most dangerous position on the page. Going from 100% to 0.5% <strong>looks like a fix.</strong> Tests pass, and watching it for a few days shows nothing. But 0.5% is not 0. At a hundred thousand jobs a day, five hundred of them run twice.</p>
+      <p class="why" style="margin-top:9px">The window between the <code>SELECT</code> and the <code>UPDATE</code> is still open — narrower, not closed. <strong>A low-probability bug is not a fixed bug; it is a bug that is hard to reproduce.</strong></p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. Switch to a conditional UPDATE</h4>
+      <div class="seq">6 instances · conditional UPDATE
+
+excess runs   2.5% → <em>0%</em>
+wasted claims 0 → <em>5.00 / job</em></div>
+      <p class="why">Duplicates are gone. Put <code>WHERE state='PENDING'</code> in the statement and the database lets exactly one instance through. But <strong>a new number appeared</strong> — the five losers' wasted attempts. Correctness is bought, and six instances now fight over the same row every time.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. Switch to SKIP LOCKED</h4>
+      <div class="seq">6 instances · SKIP LOCKED
+
+excess runs   <em>0%</em>
+wasted claims 5.00 → <em>0</em></div>
+      <p class="why">The contention disappears too. Each instance <strong>skips rows already locked</strong> and takes a different batch, so there is nothing to fight over. This is why it is the standard way to build a job queue on PostgreSQL.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>6. Turn on mid-job death — zombie rows</h4>
+      <div class="seq">SKIP LOCKED · dies mid-job 15% · no reclaim
+
+zombie rows keep piling up
+<em>claimed, and never finished</em>
+
+turn the reclaim timeout on → zombies 0</div>
+      <p class="why">Claiming is now exact, but <strong>what happens when you claim and then die</strong> is still unanswered. That row sets to <code>RESERVED</code> and nobody ever picks it up again. Jobs quietly disappear. Create a claimed state and you <strong>must</strong> create the path back out of it.</p>
+    </div>
+
+    <h2>Why one instance hides it</h2>
+    <p>The nature of this defect is right here: <strong>it comes from instance count, not load.</strong></p>
+    <p>Load-driven problems reproduce when you apply load. This one never appears on a single instance no matter how hard you push, because inside one JVM <code>synchronized</code> genuinely works and there is no second instance to slip into the read-then-write window.</p>
+    <table class="keytable">
+      <tr><th>environment</th><th>instances</th><th>this defect</th></tr>
+      <tr><td>unit tests</td><td>1</td><td>invisible</td></tr>
+      <tr><td>local dev</td><td>1</td><td>invisible</td></tr>
+      <tr><td>staging</td><td>usually 1</td><td>invisible</td></tr>
+      <tr><td>production</td><td>2 or more</td><td><strong>only breaks here</strong></td></tr>
+    </table>
+    <div class="callout">Which is why it gets reported as "sometimes a file is processed twice". It will not reproduce, so it is filed as a transient error — and the same report comes back a few weeks later. <strong>Starting two instances locally</strong> is enough to break that cycle.</div>
+
+    <h2>The four strategies</h2>
+
+    <h3>1. In-memory collection with synchronized</h3>
+    <pre><code>synchronized (waitList) {
+    if (!waitList.contains(id) &amp;&amp; !runningList.contains(id)) {
+        waitList.add(id);          // ← this JVM's memory
+    }
+}</code></pre>
+    <p>Putting the check and the add in one critical section is correct. It does close the <strong>check-then-act race</strong> inside a JVM. The scope of that protection is simply that one JVM.</p>
+
+    <h3>2. Read, then write the state</h3>
+    <pre><code>Job job = repo.findFirstByStateOrderById(PENDING);   // ← read
+if (job != null) {
+    job.setState(RESERVED);                          // ← write
+    // another instance reading in between passes too
+}</code></pre>
+    <p>Moving from memory to the database is the right direction. What remains is that reading and writing are <strong>two round trips</strong>, and however short the gap, a window is a window.</p>
+
+    <h3>3. Conditional UPDATE — atomic claiming</h3>
+    <pre><code>UPDATE job
+   SET state = 'RESERVED', reserved_by = :me, reserved_at = now()
+ WHERE id = :id
+   AND state = 'PENDING';        -- ← this condition is the whole trick
+
+-- proceed only when rowCount == 1. Zero means someone else took it</code></pre>
+    <p>Collapsing read and write into <strong>one statement</strong> removes the window. The database serialises on the row lock, so however many instances fire at once, exactly one gets <code>rowCount = 1</code>. <strong>No in-memory lock and no separate distributed lock required.</strong></p>
+
+    <h3>4. SELECT … FOR UPDATE SKIP LOCKED</h3>
+    <pre><code>SELECT id FROM job
+ WHERE state = 'PENDING'
+ ORDER BY id
+ LIMIT 10
+ FOR UPDATE SKIP LOCKED;         -- step over rows already locked</code></pre>
+    <p>The conditional UPDATE is correct, but everyone aims at the <em>same row</em>, so wasted attempts grow linearly with instance count. <code>SKIP LOCKED</code> steps over locked rows entirely, so <strong>each instance takes a different batch</strong> and contention goes to zero.</p>
+    <p>Available from PostgreSQL 9.5 and MySQL 8.0. Raise the <code>LIMIT</code> to claim several at a time and cut your polling frequency as well.</p>
+
+    <h2>Claiming, then dying</h2>
+    <p>Once claiming is exact, the next question arrives: <strong>who undoes a job that was claimed and then abandoned?</strong></p>
+    <p>Nobody. That row stays <code>RESERVED</code> forever. It does not show up in queries, it never counts as a failure, and it behaves exactly like a job that was never there.</p>
+    <pre><code>-- return rows that have been held too long
+UPDATE job
+   SET state = 'PENDING', reserved_by = NULL, reserved_at = NULL,
+       attempt_count = attempt_count + 1
+ WHERE state = 'RESERVED'
+   AND reserved_at &lt; now() - interval '10 minutes'
+   AND attempt_count &lt; 5;        -- do not retry forever</code></pre>
+    <p>There is a trap here. <strong>The timeout must be comfortably longer than your maximum processing time.</strong> Reclaim a job from an instance that is still alive and working, and the claiming you just made exact turns straight back into duplicate execution.</p>
+    <p>When processing times vary wildly, use a <strong>heartbeat</strong> instead of a fixed timeout: refresh <code>reserved_at</code> periodically while processing, and reclaim on "last refresh is old". Live jobs keep refreshing and never get reclaimed.</p>
+    <div class="callout">Do not forget <code>attempt_count</code> alongside it. A reclaim path on its own gives you <strong>jobs that are reclaimed forever and fail forever</strong>, burning resources on every pass. Past the limit they have to move to a terminal state.</div>
+
+    <h2>It is still not exactly-once</h2>
+    <p>Make claiming atomic, add reclaiming, and you have <strong>at-least-once</strong>. Finish a job and die just before writing <code>DONE</code>, and it gets reclaimed and run again.</p>
+    <p>So the last line of defence is always the same: <strong>make the job itself idempotent.</strong> Put a unique constraint on the job id where results are written, use an upsert, or check for already-processed and skip.</p>
+    <p>Claiming is the mechanism that <em>reduces</em> duplicates; idempotency is the mechanism that makes duplicates <em>safe</em>. They are layers, not alternatives.</p>
+
+    <h2>What about a distributed lock?</h2>
+    <p>A Redis-based distributed lock (Redisson and friends) solves the same problem. For a job queue, though, a conditional UPDATE or <code>SKIP LOCKED</code> is usually the better fit.</p>
+    <ul>
+      <li><strong>It adds a dependency.</strong> The job table is already in the database; pulling in Redis purely for the lock is a strange trade</li>
+      <li><strong>If lock expiry and processing time disagree</strong>, you get an instance still working after its lock has been released. Same shape as the zombie-reclaim trap, except this one happens silently</li>
+      <li><strong>Job state and lock live in different stores</strong>, so now you have consistency to maintain between them. They cannot share a transaction</li>
+    </ul>
+    <p>Making sure a scheduler fires on only one instance (ShedLock and similar) is a different matter. That is <em>choosing who runs</em>, not <em>claiming work</em>, and sits at a different layer from this page.</p>
+
+    <h2>What to check in production</h2>
+    <p><strong>Run two instances locally.</strong> Start two on different ports against the same database and most of what this page describes surfaces within minutes. A single-instance test proves nothing in this area.</p>
+
+    <p><strong>Put these queries on a dashboard.</strong></p>
+    <pre><code>-- zombie rows: claimed long ago, still unfinished
+SELECT state, count(*), min(reserved_at), max(now() - reserved_at) AS oldest
+FROM job
+WHERE state = 'RESERVED'
+GROUP BY state;
+
+-- jobs accumulating retries — stuck in a reclaim loop
+SELECT id, attempt_count, reserved_by, reserved_at
+FROM job
+WHERE attempt_count &gt;= 3
+ORDER BY attempt_count DESC
+LIMIT 20;</code></pre>
+    <p>A steadily growing <code>oldest</code> in the first query means there is no reclaim path. A growing count in the second means reclaiming works but the jobs <strong>keep failing for the same reason</strong>.</p>
+
+    <p><strong>Count duplicate executions directly.</strong> If your result table has a unique constraint on the job id, constraint violations are your duplicate count. If it does not, now is a good time to add one — it both prevents and counts.</p>
+
+    <p><strong>Log which instance claimed what.</strong> Write your instance identifier into <code>reserved_by</code> and put it in the log MDC, and you can trace after the fact which instance took a job. Without it, the logs cannot tell you when a duplicate happens.</p>
+
+    <p><strong>The order.</strong> When you hit duplicate execution, work through it like this.</p>
+    <ol>
+      <li>Check how many instances are running — one means this is not your problem</li>
+      <li>Check whether the claim is <strong>one statement</strong>. Two round trips is your cause</li>
+      <li>Check whether the claimed state has a <strong>path back out</strong></li>
+      <li>Check that the reclaim timeout exceeds your maximum processing time</li>
+      <li>Then check whether the job is idempotent — that layer remains after all four</li>
+    </ol>
+
+    <div class="callout">This model is simplified for teaching. The duplicate probability for read-then-write assumes a 1-second poll interval and a 5-millisecond gap between read and write. Real probabilities depend heavily on poll interval, query latency, and how much the instances' polling schedules overlap. <strong>The point is not that the number is small — it is that the number is not zero.</strong></div>
+
+  </article>
+
+  <footer>Claiming work · simplified teaching model · <a href="/jobclaim/" hreflang="ko" lang="ko">한국어</a> / English · <a href="mailto:contact@vermilion19.com">contact@vermilion19.com</a></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  pause:'pause', resume:'resume',
+  uInst:'×', noDie:'never',
+  m_memory:'in-memory + synchronized', m_readwrite:'read, then write state',
+  m_conditional:'conditional UPDATE', m_skiplocked:'SELECT … FOR UPDATE SKIP LOCKED',
+  bWon:'claimed', bDup:'duplicate!', bLost:'wasted',
+  rWon:'claimed', rDup:'of those, duplicate', rLost:'wasted attempts',
+  s_ok:'ran once', s_dup:'ran more than once', s_zombie:'claimed but never finished',
+  mExcess:'excess runs', mWasted:'wasted / job', mZombie:'zombie rows', mDone:'jobs',
+  mExp:'exp $1', mReclaimed:'reclaimed $1',
+  cMode:'strategy', cExcess:'excess runs', cWasted:'wasted', cVerdict:'verdict',
+  vSafe:'no duplicates', vBroken:'duplicates',
+  hSingle:'on one instance all four behave identically — which is why tests never catch it',
+  hMemory:'synchronized only holds inside one JVM — all $1 instances claim the same row',
+  hRw:'the window narrowed, it did not close — expected excess runs $1%',
+  hCond:'no duplicates. Instead the $1 losers waste an attempt every time',
+  hSkip:'no duplicates and no contention — each instance takes different rows',
+  hZombie:'$1 zombie rows — claimed and never finished',
+  lgSetup:'$1 instances · $2 — readouts reset',
+  lgDup:'job #$1 ran $2 times — $3 claimed it at once',
+  lgZombie:'job #$1 is a zombie — worker-$2 died mid-job and nothing brings it back',
+  lgReclaim:'job #$1 reclaimed — worker-$2 died, the timeout returned it',
+  scene:[
+    'One instance. Press all four claiming strategies — excess runs is 0% for every one of them. There is no difference at all. This is why the defect survives into production: with one instance in dev and one in staging, tests cannot separate them.',
+    'Now two instances. In-memory jumps to 100% excess runs — every job runs twice. synchronized only holds inside one JVM, and the other instance has no idea that collection exists. Worse, this strategy never changes the database state, so the row keeps looking PENDING and every polling instance claims it.',
+    'Switched to writing the state. 100% dropped to 0.5%. It looks fixed — and this is the most dangerous position on the page. The window between the SELECT and the UPDATE is still open; it narrowed rather than closed. At a hundred thousand jobs a day, five hundred still run twice.',
+    'Six instances now. Same strategy, and excess runs climbed to 2.5%, because there are more instances available to slip into the window. It quietly gets worse the more you scale out — which is awkward, since scaling out was the point.',
+    'Conditional UPDATE. Excess runs is 0. Putting WHERE state=PENDING into the statement collapses read and write into one, and the window is gone. But a new number appeared: the five losers waste an attempt on every job, five per job.',
+    'SKIP LOCKED brings the wasted attempts to zero as well. Each instance steps over rows already locked and takes a different batch, so there is nothing to fight over. This is why job queues on PostgreSQL are built this way.',
+    'Mid-job death turned on at 15%. Claiming is still exact, but zombie rows start piling up — jobs claimed by an instance that died stay RESERVED forever. Nobody picks them up, they never count as failures, and they behave like jobs that were never there.',
+    'Reclaim timeout on, and zombies are back to zero. One caveat: that timeout must be comfortably longer than your maximum processing time. Reclaim from an instance that is still working and the claiming you just made exact turns straight back into duplicate execution.'
+  ],
+};
+</script>
+<script src="/shared/jobclaim-lab.js"></script>
+</body>
+</html>
