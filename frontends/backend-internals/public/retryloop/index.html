@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>롤백해도 시퀀스는 돌아오지 않는다 — 재시도 루프가 21억을 태우는 법</title>
+<meta name="description" content="적재된 행은 3천만인데 시퀀스는 21억입니다. 검증을 COPY 뒤에 두면 롤백된 행마다 시퀀스가 영구히 소비되고, 종료 조건 없는 재시도가 그걸 매분 반복합니다. 검증 순서와 재시도 3요건을 직접 조작하며 확인합니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/retryloop/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/retryloop/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/retryloop/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/retryloop/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="롤백해도 시퀀스는 돌아오지 않는다">
+<meta property="og:description" content="적재된 행은 3천만인데 시퀀스는 21억. 두 숫자가 벌어지는 것이 이 페이지의 전부입니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/retryloop/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="롤백해도 시퀀스는 돌아오지 않는다">
+<meta name="twitter:description" content="종료 조건 없는 재시도가 int4 상한을 태우는 과정을 직접 조작하며 봅니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/retryloop-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/retryloop/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>롤백해도 시퀀스는 돌아오지 않는다</h1>
+  <p class="lede">적재 배치가 어느 날 멈춥니다. <code>nextval: reached maximum value of sequence</code>. 그런데 테이블의 실제 행은 3천만 남짓이에요. 21억은 어디로 갔을까요.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>검증 순서</label>
+          <div class="seg" id="segOrder">
+            <button data-order="after" aria-pressed="true">COPY 뒤에 검증</button>
+            <button data-order="first" aria-pressed="false">COPY 앞에 검증</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>영구 실패 상태</label>
+          <div class="seg" id="segTerm">
+            <button data-term="off" aria-pressed="true">없음</button>
+            <button data-term="on" aria-pressed="false">있음</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>시도 횟수 상한</label>
+          <span class="v" id="vCap"><small>없음</small></span>
+          <input type="range" id="sCap" min="0" max="10" step="1" value="0" aria-label="시도 횟수 상한">
+        </div>
+        <div class="dial">
+          <label>불량 파일 비율</label>
+          <span class="v" id="vD">10<small> %</small></span>
+          <input type="range" id="sD" min="0" max="30" step="5" value="10" aria-label="불량 파일 비율">
+        </div>
+        <div class="dial">
+          <label>시뮬레이션</label>
+          <button id="btnRun">일시정지</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">int4 시퀀스 상한을 향해</span>
+      <div class="gauges">
+        <div class="gauge seq">
+          <div class="lbl"><span>시퀀스 <code>last_value</code> <span id="pSeq"></span></span><b id="nSeq">0</b></div>
+          <div class="track"><div class="fill" id="gSeq" style="width:0"></div><p class="cap">2,147,483,647</p></div>
+        </div>
+        <div class="gauge rows">
+          <div class="lbl"><span>실제 적재된 행 <span id="pRows"></span></span><b id="nRows">0</b></div>
+          <div class="track"><div class="fill" id="gRows" style="width:0"></div></div>
+        </div>
+        <div class="dead" id="dead"></div>
+        <div class="meters" id="meters"></div>
+      </div>
+      <p class="boardnote">두 막대가 벌어지는 것이 이 페이지의 전부입니다. 위 막대는 시퀀스가 <strong>발급한 번호</strong>, 아래는 <strong>실제로 남은 행</strong>이에요. 그 차이가 롤백으로 사라진 값입니다. 시간은 가속돼 있습니다 — 화면의 한 걸음이 배치 한 주기(1분)입니다.</p>
+    </section>
+
+    <section>
+      <span class="cap">지금 불량 비율에서 각 조합이 언제 소진되나</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section>
+      <span class="cap">사건 기록</span>
+      <div class="events" id="events"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 05</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>직접 조작하기</h2>
+    <p>1분마다 도는 적재 배치입니다. 매 주기 파일 12개가 도착하고, 파일 하나당 3,000행을 <code>COPY</code> 합니다. 그중 일부는 후행 테이블이 없는 불량 파일이에요.</p>
+    <table class="keytable">
+      <tr><th>조작</th><th>무엇이 일어나나</th></tr>
+      <tr><td>검증 순서</td><td><code>COPY</code> 를 먼저 하고 검증할지, 검증을 먼저 하고 <code>COPY</code> 할지. <strong>누수를 멈추는 유일한 손잡이</strong>입니다</td></tr>
+      <tr><td>영구 실패 상태</td><td>불량 파일을 종료 상태로 보내 재시도 대상에서 뺄지</td></tr>
+      <tr><td>시도 횟수 상한</td><td>몇 번 실패하면 포기할지. 0이면 영원히 재시도합니다</td></tr>
+      <tr><td>불량 파일 비율</td><td>도착하는 파일 중 검증에 실패하는 비율</td></tr>
+    </table>
+
+    <h2>이렇게 해보세요</h2>
+
+    <div class="recipe">
+      <h4>1. 아무것도 안 켜고 그냥 둔다</h4>
+      <div class="seq">COPY 뒤에 검증 · 상한 없음 · 종료 상태 없음 · 불량 10%
+
+시퀀스   0 → <em>2,147,483,647</em>
+적재 행  0 → <em>3,500만 남짓</em>
+소진까지 <em>약 18시간</em></div>
+      <p class="why">두 막대가 벌어지는 걸 그냥 지켜보세요. 위 막대는 상한을 향해 달리는데 아래 막대는 바닥에 붙어 있습니다. 적재된 행보다 <strong>태워버린 값이 60배</strong>예요. 하루도 안 돼서 적재가 전면 중단됩니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. 시도 횟수 상한만 넣는다</h4>
+      <div class="seq">시도 횟수 상한 5회
+
+소진까지  18시간 → <em>약 30일</em>
+재시도 풀 <em>무한히 증가 → 5주기분에서 멈춤</em></div>
+      <p class="why">크게 나아졌습니다. 재시도 풀이 무한히 자라던 게 <strong>다섯 주기분에서 멈추기</strong> 때문이에요. 소비량이 2차 증가에서 선형으로 바뀝니다. 그래도 <strong>누수 자체는 그대로</strong>입니다 — 불량 파일 하나가 다섯 번씩 시퀀스를 태우고 나갈 뿐이죠.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. 영구 실패 상태로 바꾼다</h4>
+      <div class="seq">영구 실패 상태 있음 (시도 상한 대신)
+
+소진까지  30일 → <em>약 41일</em>
+재시도 풀 <em>0 — 첫 시도 후 바로 빠진다</em></div>
+      <p class="why">불량 파일이 <strong>한 번만 태우고</strong> 종료 상태로 빠집니다. 재시도 루프가 완전히 끊겼어요. 그런데 아직 태운 값이 2억을 넘습니다 — 한 번씩은 여전히 <code>COPY</code> 하고 롤백하니까요.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. 검증을 COPY 앞으로 옮긴다 — 이 페이지의 핵심</h4>
+      <div class="seq">COPY 앞에 검증
+
+태운 값  2억 → <em>0</em>
+소진까지 41일 → <em>46일</em></div>
+      <p class="why">누수가 <strong>완전히</strong> 사라집니다. 불량 파일은 <code>COPY</code> 자체를 안 하니 시퀀스를 건드릴 일이 없어요. 손잡이 하나를 옮겼을 뿐인데 태운 값이 0이 됐습니다.</p>
+      <p class="why" style="margin-top:9px">교훈은 한 줄로 줄어듭니다 — <strong>검증은 되돌릴 수 없는 일보다 먼저.</strong> 트랜잭션은 행을 되돌려주지만 시퀀스는 되돌려주지 않습니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. 다 고쳐도 46일이면 찬다</h4>
+      <div class="seq">모든 장치를 켠 상태에서 그냥 둔다
+
+태운 값  0
+소진까지 <em>46일</em>  ← 정상 적재만으로</div>
+      <p class="why">여기가 두 번째 결론입니다. 누수를 다 막아도 <strong>int4 는 46일이면 찹니다.</strong> 하루 4,600만 행을 넣는 테이블에 21억은 그냥 작아요. 코드를 고치는 것과 <strong>컬럼을 <code>bigint</code> 로 바꾸는 것은 별개의 작업</strong>이고, 둘 다 필요합니다.</p>
+    </div>
+
+    <h2>왜 시퀀스는 롤백되지 않는가</h2>
+    <p>이게 이 페이지의 출발점입니다. PostgreSQL 의 시퀀스는 <strong>트랜잭션 밖에서 동작합니다.</strong></p>
+    <pre><code>BEGIN;
+  INSERT INTO gps_history ...;   -- nextval() 이 1,000개를 발급
+  -- 검증 실패
+ROLLBACK;
+
+-- 행: 없음.  시퀀스: 1,000 만큼 전진한 채로 남음</code></pre>
+    <p>일부러 그렇게 만든 겁니다. 시퀀스가 롤백된다면 동시에 도는 트랜잭션들이 서로를 기다려야 하거든요. 번호 하나 받으려고 줄을 서게 되는 셈이죠. <strong>시퀀스는 유일성만 약속하고 연속성은 약속하지 않습니다.</strong></p>
+    <p>그래서 이런 것들이 전부 정상 동작입니다.</p>
+    <ul>
+      <li>롤백된 트랜잭션이 쓴 번호는 <strong>영원히 비어 있습니다</strong></li>
+      <li><code>cache</code> 설정이 있으면 세션이 끝날 때 캐시분이 통째로 버려집니다</li>
+      <li>충돌로 죽은 세션이 잡고 있던 번호도 안 돌아옵니다</li>
+    </ul>
+    <div class="callout">그러니 <strong>id 값을 세는 데 쓰면 안 됩니다.</strong> "마지막 id 가 21억이니 행이 21억 개"라는 추정이 이 장애를 늦게 발견하게 만드는 원인이기도 합니다. 행 수는 <code>count(*)</code> 로 세야 해요.</div>
+
+    <h2>검증이 부수효과 뒤에 있으면</h2>
+    <p>문제의 코드는 대개 이렇게 생겼습니다.</p>
+    <pre><code>@Transactional
+public void migrate(File file) {
+    copyGpsRows(file);                        // ① 3,000행 COPY — 시퀀스 3,000 소비
+    copyDriveRows(file);
+
+    if (!hasAdasTable(file)) {                // ② 여기서 검증
+        throw new IllegalStateException(...); // ③ 롤백 — 행은 사라지고 시퀀스는 남는다
+    }
+    markMigrated(file);                       // ④ 여기까지 못 온다
+}</code></pre>
+    <p>①과 ②의 순서만 바꾸면 됩니다. 검증이 먼저면 불량 파일은 <code>COPY</code> 근처에도 못 가요.</p>
+    <pre><code>public void migrate(File file) {
+    if (!hasAdasTable(file)) {                // ① 먼저 검증
+        markPermanentlyFailed(file);          //    종료 상태로 보내고 끝
+        return;
+    }
+    copyGpsRows(file);                        // ② 통과한 것만 COPY
+    ...
+}</code></pre>
+    <p>일반화하면 이렇습니다. <strong>되돌릴 수 없는 일을 하기 전에 되돌릴 수 있는 검증을 끝내라.</strong> 롤백이 안 되는 건 시퀀스만이 아니에요.</p>
+    <table class="keytable">
+      <tr><th>되돌아가지 않는 것</th><th>예</th></tr>
+      <tr><td>시퀀스</td><td><code>nextval()</code> 은 전진만 한다</td></tr>
+      <tr><td>외부 호출</td><td>결제 승인, 메일 발송, 푸시</td></tr>
+      <tr><td>파일 시스템</td><td>업로드, 삭제, 이동</td></tr>
+      <tr><td>메시지 발행</td><td>Kafka, MQTT — 발행한 건 회수 안 된다</td></tr>
+      <tr><td>다른 트랜잭션이 이미 본 것</td><td>커밋 전에 읽혔다면 이미 늦었다</td></tr>
+    </table>
+
+    <h2>재시도 루프의 3요건</h2>
+    <p>누수를 막아도 재시도 루프 자체가 남습니다. 실패한 작업이 <strong>영원히 다시 시도되는</strong> 구조는 그 자체로 위험해요. 최소 세 가지가 필요합니다.</p>
+
+    <h3>1. 영구 실패 상태</h3>
+    <p>재시도 대상에서 <strong>빠져나갈 상태</strong>가 반드시 있어야 합니다. 이게 없으면 실패한 레코드가 큐에 영원히 남습니다.</p>
+    <pre><code>-- 상태값 하나를 더 두는 것으로 끝난다
+migrate_flag: 'N'  대기      → 재시도 대상
+              'Y'  완료
+              'E'  영구 실패  → 재시도 대상에서 제외</code></pre>
+    <p>실험대에서 이 토글 하나가 재시도 풀을 0으로 만듭니다. <strong>가장 값싼 장치인데 가장 자주 빠져 있어요.</strong></p>
+
+    <h3>2. 시도 횟수 상한</h3>
+    <p>영구 실패로 분류할 수 없는 실패(일시적 네트워크 오류 등)에는 횟수 상한이 답입니다. <code>attempt_count</code> 컬럼 하나면 됩니다.</p>
+    <p>상한만 있고 영구 실패 상태가 없으면 어떻게 될까요. 실험대의 레시피 2가 그겁니다 — 나아지지만 누수는 남습니다. <strong>둘은 서로를 대체하지 않습니다.</strong></p>
+
+    <h3>3. 재시도 대상은 화이트리스트로</h3>
+    <p>가장 자주 뒤집혀 있는 항목입니다. 보통 이렇게 씁니다.</p>
+    <pre><code>try { work(); }
+catch (IOException | TimeoutException e) { fail(job); }   // 이것만 실패 처리
+catch (Exception e) { requeue(job); }                     // 나머지는 재시도 ← 위험</code></pre>
+    <p>기본값이 <strong>"재시도"</strong> 로 되어 있습니다. 새로운 예외가 등장하면 자동으로 무한 재시도 경로를 탑니다. 디스크 가득 참, 권한 만료, 잘못된 데이터 — 재시도해봐야 영원히 실패할 것들이 전부 여기로 들어와요.</p>
+    <pre><code>if (isRetryable(e)) requeue(job);   // 일시적이라고 아는 것만 재시도
+else                fail(job);      // 기본값은 실패</code></pre>
+    <p>기본값을 뒤집는 것만으로 <strong>모르는 실패가 루프에 들어가지 않습니다.</strong></p>
+    <div class="callout">여기에 <strong>지수 백오프</strong>를 얹으세요. 매분 재시도는 상대가 힘들 때 그 상대를 같이 두들깁니다. 상대가 외부 API 라면 그쪽 장애를 연장시키고, 자기 DB 라면 자기 장애를 연장시켜요.</div>
+
+    <h2>21억은 생각보다 작다</h2>
+    <p>레시피 5가 보여주는 두 번째 결론입니다. <code>integer</code> 의 상한 2,147,483,647 은 요즘 데이터 규모에서 그렇게 큰 숫자가 아닙니다.</p>
+    <table class="keytable">
+      <tr><th>초당 삽입</th><th>int4 상한 도달</th></tr>
+      <tr><td>100</td><td>약 8개월</td></tr>
+      <tr><td>500</td><td>약 50일</td></tr>
+      <tr><td>1,000</td><td>약 25일</td></tr>
+      <tr><td>5,000</td><td>약 5일</td></tr>
+    </table>
+    <p>여기에 롤백·캐시로 버려지는 몫이 더해지면 훨씬 빨라집니다. 그리고 <strong>도달하는 순간이 곧 전면 장애</strong>예요 — 성능이 나빠지는 게 아니라 삽입이 그냥 안 됩니다.</p>
+    <p>더 나쁜 건 그때 해야 할 일입니다. <code>integer</code> → <code>bigint</code> 전환은 큰 테이블에서 <strong><code>ACCESS EXCLUSIVE</code> 락을 잡고 전체를 다시 씁니다.</strong> 수십 GB 짜리라면 그 시간 내내 그 테이블을 못 씁니다. 이미 장애 중인데 복구에 또 시간이 드는 거죠.</p>
+    <pre><code>-- 컬럼과 시퀀스 양쪽을 다 바꿔야 한다
+ALTER TABLE gps_history ALTER COLUMN id TYPE bigint;   -- 전체 재작성
+ALTER SEQUENCE gps_history_id_seq AS bigint MAXVALUE 9223372036854775807;
+SELECT setval('gps_history_id_seq', (SELECT max(id) FROM gps_history));</code></pre>
+    <p>그래서 <strong>새 테이블은 처음부터 <code>bigint</code></strong> 로 만드는 게 정석입니다. 8바이트가 아까워서 4바이트를 쓸 이유가 대부분 없어요.</p>
+
+    <h2>현장에서 확인할 것</h2>
+    <p><strong>시퀀스 사용률에 알람을 거세요.</strong> 도달하기 전에 알 수 있는 유일한 방법입니다.</p>
+    <pre><code>-- 전체 시퀀스의 사용률
+SELECT schemaname, sequencename,
+       last_value,
+       max_value,
+       round(last_value::numeric / max_value * 100, 2) AS pct_used
+FROM pg_sequences
+WHERE last_value IS NOT NULL
+ORDER BY pct_used DESC
+LIMIT 20;</code></pre>
+    <p>70% 를 경고선으로 잡으면 <code>bigint</code> 전환을 <strong>장애가 아니라 계획된 작업으로</strong> 할 수 있습니다. 그 차이가 큽니다.</p>
+
+    <p><strong>시퀀스와 실제 행 수를 나란히 보세요.</strong> 이 페이지의 두 막대가 그겁니다.</p>
+    <pre><code>SELECT (SELECT last_value FROM gps_history_id_seq)          AS seq,
+       (SELECT count(*) FROM gps_history)                   AS rows,
+       (SELECT last_value FROM gps_history_id_seq)
+         - (SELECT count(*) FROM gps_history)                AS gap;</code></pre>
+    <p>정상적인 삭제로도 격차는 생깁니다. 다만 <strong>격차가 행 수의 몇 배로 벌어져 있다면</strong> 어딘가에서 넣었다 버리는 일이 반복되고 있다는 뜻이에요. 이 모순이 원인을 찾는 가장 빠른 단서입니다.</p>
+
+    <p><strong>재시도 큐를 지표로 만드세요.</strong></p>
+    <table class="keytable">
+      <tr><th>지표</th><th>무엇을 말해주나</th></tr>
+      <tr><td>재시도 대기 건수</td><td>단조 증가하면 종료 조건이 없다는 뜻</td></tr>
+      <tr><td><code>attempt_count</code> 최댓값</td><td>상한에 닿는 건이 있는지</td></tr>
+      <tr><td>같은 id 의 재시도 횟수</td><td>특정 레코드가 루프에 갇혀 있는지</td></tr>
+      <tr><td>영구 실패 상태 건수</td><td>늘어나야 정상이다. 0이면 그 상태가 안 쓰이고 있다</td></tr>
+    </table>
+    <p>마지막 줄이 중요합니다. 영구 실패 상태를 만들어두고 <strong>아무도 그 상태로 안 가는</strong> 경우가 흔해요. 분류 로직이 실제로 동작하는지는 그 건수로만 알 수 있습니다.</p>
+
+    <p><strong>배치 로그에 건별 결과를 남기세요.</strong> 한 건 실패가 배치 전체를 중단시키지 않도록 <code>try/catch</code> 로 격리하고, 어떤 파일이 왜 실패했는지 남깁니다. 그래야 <code>'E'</code> 로 빠진 것들을 나중에 사람이 다시 볼 수 있습니다.</p>
+
+    <div class="callout">이 페이지의 모델은 개념을 보여주기 위해 단순화한 것입니다. 배치 주기 1분, 배치당 파일 12개, 파일당 3,000행으로 고정했고, 재시도 풀은 실수로 누적합니다. 실제 소진 시각은 데이터 유입량·불량 비율의 변동·시퀀스 <code>cache</code> 설정에 따라 달라져요. <strong>중요한 건 며칠이냐가 아니라 두 막대가 벌어진다는 사실</strong>입니다.</div>
+
+  </article>
+
+  <footer>재시도 루프와 시퀀스 소진 · 교육용 단순화 모델 · 한국어 / <a href="/en/retryloop/" hreflang="en" lang="en">English</a> · <a href="mailto:contact@vermilion19.com">contact@vermilion19.com</a></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  pause:'일시정지', resume:'다시 시작',
+  noCap:'없음', uTimes:'회',
+  fD:'$1일', fH:'$1시간', fM:'$1분',
+  cyc:'$1주기',
+  mBurned:'태운 값', mRatio:'적재의 $1배', mPool:'재시도 풀', mFiles:'파일',
+  mElapsed:'경과', mCycles:'$1주기', mEta:'소진까지', mNow:'소진됨',
+  deadBody:'<b>nextval: reached maximum value of sequence</b> — 적재 전면 중단.\n' +
+           '이 시점부터 신규 INSERT 가 전부 실패한다. 복구하려면 컬럼과 시퀀스를 bigint 로 바꿔야 하고,\n' +
+           '큰 테이블이면 ACCESS EXCLUSIVE 락을 잡고 전체를 다시 쓰는 동안 그 테이블을 못 쓴다.',
+  cSetup:'구성', cEta:'소진까지', cLeak:'누수',
+  c_a:'COPY 뒤 검증 · 아무 장치 없음',
+  c_b:'COPY 뒤 검증 · 시도 상한 5회',
+  c_c:'COPY 뒤 검증 · 영구 실패 상태',
+  c_d:'COPY 앞 검증 · 영구 실패 상태',
+  cLeakYes:'롤백분이 계속 쌓인다', cLeakNo:'없음',
+  hWorst:'재시도 풀이 주기마다 커진다 — 소비량이 2차로 늘어난다',
+  hStillLeaks:'루프는 끊겼지만 불량 파일이 한 번씩은 여전히 시퀀스를 태운다',
+  hClean:'누수 0 — 그래도 정상 적재만으로 $1 뒤에 찬다. bigint 가 필요한 이유',
+  hDead:'시퀀스 소진 — 신규 INSERT 가 전부 실패한다',
+  lgBurn:'첫 주기에 롤백으로 버려진 시퀀스 $1',
+  lgTerminal:'불량 파일을 영구 실패 상태로 보냄 — 재시도 대상에서 제외',
+  lgCap:'시도 $1회를 넘긴 파일이 재시도 풀에서 빠지기 시작',
+  lgWarn70:'시퀀스 사용률 70% 통과 — 여기서 알람이 떠야 한다',
+  lgDead:'nextval 상한 도달 — 적재 전면 중단',
+  scene:[
+    '아무 장치도 없는 상태입니다. 두 막대가 벌어지는 걸 지켜보세요 — 위쪽 시퀀스는 상한을 향해 달리는데 아래쪽 실제 행은 바닥에 붙어 있습니다. 불량 파일이 매 주기 COPY 되고 롤백되면서 시퀀스만 태우고, 성공 표시가 안 되니 다음 주기에 또 집힙니다. 재시도 풀이 계속 커지니 소비량은 2차로 늘어나요.',
+    '시도 횟수 상한 5회를 넣었습니다. 재시도 풀이 무한히 자라던 게 다섯 주기분에서 멈추고, 소진까지가 18시간에서 30일로 늘어났어요. 크게 나아졌지만 누수 자체는 그대로입니다 — 불량 파일 하나가 다섯 번씩 태우고 나갈 뿐이죠.',
+    '영구 실패 상태로 바꿨습니다. 불량 파일이 한 번만 태우고 종료 상태로 빠지니 재시도 루프가 완전히 끊겼어요. 재시도 풀이 0입니다. 그런데 태운 값이 아직 2억을 넘습니다 — 한 번씩은 여전히 COPY 하고 롤백하니까요.',
+    '검증을 COPY 앞으로 옮겼습니다. 태운 값이 0이 됐어요. 불량 파일은 COPY 자체를 안 하니 시퀀스를 건드릴 일이 없습니다. 손잡이 하나를 옮겼을 뿐인데 누수가 완전히 사라졌어요. 검증은 되돌릴 수 없는 일보다 먼저 — 그게 전부입니다.',
+    '불량 비율을 30%로 올려도 태운 값은 0 그대로입니다. 검증이 앞에 있으면 불량이 아무리 많아도 시퀀스를 안 씁니다. 그런데 게이지는 여전히 차오르죠 — 정상 적재만으로도 두 달이 안 돼 int4 가 찹니다(불량이 늘어 유입이 줄었으니 10%일 때의 46일보다 오히려 늦어진 것뿐이에요). 코드를 고치는 것과 컬럼을 bigint 로 바꾸는 것은 별개의 작업이고, 둘 다 필요합니다.'
+  ],
+};
+</script>
+<script src="/shared/retryloop-lab.js"></script>
+</body>
+</html>

@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A rollback does not give the sequence back — how a retry loop burns two billion</title>
+<meta name="description" content="Thirty million rows in the table, two billion consumed from the sequence. Validate after the COPY and every rolled-back row costs a sequence value permanently, while a retry loop with no exit repeats it every minute. Drive the validation order and the three retry requirements yourself.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/retryloop/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/retryloop/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/retryloop/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/retryloop/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="A rollback does not give the sequence back">
+<meta property="og:description" content="Thirty million rows, two billion sequence values. The gap between those two bars is the whole page.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/retryloop/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="A rollback does not give the sequence back">
+<meta name="twitter:description" content="Watch a retry loop with no exit condition burn through an int4 sequence.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/retryloop-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/retryloop/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>A rollback does not give the sequence back</h1>
+  <p class="lede">One day the ingest batch stops. <code>nextval: reached maximum value of sequence</code>. But the table only holds about thirty million rows. Where did the other two billion go?</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>validation order</label>
+          <div class="seg" id="segOrder">
+            <button data-order="after" aria-pressed="true">validate after COPY</button>
+            <button data-order="first" aria-pressed="false">validate before COPY</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>terminal state</label>
+          <div class="seg" id="segTerm">
+            <button data-term="off" aria-pressed="true">none</button>
+            <button data-term="on" aria-pressed="false">on</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>attempt cap</label>
+          <span class="v" id="vCap"><small>none</small></span>
+          <input type="range" id="sCap" min="0" max="10" step="1" value="0" aria-label="maximum attempts">
+        </div>
+        <div class="dial">
+          <label>bad files</label>
+          <span class="v" id="vD">10<small> %</small></span>
+          <input type="range" id="sD" min="0" max="30" step="5" value="10" aria-label="share of files that fail validation">
+        </div>
+        <div class="dial">
+          <label>simulation</label>
+          <button id="btnRun">pause</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">racing toward the int4 sequence ceiling</span>
+      <div class="gauges">
+        <div class="gauge seq">
+          <div class="lbl"><span>sequence <code>last_value</code> <span id="pSeq"></span></span><b id="nSeq">0</b></div>
+          <div class="track"><div class="fill" id="gSeq" style="width:0"></div><p class="cap">2,147,483,647</p></div>
+        </div>
+        <div class="gauge rows">
+          <div class="lbl"><span>rows actually stored <span id="pRows"></span></span><b id="nRows">0</b></div>
+          <div class="track"><div class="fill" id="gRows" style="width:0"></div></div>
+        </div>
+        <div class="dead" id="dead"></div>
+        <div class="meters" id="meters"></div>
+      </div>
+      <p class="boardnote">The gap between the two bars is the whole page. The top bar is the numbers the sequence <strong>handed out</strong>; the bottom is the rows that <strong>actually remain</strong>. The difference is what rollbacks threw away. Time is accelerated — one step on screen is one batch cycle, one minute.</p>
+    </section>
+
+    <section>
+      <span class="cap">when each setup runs out, at this failure rate</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section>
+      <span class="cap">event log</span>
+      <div class="events" id="events"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 05</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>Drive it yourself</h2>
+    <p>An ingest batch running every minute. Twelve files arrive per cycle and each is <code>COPY</code>ed as 3,000 rows. Some of them are bad files whose companion table is missing.</p>
+    <table class="keytable">
+      <tr><th>control</th><th>what happens</th></tr>
+      <tr><td>validation order</td><td>Whether validation runs after the <code>COPY</code> or before it. <strong>The only control that stops the leak</strong></td></tr>
+      <tr><td>terminal state</td><td>Whether bad files move to a terminal state and drop out of the retry set</td></tr>
+      <tr><td>attempt cap</td><td>How many failures before giving up. Zero means retry forever</td></tr>
+      <tr><td>bad files</td><td>Share of arriving files that fail validation</td></tr>
+    </table>
+
+    <h2>Things to try</h2>
+
+    <div class="recipe">
+      <h4>1. Turn nothing on and just watch</h4>
+      <div class="seq">validate after COPY · no cap · no terminal state · 10% bad
+
+sequence   0 → <em>2,147,483,647</em>
+rows       0 → <em>about 35 million</em>
+runs out in <em>roughly 18 hours</em></div>
+      <p class="why">Just watch the two bars separate. The top one sprints for the ceiling while the bottom stays flat on the floor. <strong>Sixty times more value burned than rows stored.</strong> Ingest stops entirely in under a day.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. Add an attempt cap only</h4>
+      <div class="seq">attempt cap 5
+
+runs out in  18 hours → <em>about 30 days</em>
+retry pool   <em>grew forever → settles at five cycles' worth</em></div>
+      <p class="why">A big improvement, because the retry pool stops growing without bound and <strong>settles at five cycles' worth</strong>. Consumption changes from quadratic to linear. But <strong>the leak itself is untouched</strong> — each bad file just burns sequence five times on its way out instead of forever.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. Switch to a terminal state</h4>
+      <div class="seq">terminal state on (instead of the cap)
+
+runs out in  30 days → <em>about 41 days</em>
+retry pool   <em>0 — it leaves after the first attempt</em></div>
+      <p class="why">A bad file <strong>burns once</strong> and moves to a terminal state. The retry loop is now completely severed and the pool sits at zero. Yet over two hundred million values have still been burned — each file does one <code>COPY</code> and rollback before it leaves.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. Move validation before the COPY — the heart of the page</h4>
+      <div class="seq">validate before COPY
+
+burned      200M → <em>0</em>
+runs out in 41 days → <em>46 days</em></div>
+      <p class="why">The leak disappears <strong>completely</strong>. A bad file never reaches the <code>COPY</code>, so it never touches the sequence. One control moved, and burned value goes to zero.</p>
+      <p class="why" style="margin-top:9px">The lesson shrinks to one line: <strong>validate before you do anything you cannot undo.</strong> A transaction gives you rows back. It does not give sequences back.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. Fix everything and it still fills in 46 days</h4>
+      <div class="seq">every safeguard on, just left running
+
+burned       0
+runs out in  <em>46 days</em>  ← from healthy ingest alone</div>
+      <p class="why">This is the second conclusion. Plug every leak and <strong>int4 still fills in 46 days.</strong> Two billion is simply not a large number for a table taking 46 million rows a day. Fixing the code and <strong>widening the column to <code>bigint</code> are two separate jobs</strong>, and you need both.</p>
+    </div>
+
+    <h2>Why sequences do not roll back</h2>
+    <p>This is where the page starts. A PostgreSQL sequence <strong>operates outside the transaction.</strong></p>
+    <pre><code>BEGIN;
+  INSERT INTO gps_history ...;   -- nextval() hands out 1,000 values
+  -- validation fails
+ROLLBACK;
+
+-- rows: none.  sequence: still advanced by 1,000</code></pre>
+    <p>That is deliberate. If sequences rolled back, concurrent transactions would have to wait on one another — queueing up just to get a number. <strong>A sequence promises uniqueness, not continuity.</strong></p>
+    <p>So all of these are correct behaviour:</p>
+    <ul>
+      <li>Values written by a rolled-back transaction are <strong>gone forever</strong></li>
+      <li>With <code>cache</code> configured, a session discards its whole cached block on exit</li>
+      <li>Values held by a session that crashed never come back either</li>
+    </ul>
+    <div class="callout">Which means <strong>id values must never be used as a count.</strong> "The last id is two billion, so there are two billion rows" is exactly the assumption that delays discovery of this incident. Count rows with <code>count(*)</code>.</div>
+
+    <h2>When validation sits after the side effect</h2>
+    <p>The offending code usually looks like this.</p>
+    <pre><code>@Transactional
+public void migrate(File file) {
+    copyGpsRows(file);                        // ① COPY 3,000 rows — 3,000 sequence values
+    copyDriveRows(file);
+
+    if (!hasAdasTable(file)) {                // ② validate here
+        throw new IllegalStateException(...); // ③ rollback — rows go, sequence stays
+    }
+    markMigrated(file);                       // ④ never reached
+}</code></pre>
+    <p>Swapping ① and ② is the whole fix. Validate first and a bad file never gets near the <code>COPY</code>.</p>
+    <pre><code>public void migrate(File file) {
+    if (!hasAdasTable(file)) {                // ① validate first
+        markPermanentlyFailed(file);          //    move to terminal state and return
+        return;
+    }
+    copyGpsRows(file);                        // ② only what passed gets copied
+    ...
+}</code></pre>
+    <p>Generalised: <strong>finish every reversible check before you do the irreversible thing.</strong> Sequences are not the only thing that does not roll back.</p>
+    <table class="keytable">
+      <tr><th>does not come back</th><th>example</th></tr>
+      <tr><td>sequences</td><td><code>nextval()</code> only moves forward</td></tr>
+      <tr><td>external calls</td><td>payment authorisation, email, push</td></tr>
+      <tr><td>the file system</td><td>uploads, deletes, moves</td></tr>
+      <tr><td>published messages</td><td>Kafka, MQTT — once out, not recallable</td></tr>
+      <tr><td>anything another transaction already saw</td><td>read before commit is already too late</td></tr>
+    </table>
+
+    <h2>The three requirements of a retry loop</h2>
+    <p>Stopping the leak leaves the retry loop itself. A structure where a failed job is <strong>retried forever</strong> is dangerous on its own. It needs at least three things.</p>
+
+    <h3>1. A terminal state</h3>
+    <p>There has to be a state that <strong>exits the retry set</strong>. Without one, failed records stay in the queue forever.</p>
+    <pre><code>-- one more state value is the entire fix
+migrate_flag: 'N'  pending          → retried
+              'Y'  done
+              'E'  permanent failure → excluded from retries</code></pre>
+    <p>In the lab this single toggle drops the retry pool to zero. <strong>The cheapest safeguard there is, and the one most often missing.</strong></p>
+
+    <h3>2. An attempt cap</h3>
+    <p>For failures you cannot classify as permanent — transient network errors and the like — a cap is the answer. One <code>attempt_count</code> column does it.</p>
+    <p>What happens with a cap but no terminal state? Recipe 2 in the lab: much better, still leaking. <strong>They do not substitute for one another.</strong></p>
+
+    <h3>3. Retry on a whitelist</h3>
+    <p>The most commonly inverted of the three. The usual shape is this:</p>
+    <pre><code>try { work(); }
+catch (IOException | TimeoutException e) { fail(job); }   // only these are failures
+catch (Exception e) { requeue(job); }                     // everything else retries ← danger</code></pre>
+    <p>The default is <strong>retry</strong>. Any new exception automatically takes the infinite-retry path. Disk full, expired credentials, malformed data — everything that will fail forever no matter how often you try lands right here.</p>
+    <pre><code>if (isRetryable(e)) requeue(job);   // retry only what you know is transient
+else                fail(job);      // default to failure</code></pre>
+    <p>Inverting that default alone keeps <strong>unknown failures out of the loop.</strong></p>
+    <div class="callout">Put <strong>exponential backoff</strong> on top. Retrying every minute hammers a struggling peer while it is struggling. If the peer is an external API you extend their outage; if it is your own database you extend your own.</div>
+
+    <h2>Two billion is smaller than it sounds</h2>
+    <p>The second conclusion from recipe 5. The <code>integer</code> ceiling of 2,147,483,647 is not a large number at modern data volumes.</p>
+    <table class="keytable">
+      <tr><th>inserts per second</th><th>time to hit the int4 ceiling</th></tr>
+      <tr><td>100</td><td>about 8 months</td></tr>
+      <tr><td>500</td><td>about 50 days</td></tr>
+      <tr><td>1,000</td><td>about 25 days</td></tr>
+      <tr><td>5,000</td><td>about 5 days</td></tr>
+    </table>
+    <p>Add whatever rollbacks and caching throw away and it arrives sooner. And <strong>arriving is a total outage</strong>, not a slowdown — inserts simply stop.</p>
+    <p>Worse is what you then have to do. Converting <code>integer</code> to <code>bigint</code> on a large table takes an <strong><code>ACCESS EXCLUSIVE</code> lock and rewrites the whole thing.</strong> On tens of gigabytes that table is unusable for the duration. You are already in an outage and the recovery costs more of it.</p>
+    <pre><code>-- the column and the sequence both have to change
+ALTER TABLE gps_history ALTER COLUMN id TYPE bigint;   -- full rewrite
+ALTER SEQUENCE gps_history_id_seq AS bigint MAXVALUE 9223372036854775807;
+SELECT setval('gps_history_id_seq', (SELECT max(id) FROM gps_history));</code></pre>
+    <p>Which is why <strong>new tables should be <code>bigint</code> from the start.</strong> There is rarely a good reason to save four bytes here.</p>
+
+    <h2>What to check in production</h2>
+    <p><strong>Alert on sequence usage.</strong> It is the only way to know before you arrive.</p>
+    <pre><code>-- usage across every sequence
+SELECT schemaname, sequencename,
+       last_value,
+       max_value,
+       round(last_value::numeric / max_value * 100, 2) AS pct_used
+FROM pg_sequences
+WHERE last_value IS NOT NULL
+ORDER BY pct_used DESC
+LIMIT 20;</code></pre>
+    <p>Set the warning line at 70% and the <code>bigint</code> conversion becomes <strong>planned work rather than an incident.</strong> That difference is large.</p>
+
+    <p><strong>Put the sequence and the row count side by side.</strong> That is what the two bars on this page are.</p>
+    <pre><code>SELECT (SELECT last_value FROM gps_history_id_seq)          AS seq,
+       (SELECT count(*) FROM gps_history)                   AS rows,
+       (SELECT last_value FROM gps_history_id_seq)
+         - (SELECT count(*) FROM gps_history)                AS gap;</code></pre>
+    <p>Ordinary deletes create a gap too. But <strong>a gap several times the row count</strong> means something is inserting and discarding on repeat. That contradiction is the fastest route to the cause.</p>
+
+    <p><strong>Turn the retry queue into metrics.</strong></p>
+    <table class="keytable">
+      <tr><th>metric</th><th>what it tells you</th></tr>
+      <tr><td>records pending retry</td><td>monotonic growth means there is no exit condition</td></tr>
+      <tr><td>max <code>attempt_count</code></td><td>whether anything is reaching the cap</td></tr>
+      <tr><td>retries for a single id</td><td>whether one record is stuck in the loop</td></tr>
+      <tr><td>records in the terminal state</td><td>it should grow. Zero means nothing is using that state</td></tr>
+    </table>
+    <p>That last row matters. Defining a terminal state and having <strong>nothing ever reach it</strong> is common. The count is the only way to know your classification logic actually runs.</p>
+
+    <p><strong>Log per-record outcomes in the batch.</strong> Isolate each record in a <code>try/catch</code> so one failure cannot halt the whole run, and record which file failed and why. That is what makes the <code>'E'</code> pile reviewable by a human later.</p>
+
+    <div class="callout">This model is simplified for teaching. The batch cycle is fixed at one minute with twelve files of 3,000 rows each, and the retry pool accumulates as a real number. Real exhaustion dates depend on ingest volume, how the failure rate varies, and the sequence <code>cache</code> setting. <strong>What matters is not the number of days but the fact that the two bars separate.</strong></div>
+
+  </article>
+
+  <footer>Retry loops and sequence exhaustion · simplified teaching model · <a href="/retryloop/" hreflang="ko" lang="ko">한국어</a> / English · <a href="mailto:contact@vermilion19.com">contact@vermilion19.com</a></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  pause:'pause', resume:'resume',
+  noCap:'none', uTimes:'×',
+  fD:'$1d', fH:'$1h', fM:'$1m',
+  cyc:'cycle $1',
+  mBurned:'burned', mRatio:'$1× the rows', mPool:'retry pool', mFiles:'files',
+  mElapsed:'elapsed', mCycles:'$1 cycles', mEta:'runs out in', mNow:'exhausted',
+  deadBody:'<b>nextval: reached maximum value of sequence</b> — ingest has stopped entirely.\n' +
+           'From here every new INSERT fails. Recovery means widening the column and the sequence to bigint,\n' +
+           'and on a large table that takes an ACCESS EXCLUSIVE lock and a full rewrite before it is usable again.',
+  cSetup:'setup', cEta:'runs out in', cLeak:'leak',
+  c_a:'validate after COPY · nothing',
+  c_b:'validate after COPY · attempt cap 5',
+  c_c:'validate after COPY · terminal state',
+  c_d:'validate before COPY · terminal state',
+  cLeakYes:'rollbacks keep accumulating', cLeakNo:'none',
+  hWorst:'the retry pool grows every cycle — consumption rises quadratically',
+  hStillLeaks:'the loop is severed, but each bad file still burns sequence once',
+  hClean:'no leak — and healthy ingest alone still fills it in $1. This is why bigint is needed',
+  hDead:'sequence exhausted — every new INSERT now fails',
+  lgBurn:'$1 sequence values thrown away by rollback in the first cycle',
+  lgTerminal:'bad files moved to the terminal state — excluded from retries',
+  lgCap:'files past $1 attempts start dropping out of the retry pool',
+  lgWarn70:'sequence usage crossed 70% — this is where an alert should fire',
+  lgDead:'nextval hit the ceiling — ingest has stopped entirely',
+  scene:[
+    'Nothing is switched on. Watch the two bars separate — the sequence on top sprints for the ceiling while the actual rows below stay flat on the floor. Bad files are COPYed and rolled back every cycle, burning sequence values, and because they are never marked done they get picked up again next cycle. The retry pool keeps growing, so consumption rises quadratically.',
+    'An attempt cap of five. The retry pool stops growing without bound and settles at five cycles worth, pushing exhaustion from 18 hours out to about 30 days. Much better — but the leak itself is untouched. Each bad file simply burns sequence five times on its way out.',
+    'Switched to a terminal state. Bad files burn once and leave, so the retry loop is completely severed and the pool sits at zero. Yet over two hundred million values have still been burned, because each file does one COPY and rollback before it goes.',
+    'Validation moved before the COPY. Burned value is zero. A bad file never reaches the COPY, so it never touches the sequence. One control moved and the leak vanished entirely. Validate before you do anything you cannot undo — that is the whole rule.',
+    'Raise bad files to 30% and burned value stays at zero. With validation in front, no amount of bad input consumes sequence. And yet the gauge still climbs — healthy ingest alone fills int4 in under two months (later than the 46 days at 10%, only because more bad files means less data arriving). Fixing the code and widening the column to bigint are two separate jobs, and you need both.'
+  ],
+};
+</script>
+<script src="/shared/retryloop-lab.js"></script>
+</body>
+</html>
