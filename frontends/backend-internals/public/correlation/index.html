@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>응답을 순서로 맞추면 언제 어긋나는가 — correlationId</title>
+<meta name="description" content="요청과 응답을 위치로 짝지으면 한 번 어긋난 뒤로 스스로 복구하지 못합니다. 단일 슬롯, FIFO 큐, 직렬화, correlationId 네 방식을 순서 뒤집힘·지각 응답·중복 응답 아래에서 돌려보며 어디까지가 막히고 어디부터 안 막히는지 확인합니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/correlation/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/correlation/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/correlation/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/correlation/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="응답을 순서로 맞추면 언제 어긋나는가">
+<meta property="og:description" content="위치로 짝지으면 한 번 어긋난 뒤로 스스로 복구하지 못합니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/correlation/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="응답을 순서로 맞추면 언제 어긋나는가">
+<meta name="twitter:description" content="FIFO 매칭이 조용히 틀린 답을 돌려주는 과정을 직접 조작하며 봅니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/correlation-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/correlation/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>응답을 순서로 맞추면 언제 어긋나는가</h1>
+  <p class="lede">단말에 설정을 물어보고 응답을 기다립니다. 요청이 하나면 아무 문제가 없어요. 그런데 응답 하나가 늦게 오는 순간, 그 뒤의 모든 요청이 <strong>남의 답을 자기 답으로 받습니다</strong> — 그리고 아무도 그걸 눈치채지 못합니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>동시 요청</label>
+          <span class="v" id="vN">4<small> 건</small></span>
+          <input type="range" id="sN" min="1" max="6" step="1" value="4" aria-label="같은 단말에 동시에 떠 있는 요청 수">
+        </div>
+        <div class="dial">
+          <label>매칭 방식</label>
+          <div class="seg" id="segStrat">
+            <button data-strat="single" aria-pressed="true">단일 슬롯</button>
+            <button data-strat="fifo" aria-pressed="false">FIFO 큐</button>
+            <button data-strat="serialize" aria-pressed="false">직렬화</button>
+            <button data-strat="correlation" aria-pressed="false">correlationId</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>응답 교란</label>
+          <div class="seg" id="segDist">
+            <button data-dist="none" aria-pressed="true">없음</button>
+            <button data-dist="reorder" aria-pressed="false">순서 뒤집힘</button>
+            <button data-dist="late" aria-pressed="false">지각 응답</button>
+            <button data-dist="dup" aria-pressed="false">중복 응답</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>교란 강도</label>
+          <span class="v" id="vD">40<small> %</small></span>
+          <input type="range" id="sD" min="10" max="60" step="10" value="40" aria-label="교란 강도">
+        </div>
+        <div class="dial">
+          <label>시뮬레이션</label>
+          <button id="btnRun">일시정지</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">요청별 결말</span>
+      <div class="board">
+        <div class="lanes">
+          <div class="lane">
+            <span class="rq">최근 결과</span>
+            <div class="track" id="strip"></div>
+          </div>
+        </div>
+        <div class="pend" id="pend"></div>
+        <div class="alert" id="verdict"></div>
+        <div class="meters" id="meters"></div>
+      </div>
+      <p class="boardnote">칸 하나가 요청 하나의 결말입니다. 초록은 <strong>자기 응답</strong>을 받은 것, 빨강은 <strong>남의 응답</strong>을 받은 것(오매칭), 노란 점선은 아무것도 못 받고 타임아웃된 것이에요. 아래 줄은 지금 응답을 기다리는 요청들입니다 — 단일 슬롯에서는 <strong>하나밖에 못 들고 있는 것</strong>이 보입니다.</p>
+    </section>
+
+    <section>
+      <span class="cap">이 교란에서 네 방식이 원리적으로 안전한가</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section>
+      <span class="cap">사건 기록</span>
+      <div class="events" id="events"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 08</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>직접 조작하기</h2>
+    <p>같은 단말에 같은 명령을 계속 보냅니다. 요청은 끊기지 않고 이어지고, 응답은 잠시 뒤에 돌아와요.</p>
+    <table class="keytable">
+      <tr><th>조작</th><th>무엇이 일어나나</th></tr>
+      <tr><td>동시 요청</td><td>같은 단말에 동시에 떠 있는 요청 수. 직렬화에서는 1로 고정됩니다</td></tr>
+      <tr><td>매칭 방식</td><td>도착한 응답을 어느 요청에 붙일지 정하는 규칙</td></tr>
+      <tr><td>응답 교란</td><td>순서 뒤집힘 / 지각 응답(타임아웃 뒤 도착) / 중복 응답(재전송)</td></tr>
+      <tr><td>교란 강도</td><td>응답 중 몇 %가 그렇게 되는지</td></tr>
+    </table>
+
+    <h2>이렇게 해보세요</h2>
+
+    <div class="recipe">
+      <h4>1. 요청 하나로 시작한다</h4>
+      <div class="seq">동시 요청 1 · 단일 슬롯 · 교란 없음
+
+정확  <em>100%</em>
+오매칭 0</div>
+      <p class="why">완벽합니다. <code>pendingMap.put(serial, future)</code> 로도 아무 문제가 없어요. <strong>대부분의 코드가 이 상태로 시작하고, 이 상태로 리뷰를 통과합니다.</strong></p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. 동시 요청을 4건으로 올린다 — 단일 슬롯이 무너진다</h4>
+      <div class="seq">동시 요청 4 · 단일 슬롯 · 교란 없음
+
+정확   100% → <em>0%</em>
+오매칭 0 → <em>100%</em>
+
+사건 기록: "#12 의 future 가 #13 으로 덮어써졌다"</div>
+      <p class="why">네트워크는 멀쩡한데 전부 오매칭입니다. <code>put</code> 이 <strong>앞의 future 를 통째로 덮어쓰기 때문</strong>이에요. 슬롯에는 늘 <em>가장 최근</em> 요청이 들어 있는데, 도착하는 응답은 <em>가장 오래된</em> 요청 것입니다. 대기 목록을 보세요 — 하나밖에 못 들고 있습니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. FIFO 큐로 바꾼다 — 고쳐진 것처럼 보인다</h4>
+      <div class="seq">FIFO 큐 · 교란 없음
+
+정확   0% → <em>100%</em>
+오매칭 100% → <em>0%</em></div>
+      <p class="why">키마다 큐를 두고 먼저 기다린 요청부터 완료시키면 <strong>덮어쓰기가 사라집니다.</strong> 화면이 완전히 깨끗해졌어요. 실제 프로젝트가 여기서 멈췄고, 그럴 만합니다 — 재현되던 증상이 사라졌으니까요.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. 응답 순서를 뒤집는다</h4>
+      <div class="seq">FIFO 큐 · 순서 뒤집힘 40%
+
+오매칭 0% → <em>50% 부근</em></div>
+      <p class="why">FIFO 는 <strong>"먼저 보낸 요청의 응답이 먼저 온다"</strong>는 가정 위에 서 있습니다. 그런데 아무도 그걸 보장하지 않아요. 단말이 처리 순서를 바꾸거나, 재전송이 끼거나, 네트워크가 재배열하면 그대로 어긋납니다.</p>
+      <p class="why" style="margin-top:9px">더 나쁜 건 <strong>스스로 복구하지 못한다</strong>는 점입니다. 한 칸 밀리면 그 뒤로 계속 한 칸씩 밀린 채로 갑니다. 정렬이 다시 맞을 이유가 없거든요.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. 직렬화로 바꾼다 — 순서는 막힌다</h4>
+      <div class="seq">직렬화 · 순서 뒤집힘 40%
+
+오매칭 50% → <em>0%</em>
+처리량 <em>1/3 로 떨어진다</em></div>
+      <p class="why">동시에 한 건만 보내면 <strong>뒤집힐 순서 자체가 없습니다.</strong> 정확해졌어요. 대신 같은 시간에 처리하는 요청 수가 크게 줄어듭니다. 정확성을 처리량으로 산 겁니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>6. 직렬화 상태에서 지각 응답을 켠다 — 다시 무너진다</h4>
+      <div class="seq">직렬화 · 지각 응답 40%
+
+오매칭 0% → <em>60% 부근</em></div>
+      <p class="why">여기가 이 페이지에서 가장 중요한 자리입니다. <strong>동시 요청이 한 건뿐인데도 오매칭이 납니다.</strong></p>
+      <p class="why" style="margin-top:9px">요청 A 가 타임아웃되어 큐에서 빠집니다. 그 다음 요청 B 가 들어가요. 그리고 <strong>A 의 응답이 뒤늦게 도착해 B 를 완료시킵니다.</strong> B 의 호출자는 A 의 설정값을 자기 것으로 받습니다. 동시성 문제가 아니라 <strong>식별자가 없어서 생기는 문제</strong>라는 게 여기서 드러납니다.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>7. 중복 응답을 켠다 — FIFO 가 완전히 무너진다</h4>
+      <div class="seq">FIFO 큐 · 중복 응답 40%
+
+오매칭 <em>100% 부근</em></div>
+      <p class="why">재전송으로 같은 응답이 두 번 오면 <strong>두 번째 사본이 다음 요청의 future 를 완료시킵니다.</strong> 응답 하나가 두 요청을 끝내버리는 거죠. 한 번 어긋난 정렬은 복구되지 않으니 그 뒤로 전부 밀립니다.</p>
+      <p class="why" style="margin-top:9px">MQTT QoS 1 을 쓴다면 중복은 예외가 아니라 <strong>약속된 동작</strong>입니다. 위치 매칭과 QoS 1 은 같이 쓰면 안 되는 조합이에요.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>8. correlationId 로 바꾼다</h4>
+      <div class="seq">correlationId · 중복 응답 40%
+
+오매칭 <em>0%</em>
+
+교란을 순서·지각·중복 어느 것으로 바꿔도 <em>0%</em></div>
+      <p class="why">응답에 <strong>어느 요청의 답인지</strong>가 실려 있으면 순서가 어떻든 상관없습니다. 지각한 응답은 짝이 이미 사라졌으니 조용히 버려지고, 중복 사본은 이미 완료된 id 라 버려져요. <strong>세 교란 전부에 무해합니다.</strong></p>
+      <p class="why" style="margin-top:9px">지각 응답에서 유실은 여전히 납니다. 그건 맞아요 — <strong>타임아웃된 요청은 실패한 게 맞으니까요.</strong> 중요한 건 그 실패가 <em>다른 요청을 오염시키지 않는다</em>는 점입니다.</p>
+    </div>
+
+    <h2>왜 오매칭이 유실보다 나쁜가</h2>
+    <p>이 페이지의 계기가 셋으로 나뉜 이유입니다. 셋은 심각도가 전혀 다릅니다.</p>
+    <table class="keytable">
+      <tr><th>결말</th><th>호출자가 보는 것</th><th>심각도</th></tr>
+      <tr><td>유실</td><td>타임아웃 예외</td><td>시끄럽다. 재시도하면 된다</td></tr>
+      <tr><td>오매칭</td><td><strong>정상 응답</strong></td><td><strong>조용하다. 틀린 값을 맞다고 믿는다</strong></td></tr>
+      <tr><td>정확</td><td>정상 응답</td><td>—</td></tr>
+    </table>
+    <p>유실은 스스로 신고합니다. 로그에 남고, 지표에 잡히고, 재시도 대상이 됩니다. <strong>오매칭은 아무것도 안 남깁니다.</strong> 단말 A 의 설정 화면에 단말 B 의 값이 떠 있어도, 시스템 관점에서는 모든 요청이 성공한 겁니다.</p>
+    <div class="callout">그래서 이 유형은 <strong>"가끔 값이 이상해요"</strong> 로 신고됩니다. 재현이 안 되고, 로그에는 성공만 찍혀 있고, 대개 프론트엔드 캐시 문제로 의심받습니다. 실제로 값을 잘못 붙인 곳은 훨씬 아래층인데요.</div>
+
+    <h2>세 겹으로 쌓여 있던 문제</h2>
+    <p>실제 사례에서 <strong>"응답이 안 온다"</strong>는 하나의 증상 아래 원인이 세 개 겹쳐 있었습니다.</p>
+    <ol>
+      <li><strong>응답 토픽을 구독하지 않았다</strong> — 그래서 모든 요청이 타임아웃</li>
+      <li><strong>타임아웃을 3초에서 10초로 올렸다</strong> — 증상만 미뤘고 원인은 그대로</li>
+      <li><strong>future 가 덮어써지고 있었다</strong> — 8일 뒤에야 밝혀짐</li>
+    </ol>
+    <p>세 번째를 고치면서 FIFO 큐를 도입했고, 덮어쓰기는 확실히 사라졌습니다. 다만 <strong>네 번째 겹이 남아 있었어요</strong> — 이 페이지의 레시피 4~7 이 그겁니다.</p>
+    <p>타임아웃 상향(2번)은 특히 뼈아픕니다. 증상을 8일 동안 가려뒀거든요. <strong>완화 조치는 진단이 아니라 유예</strong>이고, 유예할 때는 원인 티켓을 반드시 같이 남겨야 합니다.</p>
+
+    <h2>correlationId 를 넣는 법</h2>
+    <p>MQTT 5 는 이걸 프로토콜에 넣어뒀습니다. 페이로드를 건드릴 필요가 없어요.</p>
+    <pre><code>// 요청 — 표준 속성으로 실어 보낸다
+MqttProperties props = new MqttProperties();
+props.setCorrelationData(correlationId.getBytes());
+props.setResponseTopic("device/" + serial + "/config/resp");
+
+// 응답 수신 — 그 값으로 대기 중인 요청을 찾는다
+byte[] cd = message.getProperties().getCorrelationData();
+CompletableFuture&lt;Config&gt; f = pending.remove(new String(cd));
+if (f != null) f.complete(parse(message));      // 짝이 없으면 조용히 버린다</code></pre>
+    <p>MQTT 3.1.1 이거나 단말 펌웨어를 바꿀 수 없다면 <strong>페이로드에 넣습니다.</strong> 단말이 그 값을 그대로 되돌려주기만 하면 되니 대개 가장 작은 변경이에요.</p>
+    <pre><code>{ "reqId": "9f2c...", "cmd": "getConfig" }      →
+                                                ← { "reqId": "9f2c...", "config": {...} }</code></pre>
+    <p>핵심은 마지막 줄입니다. <strong>짝이 없는 응답은 버립니다.</strong> 위치 매칭과의 차이가 여기 있어요 — 위치 매칭은 짝이 없는 응답을 <em>아무한테나</em> 붙이지만, id 매칭은 버립니다.</p>
+
+    <h2>펌웨어를 못 바꾼다면</h2>
+    <p>단말 쪽 협의에 시간이 걸리는 경우가 많습니다. 그동안 쓸 수 있는 것들인데, <strong>어느 것도 완전하지 않다</strong>는 걸 알고 써야 합니다.</p>
+    <table class="keytable">
+      <tr><th>임시 대응</th><th>막는 것</th><th>못 막는 것</th></tr>
+      <tr><td>직렬화 (동시 1건)</td><td>순서 뒤집힘</td><td><strong>지각 · 중복</strong> (레시피 6)</td></tr>
+      <tr><td>툼스톤 — 타임아웃된 키를 잠시 남겨둔다</td><td>지각 응답</td><td>순서 뒤집힘</td></tr>
+      <tr><td>둘 다</td><td>셋 다 대부분</td><td>처리량, 그리고 남는 창</td></tr>
+    </table>
+    <p><strong>툼스톤</strong>은 타임아웃으로 제거한 요청의 자리를 잠깐 비워두는 것입니다. 그 자리에 늦게 도착한 응답이 오면 다음 요청에 붙이지 않고 버려요. 지각 응답만 골라 막는 값싼 장치인데, 얼마나 오래 남길지가 또 하나의 추측이 됩니다.</p>
+    <div class="callout">임시 대응을 넣더라도 <strong>correlationId 협의는 지금 시작하세요.</strong> 펌웨어 변경은 리드타임이 길고, 그 사이 임시 대응이 "이미 고쳐진 것"으로 기록되면 영영 안 바뀝니다.</div>
+
+    <h2>이 문제는 MQTT 만의 것이 아니다</h2>
+    <p>요청과 응답이 <strong>서로 다른 채널로 오가는 모든 구조</strong>가 같은 형태입니다.</p>
+    <ul>
+      <li><strong>Kafka 요청-응답</strong> — 요청 토픽과 응답 토픽이 분리되어 있습니다. 헤더에 correlation id 를 싣는 게 관행인 이유예요</li>
+      <li><strong>WebSocket RPC</strong> — 한 소켓 위에 여러 요청이 오갑니다. 프레임에 id 가 없으면 순서에 기대게 됩니다</li>
+      <li><strong>단말·장비 시리얼 통신</strong> — 프로토콜에 시퀀스 번호가 있는 이유가 이것입니다</li>
+      <li><strong>비동기 콜백 API</strong> — 콜백이 어느 호출의 것인지 파라미터로 안 오면 같은 문제입니다</li>
+    </ul>
+    <p>HTTP 가 이 문제를 잘 안 겪는 건 <strong>커넥션이 요청-응답 짝을 대신 들고 있기 때문</strong>입니다. 같은 소켓의 응답은 그 요청의 것이 맞거든요. 그 보장을 잃는 순간 — 멀티플렉싱을 하거나, 응답을 다른 채널로 받는 순간 — 짝을 직접 들고 있어야 합니다.</p>
+
+    <h2>현장에서 확인할 것</h2>
+    <p><strong>먼저 이 질문에 답해보세요.</strong> "같은 대상에 같은 명령이 <em>동시에 두 번</em> 들어오면 어떻게 되는가." 답이 바로 안 나오면 대개 이 페이지의 상태입니다.</p>
+
+    <p><strong>대기 자료구조를 보세요.</strong> 키가 무엇인지가 전부입니다.</p>
+    <pre><code>Map&lt;String, CompletableFuture&lt;T&gt;&gt; pending;   // 키가 serial 이면 → 단일 슬롯
+Map&lt;String, Queue&lt;CompletableFuture&lt;T&gt;&gt;&gt; pending;  // 키가 serial 이면 → FIFO
+Map&lt;String, CompletableFuture&lt;T&gt;&gt; pending;   // 키가 correlationId 면 → 안전</code></pre>
+    <p>세 번째와 첫 번째가 <strong>타입이 똑같습니다.</strong> 코드 리뷰에서 이 차이를 놓치기 쉬운 이유예요. 봐야 할 건 자료구조가 아니라 <strong>키에 무엇이 들어가는지</strong>입니다.</p>
+
+    <p><strong>지표로 만들 것.</strong></p>
+    <table class="keytable">
+      <tr><th>지표</th><th>무엇을 말해주나</th></tr>
+      <tr><td>짝 없는 응답 수</td><td>버려진 응답. <strong>0이 아니면 지각·중복이 실재한다</strong></td></tr>
+      <tr><td>대기 맵 크기</td><td>단조 증가하면 완료되지 않은 future 가 쌓이는 중</td></tr>
+      <tr><td>타임아웃 비율</td><td>구독 누락이나 덮어쓰기의 첫 신호</td></tr>
+      <tr><td>요청-응답 지연 분포</td><td>타임아웃을 얼마로 잡을지의 유일한 근거</td></tr>
+    </table>
+    <p>첫 줄이 특히 값싸고 효과적입니다. correlationId 를 넣고 나면 <strong>짝 없는 응답이 그냥 카운터로 보입니다.</strong> 위치 매칭에서는 그 응답들이 조용히 남의 요청에 붙어버려서 셀 수조차 없었던 것들이에요.</p>
+
+    <p><strong>테스트는 동시에 두 번 보내는 것부터.</strong> 같은 대상에 같은 명령을 동시에 두 번 보내고 두 응답이 각자 제 값을 받는지 확인하는 테스트 하나면, 레시피 2가 재현됩니다. 응답을 일부러 뒤집어 보내는 테스트를 더하면 레시피 4까지 잡힙니다.</p>
+
+    <div class="callout">이 페이지의 모델은 개념을 보여주기 위해 단순화한 것입니다. 왕복 시간, 타임아웃, 교란 비율을 고정값으로 뒀고 실제로는 전부 분포를 갖습니다. 특히 <strong>오매칭률의 절대값은 교란이 어떻게 분포하느냐에 크게 좌우됩니다</strong> — 중요한 건 몇 퍼센트냐가 아니라, 위치로 짝지으면 <em>한 번 어긋난 뒤 스스로 복구하지 못한다</em>는 것입니다.</div>
+
+  </article>
+
+  <footer>요청-응답 매칭 · 교육용 단순화 모델 · 한국어 / <a href="/en/correlation/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  pause:'일시정지', resume:'다시 시작',
+  uReq:'건', noDist:'없음',
+  st_single:'단일 슬롯 (put)', st_fifo:'FIFO 큐', st_serialize:'직렬화', st_correlation:'correlationId',
+  s_ok:'자기 응답을 받았다', s_mis:'남의 응답을 받았다', s_lost:'타임아웃',
+  pWaiting:'응답을 기다리는 요청', pEmpty:'없음',
+  mOk:'정확', mMis:'오매칭', mLost:'유실', mDone:'처리한 요청', mInFlight:'동시 $1건',
+  vSafe:'<b style="color:var(--live)">이 조건에서는 원리적으로 오매칭이 불가능하다.</b>',
+  vBroken:'<b>이 조건에서는 오매칭이 구조적으로 가능하다.</b> 화면의 빨간 칸은 호출자에게 정상 응답으로 보인다 — 예외도 로그도 남지 않는다.',
+  cStrat:'매칭 방식', cSafe:'안전한가', cWhy:'이유',
+  cYes:'안전', cNo:'오매칭 가능',
+  why_single_none:'새 요청이 앞의 future 를 덮어쓴다. 동시 요청이 1건일 때만 안전하다',
+  why_single_reorder:'덮어쓰기가 먼저라 순서까지 갈 것도 없다',
+  why_single_late:'덮어쓰기가 먼저라 지각까지 갈 것도 없다',
+  why_single_dup:'덮어쓰기가 먼저라 중복까지 갈 것도 없다',
+  why_fifo_none:'도착 순서가 요청 순서와 같으면 정확하다',
+  why_fifo_reorder:'순서가 뒤집히면 그대로 어긋나고 복구되지 않는다',
+  why_fifo_late:'타임아웃으로 빠진 자리에 지각분이 도착해 다음 요청에 붙는다',
+  why_fifo_dup:'두 번째 사본이 다음 요청의 future 를 완료시킨다',
+  why_serialize_none:'동시에 한 건뿐이라 섞일 대상이 없다',
+  why_serialize_reorder:'동시에 한 건뿐이라 뒤집힐 순서가 없다',
+  why_serialize_late:'한 건뿐이어도 지각분이 다음 요청에 붙는다',
+  why_serialize_dup:'한 건뿐이어도 중복분이 다음 요청에 붙는다',
+  why_correlation_none:'id 로 찾으므로 순서에 기대지 않는다',
+  why_correlation_reorder:'id 로 찾으므로 순서가 어떻든 무관하다',
+  why_correlation_late:'짝이 이미 사라져 조용히 버려진다',
+  why_correlation_dup:'이미 완료된 id 라 버려진다',
+  hSingle:'put 이 앞의 future 를 덮어쓴다 — 슬롯에는 늘 최신 요청만 남는다',
+  hDrift:'한 번 어긋난 정렬은 스스로 복구되지 않는다 — 그 뒤로 계속 밀린다',
+  hSerial:'순서는 막았지만 지각·중복은 못 막는다. 그리고 처리량을 내줬다',
+  hCorr:'id 로 찾으므로 순서·지각·중복 전부 무해하다',
+  hOk:'이 조건에서는 정확하다',
+  lgOverwrite:'#$1 의 future 가 #$2 로 덮어써짐 — #$1 은 영영 완료되지 않는다',
+  lgMis:'#$1 이 #$2 의 응답을 받음 — 호출자에게는 정상 응답으로 보인다',
+  lgLost:'#$1 타임아웃 — 유실',
+  scene:[
+    '요청이 한 건뿐입니다. pendingMap.put(serial, future) 로도 아무 문제가 없어요. 정확 100%. 대부분의 코드가 이 상태로 시작하고, 이 상태로 리뷰를 통과합니다.',
+    '동시 요청을 4건으로 올렸습니다. 네트워크는 멀쩡한데 전부 오매칭입니다. put 이 앞의 future 를 통째로 덮어쓰기 때문이에요. 대기 목록을 보세요 — 슬롯에 하나밖에 못 들고 있습니다. 늘 가장 최근 요청이 들어 있는데 도착하는 응답은 가장 오래된 요청 것입니다.',
+    'FIFO 큐로 바꿨습니다. 키마다 큐를 두고 먼저 기다린 요청부터 완료시키니 덮어쓰기가 사라졌어요. 화면이 완전히 깨끗해졌습니다. 실제 프로젝트가 여기서 멈췄고, 그럴 만합니다 — 재현되던 증상이 사라졌으니까요.',
+    '응답 순서를 뒤집었습니다. 오매칭이 절반 가까이 납니다. FIFO 는 "먼저 보낸 요청의 응답이 먼저 온다"는 가정 위에 서 있는데 아무도 그걸 보장하지 않아요. 게다가 한 칸 밀리면 그 뒤로 계속 밀린 채로 갑니다 — 정렬이 다시 맞을 이유가 없거든요.',
+    '직렬화로 바꿨습니다. 동시에 한 건만 보내니 뒤집힐 순서 자체가 없어 정확해졌어요. 대신 같은 시간에 처리하는 요청 수가 크게 줄었습니다. 정확성을 처리량으로 산 겁니다.',
+    '직렬화 그대로 두고 지각 응답을 켰습니다. 다시 무너집니다 — 동시 요청이 한 건뿐인데도요. 요청 A 가 타임아웃되어 빠지고 B 가 들어간 다음, A 의 응답이 뒤늦게 도착해 B 를 완료시킵니다. 동시성 문제가 아니라 식별자가 없어서 생기는 문제라는 게 여기서 드러납니다.',
+    'FIFO 로 돌아와 중복 응답을 켰습니다. 오매칭이 거의 100%예요. 재전송으로 같은 응답이 두 번 오면 두 번째 사본이 다음 요청의 future 를 완료시키고, 한 번 어긋난 정렬은 복구되지 않습니다. MQTT QoS 1 을 쓴다면 중복은 예외가 아니라 약속된 동작이에요.',
+    'correlationId 로 바꿨습니다. 오매칭 0입니다. 교란을 순서·지각·중복 어느 것으로 바꿔도 0이에요. 지각한 응답은 짝이 이미 사라졌으니 버려지고, 중복 사본은 이미 완료된 id 라 버려집니다. 유실은 여전히 나지만 그건 맞아요 — 타임아웃된 요청은 실패한 게 맞으니까요. 중요한 건 그 실패가 다른 요청을 오염시키지 않는다는 점입니다.'
+  ],
+};
+</script>
+<script src="/shared/correlation-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>

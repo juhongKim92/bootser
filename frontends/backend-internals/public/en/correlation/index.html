@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>When does matching responses by order go wrong — correlationId</title>
+<meta name="description" content="Pair requests with responses by position and one misalignment never corrects itself. Run a single slot, a FIFO queue, serialisation and correlationId against reordering, late responses and duplicates to see exactly where each one stops working.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/correlation/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/correlation/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/correlation/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/correlation/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="When does matching responses by order go wrong">
+<meta property="og:description" content="Pair by position and one misalignment never corrects itself.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/correlation/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="When does matching responses by order go wrong">
+<meta name="twitter:description" content="Watch FIFO matching quietly return the wrong answer.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/correlation-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/correlation/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>When does matching responses by order go wrong</h1>
+  <p class="lede">You ask a device for its config and wait for the answer. With one request in flight nothing can go wrong. But the moment one response arrives late, every request after it <strong>receives someone else's answer as its own</strong> — and nobody notices.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>concurrent requests</label>
+          <span class="v" id="vN">4<small> ×</small></span>
+          <input type="range" id="sN" min="1" max="6" step="1" value="4" aria-label="requests in flight to the same device">
+        </div>
+        <div class="dial">
+          <label>matching</label>
+          <div class="seg" id="segStrat">
+            <button data-strat="single" aria-pressed="true">single slot</button>
+            <button data-strat="fifo" aria-pressed="false">FIFO queue</button>
+            <button data-strat="serialize" aria-pressed="false">serialised</button>
+            <button data-strat="correlation" aria-pressed="false">correlationId</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>disturbance</label>
+          <div class="seg" id="segDist">
+            <button data-dist="none" aria-pressed="true">none</button>
+            <button data-dist="reorder" aria-pressed="false">reordering</button>
+            <button data-dist="late" aria-pressed="false">late responses</button>
+            <button data-dist="dup" aria-pressed="false">duplicates</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>severity</label>
+          <span class="v" id="vD">40<small> %</small></span>
+          <input type="range" id="sD" min="10" max="60" step="10" value="40" aria-label="disturbance severity">
+        </div>
+        <div class="dial">
+          <label>simulation</label>
+          <button id="btnRun">pause</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">how each request ends</span>
+      <div class="board">
+        <div class="lanes">
+          <div class="lane">
+            <span class="rq">recent</span>
+            <div class="track" id="strip"></div>
+          </div>
+        </div>
+        <div class="pend" id="pend"></div>
+        <div class="alert" id="verdict"></div>
+        <div class="meters" id="meters"></div>
+      </div>
+      <p class="boardnote">Each cell is one request's outcome. Green got <strong>its own response</strong>, red got <strong>someone else's</strong> (a mismatch), amber dashed timed out with nothing. The row below lists requests currently awaiting a response — with a single slot you can see it <strong>only ever holds one</strong>.</p>
+    </section>
+
+    <section>
+      <span class="cap">is each approach structurally safe under this disturbance</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section>
+      <span class="cap">event log</span>
+      <div class="events" id="events"></div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 08</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <article class="prose">
+
+    <h2>Drive it yourself</h2>
+    <p>The same command goes to the same device continuously. Requests keep flowing and responses come back a moment later.</p>
+    <table class="keytable">
+      <tr><th>control</th><th>what happens</th></tr>
+      <tr><td>concurrent requests</td><td>How many are in flight to the same device. Fixed at 1 when serialised</td></tr>
+      <tr><td>matching</td><td>The rule that decides which request an arriving response belongs to</td></tr>
+      <tr><td>disturbance</td><td>reordering / late responses (arriving after the timeout) / duplicates (retransmission)</td></tr>
+      <tr><td>severity</td><td>What share of responses are affected</td></tr>
+    </table>
+
+    <h2>Things to try</h2>
+
+    <div class="recipe">
+      <h4>1. Start with one request</h4>
+      <div class="seq">1 concurrent · single slot · no disturbance
+
+correct   <em>100%</em>
+mismatched 0</div>
+      <p class="why">Flawless. Even <code>pendingMap.put(serial, future)</code> is fine here. <strong>Most code starts in this state, and passes review in this state.</strong></p>
+    </div>
+
+    <div class="recipe">
+      <h4>2. Raise concurrency to 4 — the single slot collapses</h4>
+      <div class="seq">4 concurrent · single slot · no disturbance
+
+correct    100% → <em>0%</em>
+mismatched 0 → <em>100%</em>
+
+log: "the future for #12 was overwritten by #13"</div>
+      <p class="why">The network is perfectly healthy and everything mismatches, because <code>put</code> <strong>overwrites the previous future outright</strong>. The slot always holds the <em>newest</em> request while the arriving response belongs to the <em>oldest</em>. Look at the waiting row — it only ever holds one.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>3. Switch to a FIFO queue — it looks fixed</h4>
+      <div class="seq">FIFO queue · no disturbance
+
+correct    0% → <em>100%</em>
+mismatched 100% → <em>0%</em></div>
+      <p class="why">Give each key a queue and complete the longest-waiting request first, and <strong>the overwriting is gone.</strong> The screen is completely clean. The real project stopped here, understandably — the symptom that had been reproducing was gone.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>4. Reorder the responses</h4>
+      <div class="seq">FIFO queue · reordering 40%
+
+mismatched 0% → <em>around 50%</em></div>
+      <p class="why">FIFO rests on the assumption that <strong>the first request's response arrives first</strong>. Nothing guarantees that. The device processes out of order, a retransmission slips in, the network rearranges — and it drifts.</p>
+      <p class="why" style="margin-top:9px">Worse, it <strong>never corrects itself.</strong> Slip by one and everything after stays one behind. There is no reason for the alignment to come back.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>5. Serialise — reordering is handled</h4>
+      <div class="seq">serialised · reordering 40%
+
+mismatched 50% → <em>0%</em>
+throughput <em>drops to a third</em></div>
+      <p class="why">Send one at a time and <strong>there is no order to reverse.</strong> It is correct again — at the price of far fewer requests completed in the same time. You bought correctness with throughput.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>6. Keep it serialised and turn on late responses — it breaks again</h4>
+      <div class="seq">serialised · late responses 40%
+
+mismatched 0% → <em>around 60%</em></div>
+      <p class="why">This is the most important position on the page. <strong>Mismatches happen with only one request in flight.</strong></p>
+      <p class="why" style="margin-top:9px">Request A times out and leaves the queue. Request B takes its place. Then <strong>A's response arrives late and completes B.</strong> B's caller receives A's configuration as its own. This is not a concurrency problem — it is a <strong>missing-identifier problem</strong>, and that is what this step shows.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>7. Turn on duplicates — FIFO fails completely</h4>
+      <div class="seq">FIFO queue · duplicates 40%
+
+mismatched <em>near 100%</em></div>
+      <p class="why">When retransmission delivers the same response twice, <strong>the second copy completes the next request's future.</strong> One response finishes two requests. And since misalignment never recovers, everything after stays shifted.</p>
+      <p class="why" style="margin-top:9px">On MQTT QoS 1, duplicates are not an exception — they are <strong>promised behaviour</strong>. Positional matching and QoS 1 must not be combined.</p>
+    </div>
+
+    <div class="recipe">
+      <h4>8. Switch to correlationId</h4>
+      <div class="seq">correlationId · duplicates 40%
+
+mismatched <em>0%</em>
+
+switch the disturbance to reordering or late — still <em>0%</em></div>
+      <p class="why">When the response carries <strong>which request it answers</strong>, arrival order stops mattering. A late response finds its partner already gone and is quietly discarded; a duplicate finds an id already completed and is discarded too. <strong>All three disturbances become harmless.</strong></p>
+      <p class="why" style="margin-top:9px">Loss still happens under late responses, and that is correct — <strong>a request that timed out did fail.</strong> What matters is that its failure no longer contaminates a different request.</p>
+    </div>
+
+    <h2>Why a mismatch is worse than a loss</h2>
+    <p>This is why the readouts split into three. The three outcomes differ enormously in severity.</p>
+    <table class="keytable">
+      <tr><th>outcome</th><th>what the caller sees</th><th>severity</th></tr>
+      <tr><td>lost</td><td>a timeout exception</td><td>loud. Retry and move on</td></tr>
+      <tr><td>mismatched</td><td><strong>a normal response</strong></td><td><strong>silent. A wrong value believed to be right</strong></td></tr>
+      <tr><td>correct</td><td>a normal response</td><td>—</td></tr>
+    </table>
+    <p>A loss reports itself. It lands in the logs, shows up in metrics, becomes a retry. <strong>A mismatch leaves nothing behind.</strong> Device A's config screen can be showing device B's values while, as far as the system is concerned, every request succeeded.</p>
+    <div class="callout">Which is why this class of bug gets reported as <strong>"the values are sometimes wrong"</strong>. It will not reproduce, the logs show only successes, and it usually gets blamed on frontend caching — while the place that attached the wrong value sits several layers below.</div>
+
+    <h2>Three causes stacked under one symptom</h2>
+    <p>In the real incident, <strong>"the response never arrives"</strong> had three separate causes underneath it.</p>
+    <ol>
+      <li><strong>The response topic was never subscribed to</strong> — so every request timed out</li>
+      <li><strong>The timeout was raised from 3 to 10 seconds</strong> — which deferred the symptom and left the cause</li>
+      <li><strong>Futures were being overwritten</strong> — found eight days later</li>
+    </ol>
+    <p>Fixing the third brought in the FIFO queue, and the overwriting genuinely stopped. But <strong>a fourth layer was still there</strong> — recipes 4 through 7 on this page.</p>
+    <p>The timeout increase is the painful one. It hid the symptom for eight days. <strong>Mitigation is a deferral, not a diagnosis</strong>, and when you defer you must leave a ticket for the cause behind.</p>
+
+    <h2>Adding a correlationId</h2>
+    <p>MQTT 5 put this in the protocol, so the payload does not have to change.</p>
+    <pre><code>// request — carried as a standard property
+MqttProperties props = new MqttProperties();
+props.setCorrelationData(correlationId.getBytes());
+props.setResponseTopic("device/" + serial + "/config/resp");
+
+// response — look the waiting request up by that value
+byte[] cd = message.getProperties().getCorrelationData();
+CompletableFuture&lt;Config&gt; f = pending.remove(new String(cd));
+if (f != null) f.complete(parse(message));      // no partner? discard quietly</code></pre>
+    <p>On MQTT 3.1.1, or when the device firmware cannot change, <strong>put it in the payload.</strong> The device only has to echo the value back, which is usually the smallest possible change.</p>
+    <pre><code>{ "reqId": "9f2c...", "cmd": "getConfig" }      →
+                                                ← { "reqId": "9f2c...", "config": {...} }</code></pre>
+    <p>The last line is the crux. <strong>A response with no partner is discarded.</strong> That is the whole difference from positional matching — positional matching attaches an orphan response to <em>whoever is next in line</em>; id matching throws it away.</p>
+
+    <h2>If the firmware cannot change</h2>
+    <p>Agreeing a protocol change with the device side often takes time. These help meanwhile, but <strong>none of them is complete</strong> and you should use them knowing that.</p>
+    <table class="keytable">
+      <tr><th>stopgap</th><th>handles</th><th>does not handle</th></tr>
+      <tr><td>serialising (one in flight)</td><td>reordering</td><td><strong>late responses · duplicates</strong> (recipe 6)</td></tr>
+      <tr><td>tombstones — keep a timed-out key briefly</td><td>late responses</td><td>reordering</td></tr>
+      <tr><td>both</td><td>most of all three</td><td>throughput, and the window that remains</td></tr>
+    </table>
+    <p>A <strong>tombstone</strong> holds the slot of a timed-out request open for a while. A response arriving into that slot is discarded rather than attached to the next request. It is a cheap way to target late responses specifically — though how long to hold it becomes another guess.</p>
+    <div class="callout">Even with a stopgap in place, <strong>start the correlationId conversation now.</strong> Firmware changes have long lead times, and if the stopgap gets recorded as "already fixed" in the meantime, it never changes.</div>
+
+    <h2>This is not an MQTT problem</h2>
+    <p>Every structure where <strong>requests and responses travel on separate channels</strong> has the same shape.</p>
+    <ul>
+      <li><strong>Kafka request-reply</strong> — request and reply topics are separate, which is why a correlation id in the headers is the convention</li>
+      <li><strong>WebSocket RPC</strong> — many requests share one socket. Without an id in the frame you end up relying on order</li>
+      <li><strong>Serial links to devices and equipment</strong> — this is what sequence numbers in those protocols are for</li>
+      <li><strong>Asynchronous callback APIs</strong> — if the callback does not say which call it belongs to, same problem</li>
+    </ul>
+    <p>HTTP mostly escapes this because <strong>the connection holds the request-response pairing for you</strong>: a response on that socket is that request's. The moment you lose that guarantee — by multiplexing, or by receiving the reply on a different channel — you have to hold the pairing yourself.</p>
+
+    <h2>What to check in production</h2>
+    <p><strong>Start by answering this.</strong> "What happens when the same command reaches the same target <em>twice at once</em>?" If the answer does not come immediately, you are probably in this page's state.</p>
+
+    <p><strong>Look at the pending data structure.</strong> The key is everything.</p>
+    <pre><code>Map&lt;String, CompletableFuture&lt;T&gt;&gt; pending;         // keyed by serial → single slot
+Map&lt;String, Queue&lt;CompletableFuture&lt;T&gt;&gt;&gt; pending;  // keyed by serial → FIFO
+Map&lt;String, CompletableFuture&lt;T&gt;&gt; pending;         // keyed by correlationId → safe</code></pre>
+    <p>The third and the first have <strong>identical types</strong>. That is exactly why code review misses this. What to look at is not the data structure but <strong>what goes into the key</strong>.</p>
+
+    <p><strong>Worth measuring.</strong></p>
+    <table class="keytable">
+      <tr><th>metric</th><th>what it tells you</th></tr>
+      <tr><td>orphan responses</td><td>responses discarded. <strong>Not zero means late and duplicate responses are real</strong></td></tr>
+      <tr><td>pending map size</td><td>monotonic growth means futures are accumulating uncompleted</td></tr>
+      <tr><td>timeout rate</td><td>the first sign of a missing subscription or overwriting</td></tr>
+      <tr><td>request-response latency distribution</td><td>the only basis for choosing a timeout</td></tr>
+    </table>
+    <p>The first row is cheap and effective. Once correlationId is in place, <strong>orphan responses become a plain counter.</strong> Under positional matching those same responses were silently attached to somebody else's request — impossible even to count.</p>
+
+    <p><strong>Test by sending two at once.</strong> One test that fires the same command at the same target concurrently and asserts each response carries its own value will reproduce recipe 2. Add a test that deliberately returns the responses in reverse and you catch recipe 4 as well.</p>
+
+    <div class="callout">This model is simplified for teaching. Round-trip time, timeout and disturbance rates are fixed values; in reality all of them have distributions. In particular, <strong>the absolute mismatch percentages depend heavily on how the disturbance is distributed</strong> — what matters is not the percentage but that positional matching, once misaligned, <em>never recovers on its own</em>.</div>
+
+  </article>
+
+  <footer>Request-response matching · simplified teaching model · <a href="/correlation/" hreflang="ko" lang="ko">한국어</a> / English · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+</main>
+
+<script>
+window.LAB_I18N = {
+  pause:'pause', resume:'resume',
+  uReq:'×', noDist:'none',
+  st_single:'single slot (put)', st_fifo:'FIFO queue', st_serialize:'serialised', st_correlation:'correlationId',
+  s_ok:'received its own response', s_mis:'received someone else’s response', s_lost:'timed out',
+  pWaiting:'awaiting a response', pEmpty:'none',
+  mOk:'correct', mMis:'mismatched', mLost:'lost', mDone:'requests', mInFlight:'$1 in flight',
+  vSafe:'<b style="color:var(--live)">Under these conditions a mismatch is structurally impossible.</b>',
+  vBroken:'<b>Under these conditions a mismatch is structurally possible.</b> Every red cell looked like a normal response to its caller — no exception, no log line.',
+  cStrat:'matching', cSafe:'safe', cWhy:'why',
+  cYes:'safe', cNo:'can mismatch',
+  why_single_none:'a new request overwrites the previous future. Safe only with one in flight',
+  why_single_reorder:'overwriting comes first; order never gets a chance to matter',
+  why_single_late:'overwriting comes first; lateness never gets a chance to matter',
+  why_single_dup:'overwriting comes first; duplicates never get a chance to matter',
+  why_fifo_none:'arrival order equals request order, so it lines up',
+  why_fifo_reorder:'reversed order shifts the alignment and it never recovers',
+  why_fifo_late:'a late response lands in the gap left by a timeout and hits the next request',
+  why_fifo_dup:'the second copy completes the next request’s future',
+  why_serialize_none:'only one in flight, so there is nothing to interleave',
+  why_serialize_reorder:'only one in flight, so there is no order to reverse',
+  why_serialize_late:'even with one in flight, a late response hits the next request',
+  why_serialize_dup:'even with one in flight, a duplicate hits the next request',
+  why_correlation_none:'looked up by id, so it never relies on order',
+  why_correlation_reorder:'looked up by id, so order is irrelevant',
+  why_correlation_late:'its partner is already gone, so it is discarded',
+  why_correlation_dup:'the id is already completed, so it is discarded',
+  hSingle:'put overwrites the previous future — the slot only ever holds the newest request',
+  hDrift:'once the alignment slips it never recovers — everything after stays shifted',
+  hSerial:'order is handled, late and duplicate responses are not. And you paid in throughput',
+  hCorr:'looked up by id — reordering, lateness and duplicates are all harmless',
+  hOk:'correct under these conditions',
+  lgOverwrite:'the future for #$1 was overwritten by #$2 — #$1 will never complete',
+  lgMis:'#$1 received the response for #$2 — its caller sees a normal response',
+  lgLost:'#$1 timed out — lost',
+  scene:[
+    'One request in flight. Even pendingMap.put(serial, future) is fine — 100% correct. Most code starts in this state, and passes review in this state.',
+    'Concurrency raised to 4. The network is perfectly healthy and everything mismatches, because put overwrites the previous future outright. Look at the waiting row: the slot only ever holds one. It always holds the newest request while the arriving response belongs to the oldest.',
+    'Switched to a FIFO queue. Each key gets a queue and the longest-waiting request is completed first, so the overwriting is gone and the screen is completely clean. The real project stopped here, understandably — the symptom that had been reproducing was gone.',
+    'Responses reordered. Nearly half now mismatch. FIFO rests on the assumption that the first request’s response arrives first, and nothing guarantees that. Worse, slip by one and everything after stays one behind — there is no reason for the alignment to come back.',
+    'Serialised. With one request at a time there is no order to reverse, so it is correct again. But far fewer requests complete in the same span. Correctness was bought with throughput.',
+    'Still serialised, now with late responses. It breaks again — with only one request in flight. Request A times out and leaves, B takes its place, and A’s response arrives late and completes B. This is not a concurrency problem but a missing-identifier problem, and this is where that shows.',
+    'Back to FIFO with duplicates on. Almost everything mismatches. A retransmitted response completes the next request’s future, one response finishing two requests, and the misalignment never recovers. On MQTT QoS 1 duplicates are not an exception — they are promised behaviour.',
+    'Switched to correlationId. Zero mismatches, and it stays zero whether you choose reordering, lateness or duplicates. A late response finds its partner already gone and is discarded; a duplicate finds a completed id and is discarded. Loss still happens, and that is correct — a request that timed out did fail. What matters is that its failure no longer contaminates a different request.'
+  ],
+};
+</script>
+<script src="/shared/correlation-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>
