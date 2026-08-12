@@ -39,6 +39,18 @@
       color:var(--ink-3);border:1px solid var(--rule);padding:3px 7px;border-radius:2px;white-space:nowrap;
     }
     .card .tag.live{color:var(--live);border-color:var(--live)}
+    .cards h2.group{
+      font-family:var(--mono);
+      font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+      color:var(--ink-3);font-weight:400;line-height:1.5;
+      margin:0;padding:34px 0 3px;border:none;
+      display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+    }
+    .cards h2.group:first-child{padding-top:24px}
+    .cards h2.group em{
+      font-family:var(--serif);font-style:normal;font-size:14px;
+      letter-spacing:0;text-transform:none;color:var(--ink-2);
+    }
     @media (max-width:600px){
       .card{grid-template-columns:1fr;gap:6px}
       .card .tag{justify-self:start}
@@ -57,6 +69,8 @@
   <p class="lede">Some concepts read fine on paper and desert you the moment production breaks. Here you drive them yourself.</p>
 
   <div class="cards">
+
+    <h2 class="group">Concepts <em>internals you can put your hands on</em></h2>
 
     <a class="card" href="/en/mvcc/">
       <span class="no">01</span>
@@ -94,6 +108,8 @@
       <span class="tag live">live</span>
     </a>
 
+    <h2 class="group">Real-time messaging <em>where connections drop and messages go astray</em></h2>
+
     <a class="card" href="/en/mqtt/">
       <span class="no">05</span>
       <span>
@@ -121,6 +137,8 @@
       <span class="tag live">live</span>
     </a>
 
+    <h2 class="group">How capacity collapses <em>the queries are fast and the system stalls anyway</em></h2>
+
     <a class="card" href="/en/connpool/">
       <span class="no">08</span>
       <span>
@@ -129,6 +147,17 @@
       </span>
       <span class="tag live">live</span>
     </a>
+
+    <a class="card" href="/en/backpressure/">
+      <span class="no">11</span>
+      <span>
+        <h2>Rejection is a signal, not a bug</h2>
+        <p>Backpressure and queue policy. Open the queue up and rejection does not go away — it turns into an OOM.</p>
+      </span>
+      <span class="tag live">live</span>
+    </a>
+
+    <h2 class="group">Failing quietly <em>no exception, no log — just a wrong result</em></h2>
 
     <a class="card" href="/en/jobclaim/">
       <span class="no">09</span>
@@ -148,15 +177,6 @@
       <span class="tag live">live</span>
     </a>
 
-    <a class="card" href="/en/backpressure/">
-      <span class="no">11</span>
-      <span>
-        <h2>Rejection is a signal, not a bug</h2>
-        <p>Backpressure and queue policy. Open the queue up and rejection does not go away — it turns into an OOM.</p>
-      </span>
-      <span class="tag live">live</span>
-    </a>
-
     <a class="card" href="/en/correlation/">
       <span class="no">12</span>
       <span>
@@ -165,7 +185,6 @@
       </span>
       <span class="tag live">live</span>
     </a>
-
   </div>
 
   <footer>Interactive visualizations of backend internals · <a href="/" hreflang="ko" lang="ko">한국어</a> / English · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
