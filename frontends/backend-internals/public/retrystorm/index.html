@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>부하는 걷혔는데 돌아오지 않는다 — 재시도 증폭과 메타스터블</title>
+<meta name="description" content="트래픽 스파이크는 20초 만에 끝났는데 시스템은 30분째 죽어 있습니다. 부하를 원래대로 되돌려도 안 돌아오는 이유를, 재시도 증폭 배수와 무너지는 임계·회복 임계 사이의 간격으로 확인합니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/retrystorm/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/retrystorm/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/retrystorm/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/retrystorm/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="부하는 걷혔는데 돌아오지 않는다">
+<meta property="og:description" content="슬라이더를 원래대로 되돌려도 큐가 안 빕니다. 무너지는 임계와 회복 임계가 다르기 때문입니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/retrystorm/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="부하는 걷혔는데 돌아오지 않는다">
+<meta name="twitter:description" content="재시도 증폭이 만드는 이력현상 — 무너지는 데는 100/s, 돌아오는 데는 3.7/s.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/retrystorm-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/retrystorm/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>부하는 걷혔는데 돌아오지 않는다</h1>
+  <p class="lede">트래픽 스파이크는 20초 만에 지나갔습니다. 대시보드의 유입 그래프는 이미 평소 높이로 내려와 있어요. 그런데 서비스는 30분째 아무것도 처리하지 못합니다. <strong>원인이 사라졌는데 결과가 안 사라집니다.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sLam">평시 부하 λ</label>
+          <span class="v" id="vLam">60<small> /s</small></span>
+          <input type="range" id="sLam" min="0" max="200" step="1" value="60" aria-label="초당 신규 요청 수">
+        </div>
+        <div class="dial">
+          <label for="sL">계층 수 L</label>
+          <span class="v" id="vL">3<small> 단</small></span>
+          <input type="range" id="sL" min="1" max="4" step="1" value="3" aria-label="호출 사슬의 계층 수">
+        </div>
+        <div class="dial">
+          <label for="sR">계층당 재시도 r</label>
+          <span class="v" id="vR">3<small> 회</small></span>
+          <input type="range" id="sR" min="1" max="4" step="1" value="3" aria-label="계층마다 시도하는 횟수">
+        </div>
+        <div class="dial">
+          <label>지터</label>
+          <div class="seg" id="segJitter" role="group" aria-label="백오프 지터">
+            <button data-on="0" aria-pressed="true">끔</button>
+            <button data-on="1">켬</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>서킷 브레이커</label>
+          <div class="seg" id="segBreaker" role="group" aria-label="서킷 브레이커">
+            <button data-on="0" aria-pressed="true">끔</button>
+            <button data-on="1">켬</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>&nbsp;</label>
+          <button id="btnSpike">부하 스파이크</button>
+        </div>
+        <div class="dial">
+          <label>&nbsp;</label>
+          <button id="btnRun">일시정지</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">굿풋 — 클라이언트가 실제로 받아간 응답</span>
+      <div class="board">
+        <div class="trace" id="trace"></div>
+        <div class="tracex" id="traceX"></div>
+
+        <div class="qwrap">
+          <div class="qbar"><div class="fill" id="qFill"></div><div class="stale" id="qStale"></div></div>
+          <div class="qmeta" id="qMeta"></div>
+        </div>
+
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+        <div class="hyst" id="hyst"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">같은 계층 수에서 재시도 횟수만 바꾸면</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+        <div class="speed" id="segSpeed" role="group" aria-label="재생 속도">
+          <button data-speed="0.5">0.5&times;</button>
+          <button data-speed="1" aria-pressed="true">1&times;</button>
+          <button data-speed="2">2&times;</button>
+        </div>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 06</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>평시 부하 λ</td><td>스파이크가 끝난 뒤 돌아갈 유입량. <strong>올렸다 내리는 것이 이 페이지의 전부입니다.</strong></td></tr>
+    <tr><td>계층 수 L</td><td>호출 사슬의 깊이. 게이트웨이 → API → 저장소면 3단입니다.</td></tr>
+    <tr><td>계층당 재시도 r</td><td>각 계층이 실패했을 때 다시 던지는 횟수. 증폭 배수는 <code>A = r^L</code> 입니다.</td></tr>
+    <tr><td>지터</td><td>백오프에 난수를 섞습니다. 같은 순간 실패한 클라이언트를 흩어 놓습니다.</td></tr>
+    <tr><td>서킷 브레이커</td><td>성공률이 절반 밑으로 떨어지면 5초간 열고, 그동안은 즉시 거절하며 <strong>재시도도 걸지 않습니다.</strong></td></tr>
+    <tr><td>부하 스파이크</td><td>20초 동안 유입을 160/s 로 올렸다가 슬라이더 값으로 되돌립니다.</td></tr>
+  </table>
+
+  <p>고정값은 <strong>용량 100/s · 서버 큐 상한 500 · 클라이언트 타임아웃 1.0초</strong> 입니다. 큐 막대의 빗금은 <strong>클라이언트가 이미 포기한 요청</strong>이 큐에 남아 있는 양이에요.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 평시에는 아무 일도 없다</h4>
+    <div class="seq">λ 60/s · 용량 100/s · 재시도 없음
+굿풋 60/s · 큐 0 · 낭비 0</div>
+    <p class="why">유입이 용량 아래라 큐가 안 쌓이고, 쌓이지 않으니 타임아웃이 없고, 타임아웃이 없으니 재시도도 없습니다. 재시도 설정이 무엇이든 화면이 똑같아요. <strong>재시도는 평상시에 공짜입니다</strong> — 그래서 아무도 그 비용을 모릅니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 스파이크를 올렸다 내린다 — 재시도가 없으면</h4>
+    <div class="seq">20초 동안 160/s · 그 뒤 다시 60/s
+스파이크 중: 큐 500 · 굿풋 0
+스파이크 뒤: <em>몇 초 만에 굿풋 60/s 로 복귀</em></div>
+    <p class="why">부하가 용량을 넘는 동안은 큐가 차고 굿풋이 0으로 떨어집니다. 당연한 일이에요. 그리고 부하가 걷히면 큐가 초당 40건씩 빠지면서 원래대로 돌아옵니다. <strong>이게 우리가 기대하는 동작입니다.</strong> 원인이 사라지면 결과도 사라지는 것.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 똑같이 하는데 3계층 × 3회 재시도 — 안 돌아온다</h4>
+    <div class="seq">L 3 · r 3 → 증폭 A = 27배
+스파이크 20초 뒤 λ 를 60/s 로 <em>되돌렸는데</em>
+굿풋 <em>0/s 그대로</em> · 큐 495/500 · 낭비 100/s</div>
+    <p class="why"><strong>이 페이지의 전부가 이 한 칸입니다.</strong> 조건은 2번과 똑같고 재시도 설정만 다릅니다. 유입 그래프는 이미 60/s 로 내려와 있는데 굿풋이 안 올라와요. 시계열의 옅은 막대(유입)는 내려왔는데 진한 막대(굿풋)는 바닥에 붙어 있습니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. 갇힌 뒤에 부하를 더 내려본다</h4>
+    <div class="seq">스파이크 뒤 λ 를 <em>10/s</em> 로 — 용량의 10분의 1
+굿풋 <em>여전히 0/s</em>
+회복 임계 = 용량 ÷ 증폭 = 100 ÷ 27 = 3.7/s</div>
+    <p class="why">부하를 여섯 배로 줄여도 안 돌아옵니다. 10/s 의 신규 요청이 각각 최대 27번 시도되면 서버가 보는 것은 270/s 이고, 용량 100/s 로는 여전히 못 당해내니까요. <strong>3.7/s 밑으로 내려야 비로소 빠져나옵니다.</strong> 슬라이더를 직접 내려보세요 — 4/s 에서는 안 나오고 3/s 에서 나옵니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 지터를 켠다 — 파도는 사라지는데</h4>
+    <div class="seq">지터 켬 · 나머지 동일
+시도 미터 1,480~2,300 사이 진동 → <em>1,620/s 에 고정</em>
+굿풋 <em>0/s 그대로</em> · 여전히 갇혀 있다</div>
+    <p class="why">지터 없는 지수 백오프는 같은 순간 실패한 클라이언트를 같은 순간 다시 부르게 만듭니다. 그래서 시도율이 파도칩니다. 지터를 켜면 그 덩어리가 흩어져 시도 미터가 1,620/s 에 딱 붙습니다 — 60 × 27, 증폭 배수 그대로예요. <strong>그런데 갇힌 상태에서 꺼내주지는 못합니다.</strong> 지터가 줄이는 것은 <em>동시성</em>이지 <em>총량</em>이 아니거든요. 총량을 정하는 것은 <code>r^L</code> 하나입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. 서킷 브레이커를 켠다 — 이것만 꺼낸다</h4>
+    <div class="seq">브레이커 켬 · 성공률 50% 미만이면 5초간 개방
+개방 중에는 즉시 거절하고 <em>재시도를 걸지 않는다</em>
+큐 0 · 굿풋 60/s 로 복귀</div>
+    <p class="why">브레이커가 하는 일은 요청을 빨리 실패시키는 게 아닙니다. <strong>재시도를 끊는 것</strong>이에요. 개방된 5초 동안 증폭이 27배에서 1배로 떨어지고, 그러면 유효 유입 60/s 가 용량 100/s 아래로 내려와 큐가 빕니다. 큐가 비면 성공률이 회복되고 브레이커가 닫힙니다. <strong>부하를 낮춰서는 안 돌아오고, 끊어야 돌아옵니다.</strong></p>
+  </div>
+
+  <h2>왜 안 돌아오는가</h2>
+
+  <p>큐에 쌓인 요청은 1초가 지나면 클라이언트가 포기합니다. 그런데 <strong>서버는 그걸 모릅니다.</strong> 소켓은 아직 열려 있고, 그 요청은 큐에 그대로 남아 순서가 오면 끝까지 처리됩니다. 큐 막대의 빗금이 그 부분이에요. 서버는 100% 바쁩니다. 그런데 그 일의 결과를 받을 사람이 없습니다.</p>
+
+  <div class="callout">CPU 사용률 100%, 처리량 100/s, <strong>굿풋 0/s.</strong> 대시보드에서 이 시스템은 열심히 일하는 중으로 보입니다.</div>
+
+  <p>그동안 포기한 클라이언트는 재시도를 겁니다. 3계층에서 각 3회면 원 요청 하나가 최대 27번 서버에 도착해요. 평시 부하 60/s 가 서버에게는 <strong>1,620/s</strong> 로 보입니다 — 60 × 27, 용량의 16배예요. 실험대의 시도 미터가 정확히 그 값입니다(지터를 끄면 파도쳐서 1,480~2,300 사이를 오가고, 켜면 1,620 에 붙습니다). 그러니 큐는 절대 안 빕니다. 안 비니까 다음 요청도 타임아웃되고, 타임아웃되니까 또 재시도하고 — <strong>스파이크가 만든 상태를 재시도가 스스로 먹여 살립니다.</strong></p>
+
+  <h2>두 개의 임계</h2>
+
+  <p>이 시스템에는 안정된 상태가 두 개 있습니다. 하나는 <em>모두 첫 시도에 성공하는</em> 정상 상태, 다른 하나는 <em>모두 실패하고 모두 재시도하는</em> 갇힌 상태예요. 두 상태 사이를 오가는 임계가 서로 다릅니다.</p>
+
+  <table class="keytable">
+    <tr><th>방향</th><th>조건</th><th>기본 설정에서</th></tr>
+    <tr><td>무너진다</td><td><code>λ &gt; C + C·T / d</code></td><td>20초짜리 스파이크면 <strong>105/s</strong></td></tr>
+    <tr><td>돌아온다</td><td><code>λ &lt; C / A</code></td><td><strong>3.7/s</strong> (100 ÷ 27)</td></tr>
+    <tr><td>간격</td><td><code>A = r^L</code> 배</td><td><strong>28배</strong></td></tr>
+  </table>
+
+  <p>무너지는 쪽은 용량 근처입니다. 스파이크가 길수록 임계는 용량 100/s 에 가까워져요 — 5초짜리는 121/s, 20초짜리는 105/s, 60초짜리는 102/s 가 되어야 무너집니다. 큐가 <code>C·T</code> = 100건을 넘겨 타임아웃이 시작되는 순간이 갈림길이고, 그 지점까지 밀어붙이는 데 필요한 초과분이 시간에 반비례하니까요.</p>
+
+  <p>돌아오는 쪽은 <strong>용량을 증폭으로 나눈 값</strong>입니다. 재시도가 없으면 두 임계가 같아서 이력현상이 없어요. 재시도를 한 계층에 한 번씩만 늘려도 간격이 곱셈으로 벌어집니다. 실험대 아래 눈금의 회색 구간이 그 간격이고, 주황색 표시가 지금 부하입니다. <strong>주황색이 회색 구간 안에 있으면, 그 부하는 시스템을 무너뜨리지도 못하고 되살리지도 못합니다.</strong></p>
+
+  <div class="callout">재시도 설정을 정할 때 우리가 생각하는 것은 "몇 번까지 봐줄까"입니다. 실제로 정하고 있는 것은 <strong>"한 번 무너지면 부하를 몇 분의 일까지 줄여야 살아나는가"</strong> 입니다.</div>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>Spring Retry</td><td><code>@Retryable(maxAttempts=3)</code> 이 세 계층에 각각 붙어 있으면 27배입니다. 계층마다 독립적으로 결정되니 아무도 곱을 안 봅니다.</td></tr>
+    <tr><td>Feign / RestClient</td><td>클라이언트 기본 재시도와 애플리케이션 재시도가 겹쳐 한 계층이 두 계층 노릇을 합니다.</td></tr>
+    <tr><td>재시도 예산</td><td>횟수 대신 <strong>비율</strong>로 겁니다 — "재시도는 전체 요청의 10%까지". 이러면 증폭이 1.1배로 묶여 이력현상이 거의 사라집니다.</td></tr>
+    <tr><td>Resilience4j</td><td><code>CircuitBreaker</code> 를 <code>Retry</code> <em>바깥</em>에 두어야 개방 시 재시도가 끊깁니다. 순서가 반대면 재시도가 브레이커를 계속 두들깁니다.</td></tr>
+    <tr><td>서버 측 폐기</td><td>큐에서 꺼낼 때 <strong>대기 시간이 타임아웃을 넘었으면 처리하지 말고 버립니다.</strong> 낭비 100/s 를 0으로 만드는 한 줄입니다.</td></tr>
+    <tr><td>지터</td><td>넣으세요. 파도를 없애는 것만으로도 값어치가 있습니다. 다만 이것으로 증폭이 해결됐다고 생각하면 안 됩니다.</td></tr>
+  </table>
+
+  <p><a href="/backpressure/">11번(백프레셔)</a>이 <em>넘칠 때 무엇을 할까</em>였다면 이 페이지는 <em>넘쳤다가 그친 뒤에 무슨 일이 일어나는가</em>입니다. 그리고 <a href="/connpool/">8번(커넥션 풀)</a>의 리틀의 법칙이 여기서도 그대로 작동해요 — 낭비되는 100/s 가 점유를 만들고, 그 점유가 용량을 갉아먹습니다.</p>
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/retrystorm/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  pause:'일시정지', resume:'다시 시작', spike:'부하 스파이크', spiking:'스파이크 중…',
+  uPs:'/s', uX:'배', uTier:'단', uTry:'회',
+  refCap:'용량 $1/s',
+  axAgo:'$1초 전', axNow:'지금',
+  axRec:'회복 $1/s', axBrk:'무너짐 $1/s',
+  qNow:'서버 큐 $1건 — 그중 $2건은 클라이언트가 이미 포기했다',
+  qMax:'상한 $1',
+  mAtt:'서버가 받는 시도', mGood:'굿풋', mWaste:'버려질 일', mAmp:'증폭 A = r^L',
+  vOk:'<b>정상.</b> 굿풋 $1/s — 들어온 만큼 나가고 있다. 큐가 비어 있으니 재시도가 걸리지 않는다.',
+  vSpike:'<b>스파이크 중.</b> 유입 $1/s 가 용량을 넘었다 <span class="at">— $2초 남음</span>',
+  vStuck:'<b>갇혔다.</b> 유입은 이미 $1/s 로 돌아왔는데 굿풋이 0이다.<br>돌아오려면 <b>$2/s</b> 아래로 내려야 한다 <span class="at">— 용량 ÷ 증폭 $3배</span>',
+  vDrain:'<b>빠지는 중.</b> 큐가 줄고 있다 — 재시도가 용량을 다 먹지는 못한다',
+  vBrk:'<b>브레이커 개방.</b> 즉시 거절 중 — 재시도가 끊겨 큐가 빈다',
+  cR:'재시도 r', cAmp:'증폭 A', cRec:'회복 임계', cGap:'이력 폭', cRv:'$1회', cNone:'없음', cGapV:'$1배',
+  hOk:'유입이 용량 아래다 — 큐가 비어 있어 재시도 설정이 무의미하다',
+  hSpike:'유입이 용량을 넘었다 — 큐가 차고 타임아웃이 시작된다',
+  hStuck:'부하는 걷혔는데 굿풋이 0이다 — $1/s 아래로 내려야 빠져나온다',
+  hDrain:'큐가 빠지고 있다',
+  hBrk:'브레이커가 열려 재시도를 끊는 중 — 이러는 동안 큐가 빈다',
+  scene:[
+    '평시입니다. 유입 60/s, 용량 100/s. 큐가 안 쌓이니 타임아웃도 재시도도 없어요. 재시도 슬라이더를 아무렇게나 움직여 보세요 — 화면이 하나도 안 바뀝니다. 재시도는 평상시에 공짜고, 그래서 아무도 그 값을 모릅니다.',
+    '재시도를 끈 채로 20초짜리 스파이크를 넣었습니다. 유입이 160/s 로 뛰는 동안 큐가 상한 500 에 닿고 굿풋이 0으로 떨어져요. 그리고 스파이크가 끝나면 몇 초 만에 60/s 로 돌아옵니다. 원인이 사라지니 결과도 사라집니다. 우리가 기대하는 동작이죠.',
+    '조건은 방금과 똑같고 재시도만 3계층 × 3회로 켰습니다. 증폭이 27배예요. 스파이크는 20초 만에 끝났고 옅은 막대(유입)는 이미 내려와 있는데, 진한 막대(굿풋)가 바닥에 붙어서 안 올라옵니다. 부하는 걷혔는데 시스템이 안 돌아온 겁니다. 이 한 칸이 이 페이지의 전부입니다.',
+    '갇힌 상태에서 부하를 10/s 까지 내려봤습니다. 용량의 10분의 1이에요. 그래도 안 돌아옵니다. 10/s 짜리 요청이 각각 27번 시도되면 서버가 보는 건 270/s 니까요. 눈금의 회색 구간을 보세요 — 3.7/s 아래로 내려야 비로소 빠져나옵니다. 슬라이더로 직접 확인해 보세요.',
+    '지터를 켰습니다. 시도 미터가 1,480~2,300 사이를 오가다 1,620/s 에 딱 붙었어요 — 60 × 27 그대로입니다. 같은 순간 실패한 요청들이 같은 순간 다시 오는 파도가 사라진 거예요. 그런데 굿풋은 여전히 0입니다. 지터는 재시도를 흩어 놓을 뿐 줄이지는 않으니까요. 총량을 정하는 건 r^L 하나입니다.',
+    '서킷 브레이커를 켰습니다. 성공률이 절반 밑으로 떨어지자 브레이커가 열리고, 열려 있는 동안 재시도가 끊깁니다. 증폭이 27배에서 1배로 떨어지니 유효 유입이 용량 아래로 내려오고, 큐가 빕니다. 큐가 비니 성공률이 돌아오고 브레이커가 닫혀요. 부하를 낮춰서는 안 돌아오고, 끊어야 돌아옵니다.'
+  ],
+};
+</script>
+<script src="/shared/retrystorm-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>

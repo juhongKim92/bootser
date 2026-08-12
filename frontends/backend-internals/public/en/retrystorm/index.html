@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The load is gone and it still will not recover — retry amplification and metastability</title>
+<meta name="description" content="The traffic spike lasted twenty seconds; the service has been down for thirty minutes. See why putting the load back where it was does not bring the system back, through retry amplification and the gap between the collapse and recovery thresholds.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/retrystorm/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/retrystorm/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/retrystorm/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/retrystorm/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="The load is gone and it still will not recover">
+<meta property="og:description" content="Drag the slider back where it was and the queue stays full. The threshold to break is not the threshold to recover.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/retrystorm/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The load is gone and it still will not recover">
+<meta name="twitter:description" content="The hysteresis retry amplification builds — 100/s to break it, 3.7/s to bring it back.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/retrystorm-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/retrystorm/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>The load is gone and it still will not recover</h1>
+  <p class="lede">The traffic spike passed in twenty seconds. The inbound graph on the dashboard is already back at its usual height. And the service has processed nothing for thirty minutes. <strong>The cause is gone and the effect is not.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sLam">baseline load λ</label>
+          <span class="v" id="vLam">60<small> /s</small></span>
+          <input type="range" id="sLam" min="0" max="200" step="1" value="60" aria-label="new requests per second">
+        </div>
+        <div class="dial">
+          <label for="sL">tiers L</label>
+          <span class="v" id="vL">3<small> deep</small></span>
+          <input type="range" id="sL" min="1" max="4" step="1" value="3" aria-label="depth of the call chain">
+        </div>
+        <div class="dial">
+          <label for="sR">attempts per tier r</label>
+          <span class="v" id="vR">3<small> tries</small></span>
+          <input type="range" id="sR" min="1" max="4" step="1" value="3" aria-label="attempts made at each tier">
+        </div>
+        <div class="dial">
+          <label>jitter</label>
+          <div class="seg" id="segJitter" role="group" aria-label="backoff jitter">
+            <button data-on="0" aria-pressed="true">off</button>
+            <button data-on="1">on</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>circuit breaker</label>
+          <div class="seg" id="segBreaker" role="group" aria-label="circuit breaker">
+            <button data-on="0" aria-pressed="true">off</button>
+            <button data-on="1">on</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>&nbsp;</label>
+          <button id="btnSpike">load spike</button>
+        </div>
+        <div class="dial">
+          <label>&nbsp;</label>
+          <button id="btnRun">pause</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">goodput — responses a client actually received</span>
+      <div class="board">
+        <div class="trace" id="trace"></div>
+        <div class="tracex" id="traceX"></div>
+
+        <div class="qwrap">
+          <div class="qbar"><div class="fill" id="qFill"></div><div class="stale" id="qStale"></div></div>
+          <div class="qmeta" id="qMeta"></div>
+        </div>
+
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+        <div class="hyst" id="hyst"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">same depth, only the retry count changed</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">previous</button>
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+        <div class="speed" id="segSpeed" role="group" aria-label="playback speed">
+          <button data-speed="0.5">0.5&times;</button>
+          <button data-speed="1" aria-pressed="true">1&times;</button>
+          <button data-speed="2">2&times;</button>
+        </div>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 06</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Drive it yourself</h2>
+
+  <table class="keytable">
+    <tr><th>dial</th><th>what it changes</th></tr>
+    <tr><td>baseline load λ</td><td>The arrival rate the system returns to once the spike ends. <strong>Raising it and putting it back is this whole page.</strong></td></tr>
+    <tr><td>tiers L</td><td>Depth of the call chain. Gateway → API → store is three.</td></tr>
+    <tr><td>attempts per tier r</td><td>How many times each tier tries again on failure. Amplification is <code>A = r^L</code>.</td></tr>
+    <tr><td>jitter</td><td>Randomises the backoff, scattering clients that failed at the same instant.</td></tr>
+    <tr><td>circuit breaker</td><td>Opens for five seconds when the success rate drops below half; while open it rejects immediately and <strong>queues no retries.</strong></td></tr>
+    <tr><td>load spike</td><td>Raises arrivals to 160/s for twenty seconds, then returns to the slider value.</td></tr>
+  </table>
+
+  <p>Fixed throughout: <strong>capacity 100/s, server queue cap 500, client timeout 1.0s.</strong> The hatched part of the queue bar is work whose <strong>client has already given up</strong> but which is still sitting in the queue.</p>
+
+  <h2>Things to try</h2>
+
+  <div class="recipe">
+    <h4>1. Nothing happens on a normal day</h4>
+    <div class="seq">λ 60/s · capacity 100/s · no retries
+goodput 60/s · queue 0 · wasted 0</div>
+    <p class="why">Arrivals are below capacity, so nothing queues; nothing queues, so nothing times out; nothing times out, so nothing retries. Move the retry sliders anywhere you like — the screen does not change. <strong>Retries are free on a normal day</strong>, which is why nobody knows what they cost.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Spike it and put it back — with no retries</h4>
+    <div class="seq">160/s for twenty seconds, then 60/s again
+during: queue 500 · goodput 0
+after: <em>goodput back to 60/s within seconds</em></div>
+    <p class="why">While arrivals exceed capacity the queue fills and goodput drops to zero. Nothing surprising there. Then the load lifts, the queue drains at forty a second, and everything returns. <strong>This is the behaviour we expect</strong> — the cause goes away and so does the effect.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Do exactly that again with 3 tiers × 3 attempts — it does not come back</h4>
+    <div class="seq">L 3 · r 3 → amplification A = 27×
+twenty seconds later λ is <em>back at 60/s</em> and
+goodput is <em>still 0/s</em> · queue 495/500 · wasted 100/s</div>
+    <p class="why"><strong>This one panel is the whole page.</strong> Every condition matches recipe 2 except the retry settings. The inbound graph has already come down to 60/s and goodput does not follow it up. On the chart the pale bars (arrivals) drop while the solid bars (goodput) stay pinned to the floor.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Now push the load down further</h4>
+    <div class="seq">after the spike, drop λ to <em>10/s</em> — a tenth of capacity
+goodput <em>still 0/s</em>
+recovery threshold = capacity ÷ amplification = 100 ÷ 27 = 3.7/s</div>
+    <p class="why">Cutting the load six-fold does not help. Ten new requests a second, each attempted up to twenty-seven times, is 270/s as far as the server is concerned, and 100/s of capacity still cannot cover it. <strong>You have to get below 3.7/s before it lets go.</strong> Drag the slider yourself — at 4/s it stays stuck and at 3/s it comes back.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Turn on jitter — the waves go away, and</h4>
+    <div class="seq">jitter on, everything else unchanged
+attempts meter swings 1,480–2,300 → <em>pinned at 1,620/s</em>
+goodput <em>still 0/s</em> · still stuck</div>
+    <p class="why">Exponential backoff without jitter makes clients that failed at the same instant come back at the same instant, so the attempt rate arrives in waves. Turn jitter on and the clump scatters — the attempts meter settles on 1,620/s, which is 60 × 27, the amplification factor exactly. <strong>What it will not do is get you out.</strong> Jitter reduces <em>concurrency</em>, not <em>volume</em>, and volume is set by <code>r^L</code> alone.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Turn on the circuit breaker — only this gets you out</h4>
+    <div class="seq">breaker on · opens for 5s below 50% success
+while open it rejects immediately and <em>queues no retries</em>
+queue 0 · goodput back to 60/s</div>
+    <p class="why">What a breaker does is not fail requests faster. It <strong>cuts the retries.</strong> For the five seconds it stays open, amplification falls from 27× to 1×, effective arrivals of 60/s drop below the 100/s capacity, and the queue empties. An empty queue restores the success rate and the breaker closes. <strong>Turning the load down will not bring it back; cutting the retries will.</strong></p>
+  </div>
+
+  <h2>Why it will not come back</h2>
+
+  <p>A request sitting in the queue is abandoned by its client after one second. <strong>The server does not know that.</strong> The socket is still open, the request is still queued, and when its turn comes the server processes it to completion. That is the hatched part of the queue bar. The server is a hundred percent busy — and nobody is left to receive the result.</p>
+
+  <div class="callout">CPU at 100%, throughput 100/s, <strong>goodput 0/s.</strong> On a dashboard this system looks like it is working hard.</div>
+
+  <p>Meanwhile every client that gave up retries. Three tiers at three attempts each means one original request reaching the server up to twenty-seven times. A baseline load of 60/s looks like <strong>1,620/s</strong> to the server — 60 × 27, sixteen times capacity. The attempts meter in the lab reads exactly that (with jitter off it waves between 1,480 and 2,300; with jitter on it sits at 1,620). So the queue never empties. Because it never empties the next request times out too, and because it times out it retries again — <strong>the retries feed the state the spike created.</strong></p>
+
+  <h2>Two thresholds</h2>
+
+  <p>This system has two stable states: the normal one where <em>everything succeeds on the first try</em>, and the stuck one where <em>everything fails and everything retries</em>. The threshold for crossing between them is not the same in both directions.</p>
+
+  <table class="keytable">
+    <tr><th>direction</th><th>condition</th><th>at the defaults</th></tr>
+    <tr><td>it breaks</td><td><code>λ &gt; C + C·T / d</code></td><td><strong>105/s</strong> for a twenty-second spike</td></tr>
+    <tr><td>it recovers</td><td><code>λ &lt; C / A</code></td><td><strong>3.7/s</strong> (100 ÷ 27)</td></tr>
+    <tr><td>the gap</td><td><code>A = r^L</code>×</td><td><strong>28×</strong></td></tr>
+  </table>
+
+  <p>Breaking happens near capacity. The longer the spike, the closer that threshold sits to the 100/s capacity — a five-second spike needs 121/s, a twenty-second one 105/s, a sixty-second one 102/s. The moment the queue passes <code>C·T</code> = 100 items is where timeouts begin, and the excess needed to push it that far is inversely proportional to how long you push.</p>
+
+  <p>Recovery happens at <strong>capacity divided by amplification</strong>. With no retries the two thresholds coincide and there is no hysteresis at all. Add one more attempt per tier and the gap widens multiplicatively. The grey band on the scale under the lab is that gap, and the orange marker is the current load. <strong>While the orange marker sits inside the grey band, that load can neither break the system nor revive it.</strong></p>
+
+  <div class="callout">When we set a retry policy we think we are deciding how many failures to forgive. What we are actually deciding is <strong>how far the load must fall before a collapsed system can come back.</strong></div>
+
+  <h2>In practice</h2>
+
+  <table class="keytable">
+    <tr><th>where</th><th>what to check</th></tr>
+    <tr><td>Spring Retry</td><td><code>@Retryable(maxAttempts=3)</code> on three tiers is 27×. Each tier decides independently, so nobody ever sees the product.</td></tr>
+    <tr><td>Feign / RestClient</td><td>Client-level default retries stack on top of application retries, making one tier behave like two.</td></tr>
+    <tr><td>retry budgets</td><td>Bound retries by <strong>ratio</strong> rather than count — "retries may be at most 10% of all requests". That pins amplification near 1.1× and the hysteresis nearly disappears.</td></tr>
+    <tr><td>Resilience4j</td><td>Put <code>CircuitBreaker</code> <em>outside</em> <code>Retry</code> so an open breaker actually cuts retries. The other order lets retries keep hammering the breaker.</td></tr>
+    <tr><td>server-side discard</td><td>On dequeue, <strong>drop anything that has waited longer than the timeout instead of processing it.</strong> That is the one line that turns 100/s of waste into zero.</td></tr>
+    <tr><td>jitter</td><td>Add it. Removing the waves is worth it on its own. Just do not mistake it for having dealt with amplification.</td></tr>
+  </table>
+
+  <p>Where <a href="/en/backpressure/">page 11 (backpressure)</a> asked <em>what to do when it overflows</em>, this page asks <em>what happens after it overflowed and stopped</em>. And Little's Law from <a href="/en/connpool/">page 8 (connection pools)</a> is at work here too — the 100/s of wasted processing is occupancy, and that occupancy eats the capacity.</p>
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">index</a> · <a href="/retrystorm/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  pause:'pause', resume:'resume', spike:'load spike', spiking:'spiking…',
+  uPs:'/s', uX:'×', uTier:' deep', uTry:' tries',
+  refCap:'capacity $1/s',
+  axAgo:'$1s ago', axNow:'now',
+  axRec:'recover $1/s', axBrk:'break $1/s',
+  qNow:'server queue $1 — $2 of them already abandoned by the client',
+  qMax:'cap $1',
+  mAtt:'attempts reaching server', mGood:'goodput', mWaste:'work nobody wants', mAmp:'amplification A = r^L',
+  vOk:'<b>Healthy.</b> Goodput $1/s — as much leaves as arrives. The queue is empty, so nothing retries.',
+  vSpike:'<b>Spiking.</b> Arrivals of $1/s are over capacity <span class="at">— $2s left</span>',
+  vStuck:'<b>Stuck.</b> Arrivals are already back at $1/s and goodput is zero.<br>It needs to fall below <b>$2/s</b> to return <span class="at">— capacity ÷ amplification $3×</span>',
+  vDrain:'<b>Draining.</b> The queue is shrinking — retries are not quite eating all the capacity',
+  vBrk:'<b>Breaker open.</b> Rejecting immediately — retries are cut and the queue empties',
+  cR:'attempts r', cAmp:'amplification A', cRec:'recovery threshold', cGap:'hysteresis', cRv:'$1 tries', cNone:'none', cGapV:'$1×',
+  hOk:'arrivals are under capacity — the queue is empty and retry settings mean nothing',
+  hSpike:'arrivals are over capacity — the queue is filling and timeouts are starting',
+  hStuck:'the load is gone and goodput is zero — it must fall below $1/s to return',
+  hDrain:'the queue is draining',
+  hBrk:'the breaker is open and cutting retries — this is what empties the queue',
+  scene:[
+    'A normal day. Arrivals 60/s, capacity 100/s. Nothing queues, so nothing times out and nothing retries. Move the retry sliders wherever you like — not one thing on screen changes. Retries are free on a normal day, which is why nobody knows what they cost.',
+    'With retries off, a twenty-second spike. While arrivals jump to 160/s the queue hits its cap of 500 and goodput falls to zero. Then the spike ends and within seconds we are back at 60/s. The cause went away and so did the effect. This is the behaviour we expect.',
+    'Identical conditions to a moment ago, with retries turned on at three tiers by three attempts. Amplification is 27×. The spike ended twenty seconds in and the pale bars — arrivals — have already come down, but the solid bars sit on the floor and will not rise. The load lifted and the system did not return. This one panel is the whole page.',
+    'From the stuck state, the load has been pushed down to 10/s — a tenth of capacity. It still does not come back. Ten requests a second attempted twenty-seven times each is 270/s as far as the server can tell. Look at the grey band on the scale: only below 3.7/s does it let go. Try it on the slider yourself.',
+    'Jitter is on. The attempts meter was swinging between 1,480 and 2,300; now it sits at 1,620/s — 60 × 27, the amplification factor exactly. The wave of requests failing together and returning together is gone. And goodput is still zero, because jitter scatters retries without reducing them. Volume is set by r^L alone.',
+    'The circuit breaker is on. The success rate fell below half, the breaker opened, and while it is open the retries are cut. Amplification drops from 27× to 1×, effective arrivals fall under capacity, and the queue empties. An empty queue restores the success rate and the breaker closes. Turning the load down will not bring it back; cutting the retries will.'
+  ],
+};
+</script>
+<script src="/shared/retrystorm-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>
