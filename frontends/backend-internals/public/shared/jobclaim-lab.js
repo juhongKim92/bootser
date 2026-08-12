@@ -218,12 +218,14 @@
 
   let running = false, timer = null;
 
+  let playSpeed = 1;             // 재생 배율
+
   function tick(){ runOne(); render(); }
   function start(){
     if (running) return;
     running = true;
     $('#btnRun').textContent = t('pause');
-    timer = setInterval(tick, TICK_MS);
+    timer = setInterval(tick, (TICK_MS) / playSpeed);
   }
   function pause(){
     running = false;
@@ -262,6 +264,7 @@
     $('#nStep').textContent =
       `${String(step + 1).padStart(2, '0')} / ${String(SCENE.length).padStart(2, '0')}`;
     $('#btnStep').disabled = step >= SCENE.length - 1;
+    $('#btnPrev').disabled = step <= 0;
     start();
   }
 
@@ -276,6 +279,14 @@
 
   $('#btnRun').onclick   = () => running ? pause() : start();
   $('#btnStep').onclick  = () => { if (step < SCENE.length - 1){ step++; applyStep(); } };
+  $('#btnPrev').onclick  = () => { pause(); if (step > 0){ step--; applyStep(); } };
+  $('#btnPrev').disabled = true;      // 첫 단계에서 시작한다
+  [...document.querySelectorAll('#segSpeed button')].forEach(b => b.onclick = () => {
+    playSpeed = +b.dataset.speed;
+    [...document.querySelectorAll('#segSpeed button')]
+      .forEach(x => x.setAttribute('aria-pressed', x === b));
+    if (running){ pause(); start(); }   // 돌고 있으면 새 간격으로 다시 건다
+  });
   $('#btnReset').onclick = () => {
     step = 0; N = 1; mode = 'memory'; dieRate = 0; reclaim = false;
     $('#sN').value = 1; $('#sDie').value = 0;

@@ -202,11 +202,13 @@
    * ========================================================================== */
 
   let running = false, timer = null;
+
+  let playSpeed = 1;             // 재생 배율
   function onTick(){ for (let i = 0; i < STEPS_PER_TICK; i++) step(); render(); }
   function start(){
     if (running) return;
     running = true; $('#btnRun').textContent = t('pause');
-    timer = setInterval(onTick, TICK_MS);
+    timer = setInterval(onTick, (TICK_MS) / playSpeed);
   }
   function pause(){ running = false; clearInterval(timer); $('#btnRun').textContent = t('resume'); }
   function changed(){ pause(); reset(); render(); start(); }
@@ -236,6 +238,7 @@
     $('#nStep').textContent =
       `${String(idx + 1).padStart(2, '0')} / ${String(SCENE.length).padStart(2, '0')}`;
     $('#btnStep').disabled = idx >= SCENE.length - 1;
+    $('#btnPrev').disabled = idx <= 0;
   }
 
   /* ============================================================================
@@ -249,6 +252,14 @@
 
   $('#btnRun').onclick   = () => running ? pause() : start();
   $('#btnStep').onclick  = () => { if (idx < SCENE.length - 1){ idx++; applyStep(); } };
+  $('#btnPrev').onclick  = () => { pause(); if (idx > 0){ idx--; applyStep(); } };
+  $('#btnPrev').disabled = true;      // 첫 단계에서 시작한다
+  [...document.querySelectorAll('#segSpeed button')].forEach(b => b.onclick = () => {
+    playSpeed = +b.dataset.speed;
+    [...document.querySelectorAll('#segSpeed button')]
+      .forEach(x => x.setAttribute('aria-pressed', x === b));
+    if (running){ pause(); start(); }   // 돌고 있으면 새 간격으로 다시 건다
+  });
   $('#btnReset').onclick = () => {
     idx = 0; N = 1; strat = 'single'; dist = 'none'; d = 0.4;
     $('#sN').value = N; $('#sD').value = 40;

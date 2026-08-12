@@ -238,12 +238,14 @@
 
   let running = false, timer = null;
 
+  let playSpeed = 1;             // 재생 배율
+
   function step(){ tick(); render(); if (dead) pause(); }
   function start(){
     if (running || dead) return;
     running = true;
     $('#btnRun').textContent = t('pause');
-    timer = setInterval(step, TICK_MS);
+    timer = setInterval(step, (TICK_MS) / playSpeed);
   }
   function pause(){
     running = false;
@@ -277,6 +279,7 @@
     $('#nStep').textContent =
       `${String(idx + 1).padStart(2, '0')} / ${String(SCENE.length).padStart(2, '0')}`;
     $('#btnStep').disabled = idx >= SCENE.length - 1;
+    $('#btnPrev').disabled = idx <= 0;
   }
 
   /* ============================================================================
@@ -291,6 +294,14 @@
 
   $('#btnRun').onclick   = () => running ? pause() : start();
   $('#btnStep').onclick  = () => { if (idx < SCENE.length - 1){ idx++; applyStep(); } };
+  $('#btnPrev').onclick  = () => { pause(); if (idx > 0){ idx--; applyStep(); } };
+  $('#btnPrev').disabled = true;      // 첫 단계에서 시작한다
+  [...document.querySelectorAll('#segSpeed button')].forEach(b => b.onclick = () => {
+    playSpeed = +b.dataset.speed;
+    [...document.querySelectorAll('#segSpeed button')]
+      .forEach(x => x.setAttribute('aria-pressed', x === b));
+    if (running){ pause(); start(); }   // 돌고 있으면 새 간격으로 다시 건다
+  });
   $('#btnReset').onclick = () => {
     idx = 0; qmax = 500;
     rate = 50; cons = 8; kind = 'io'; policy = 'abort';

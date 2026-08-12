@@ -206,13 +206,15 @@
 
   let running = false, timer = null;
 
+  let playSpeed = 1;             // 재생 배율
+
   function tick(){ publish(); render(); }
 
   function start(){
     if (running) return;
     running = true;
     $('#btnRun').textContent = t('pause');
-    timer = setInterval(tick, TICK_MS);
+    timer = setInterval(tick, (TICK_MS) / playSpeed);
   }
   function pause(){
     running = false;
@@ -250,6 +252,7 @@
     $('#nStep').textContent =
       `${String(stepIdx + 1).padStart(2, '0')} / ${String(SCENE.length).padStart(2, '0')}`;
     $('#btnStep').disabled = stepIdx >= SCENE.length - 1;
+    $('#btnPrev').disabled = stepIdx <= 0;
     start();
   }
 
@@ -266,6 +269,14 @@
 
   $('#btnRun').onclick  = () => running ? pause() : start();
   $('#btnStep').onclick = () => { if (stepIdx < SCENE.length - 1){ stepIdx++; applyStep(); } };
+  $('#btnPrev').onclick  = () => { pause(); if (stepIdx > 0){ stepIdx--; applyStep(); } };
+  $('#btnPrev').disabled = true;      // 첫 단계에서 시작한다
+  [...document.querySelectorAll('#segSpeed button')].forEach(b => b.onclick = () => {
+    playSpeed = +b.dataset.speed;
+    [...document.querySelectorAll('#segSpeed button')]
+      .forEach(x => x.setAttribute('aria-pressed', x === b));
+    if (running){ pause(); start(); }   // 돌고 있으면 새 간격으로 다시 건다
+  });
   $('#btnReset').onclick = () => {
     stepIdx = 0;
     N = 4; k = 12; d = 0; mode = 'local';

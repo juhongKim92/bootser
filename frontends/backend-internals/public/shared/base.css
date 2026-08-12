@@ -149,6 +149,14 @@ footer{
 footer a{color:var(--ink-2);text-decoration:underline;text-underline-offset:2px}
 footer a:hover{color:var(--ink)}
 
+
+/* --- 조작대 · 재생 속도 --------------------------------------------------
+   실험대마다 .seg 를 갖고 있지 않아 여기에 둔다. 24개 페이지가 이 파일을 공유한다. */
+.speed{display:flex;border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+.speed button{border:none;border-right:1px solid var(--rule);border-radius:0;padding:6px 9px;font-size:10.5px}
+.speed button:last-child{border-right:none}
+.speed button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+
 @media (prefers-reduced-motion: reduce){
   *{transition-duration:.01ms !important;animation-duration:.01ms !important}
   html{scroll-behavior:auto}

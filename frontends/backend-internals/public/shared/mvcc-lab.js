@@ -257,6 +257,7 @@ window.initMvccLab = function (cfg) {
     // 서술
     $('#nStep').textContent = `${String(st.step).padStart(2,'0')} / ${String(SCENE.length-1).padStart(2,'0')}`;
     $('#btnStep').disabled = st.step >= SCENE.length-1;
+    $('#btnPrev').disabled = st.step <= 0;
   }
 
   /* --- 조작 버튼 ------------------------------------------------------------
@@ -277,6 +278,7 @@ window.initMvccLab = function (cfg) {
   /* --- 진행 ----------------------------------------------------------------- */
 
   let playing = false, timer = null;
+  let playSpeed = 1;             // 재생 배율
 
   function stepOnce(){
     if (st.step >= SCENE.length-1){ stop(); return; }
@@ -290,7 +292,7 @@ window.initMvccLab = function (cfg) {
   function play(){
     playing = true;
     $('#btnPlay').textContent = t('pause');
-    timer = setInterval(stepOnce, 2600);
+    timer = setInterval(stepOnce, 2600 / playSpeed);
   }
   function stop(){
     playing = false;
@@ -298,9 +300,27 @@ window.initMvccLab = function (cfg) {
     $('#btnPlay').textContent = t('play');
   }
 
+
+  /* 이 실험대의 SCENE 은 상태를 누적으로 바꾼다(BEGIN → SELECT → UPDATE …).
+     그래서 되감기는 감산이 아니라 처음부터 n 단계까지 다시 실행하는 것이다. */
+  function goTo(n){
+    reset();
+    for (let i = 1; i <= n; i++) SCENE[i].run();
+    st.step = n;
+    $('#nText').textContent = n === 0 ? t('nIntro') : NARR[n];
+    render();
+  }
+
   $('#btnPlay').onclick   = () => playing ? stop() : play();
   $('#btnStep').onclick   = () => { stop(); stepOnce(); };
   $('#btnVacuum').onclick = () => { stop(); opVacuum(); render(); };
+  $('#btnPrev').onclick   = () => { stop(); if (st.step > 0) goTo(st.step - 1); };
+  [...document.querySelectorAll('#segSpeed button')].forEach(b => b.onclick = () => {
+    playSpeed = +b.dataset.speed;
+    [...document.querySelectorAll('#segSpeed button')]
+      .forEach(x => x.setAttribute('aria-pressed', x === b));
+    if (playing){ stop(); play(); }   // 돌고 있으면 새 간격으로 다시 건다
+  });
   $('#btnReset').onclick  = () => { stop(); reset(); $('#nText').textContent = t('nIntro'); render(); };
 
   /* ============================================================================

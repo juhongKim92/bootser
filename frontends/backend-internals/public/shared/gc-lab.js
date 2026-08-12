@@ -223,6 +223,8 @@ window.initGcLab = function (cfg) {
 
   let step = 0, playing = false, timer = null;
 
+  let playSpeed = 1;             // 재생 배율
+
   function applyStep(){
     const s = SCENE[step];
     $('#sHeap').value = s.heap;
@@ -230,6 +232,7 @@ window.initGcLab = function (cfg) {
     $('#nText').textContent = NARR[step];
     $('#nStep').textContent = `${String(step+1).padStart(2,'0')} / ${String(SCENE.length).padStart(2,'0')}`;
     $('#btnStep').disabled = step >= SCENE.length-1;
+    $('#btnPrev').disabled = step <= 0;
     render();
   }
   function stepOnce(){
@@ -237,11 +240,19 @@ window.initGcLab = function (cfg) {
     step++; applyStep();
     if (step >= SCENE.length-1) stop();
   }
-  function play(){ playing=true; $('#btnPlay').textContent=t('pause'); timer=setInterval(stepOnce, 3400); }
+  function play(){ playing=true; $('#btnPlay').textContent=t('pause'); timer=setInterval(stepOnce, (3400) / playSpeed); }
   function stop(){ playing=false; clearInterval(timer); $('#btnPlay').textContent=t('play'); }
 
   $('#btnPlay').onclick  = () => playing?stop():play();
   $('#btnStep').onclick  = () => { stop(); stepOnce(); };
+  $('#btnPrev').onclick  = () => { stop(); if (step > 0){ step--; applyStep(); } };
+  $('#btnPrev').disabled = true;      // 첫 단계에서 시작한다
+  [...document.querySelectorAll('#segSpeed button')].forEach(b => b.onclick = () => {
+    playSpeed = +b.dataset.speed;
+    [...document.querySelectorAll('#segSpeed button')]
+      .forEach(x => x.setAttribute('aria-pressed', x === b));
+    if (playing){ stop(); play(); }   // 돌고 있으면 새 간격으로 다시 건다
+  });
   $('#btnReset').onclick = () => { stop(); step=0; applyStep(); };
   $('#btnScale').onclick = () => { logScale=!logScale; render(); };
   $('#sHeap').oninput    = () => { stop(); render(); };

@@ -298,21 +298,38 @@ const SCENE = [
 
 let step = 0, playing = false, timer = null;
 
+let playSpeed = 1;             // 재생 배율
+
 function show(){
   $('#nStep').textContent = `${String(step+1).padStart(2,'0')} / ${String(SCENE.length).padStart(2,'0')}`;
   $('#nText').textContent = (I.scene && I.scene[step]) || '';
   $('#btnStep').disabled = step >= SCENE.length-1;
+  $('#btnPrev').disabled = step <= 0;
 }
 function stepOnce(){
   if (step >= SCENE.length-1){ stop(); return; }
   step++; SCENE[step](); show(); render();
   if (step >= SCENE.length-1) stop();
 }
-function play(){ playing=true; $('#btnPlay').textContent=t('pause'); timer=setInterval(stepOnce, 3600); }
+function play(){ playing=true; $('#btnPlay').textContent=t('pause'); timer=setInterval(stepOnce, (3600) / playSpeed); }
 function stop(){ playing=false; clearInterval(timer); $('#btnPlay').textContent=t('play'); }
 
 $('#btnPlay').onclick = () => playing?stop():play();
 $('#btnStep').onclick = () => { stop(); stepOnce(); };
+/* SCENE 이 상태를 누적으로 바꾸므로 되감기는 처음부터 다시 실행한다. */
+function goTo(n){
+  step = 0; SCENE[0]();
+  for (let i = 1; i <= n; i++) SCENE[i]();
+  step = n; show(); render();
+}
+$('#btnPrev').onclick  = () => { stop(); if (step > 0) goTo(step - 1); };
+$('#btnPrev').disabled = true;      // 첫 단계에서 시작한다
+[...document.querySelectorAll('#segSpeed button')].forEach(b => b.onclick = () => {
+  playSpeed = +b.dataset.speed;
+  [...document.querySelectorAll('#segSpeed button')]
+    .forEach(x => x.setAttribute('aria-pressed', x === b));
+  if (playing){ stop(); play(); }   // 돌고 있으면 새 간격으로 다시 건다
+});
 $('#btnReset').onclick = () => { stop(); step=0; SCENE[0](); show(); render(); };
 
 addEventListener('resize', () => drawRing());
