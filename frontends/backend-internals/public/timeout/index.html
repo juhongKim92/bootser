@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>각자 1초씩 줬는데 왜 아무도 1초를 못 쓰나 — 데드라인 전파</title>
+<meta name="description" content="게이트웨이 1초, 서비스 1초, DB 클라이언트 1초. 세 계층이 각자 정한 이 설정에서 안쪽 타임아웃은 한 번도 발동하지 않습니다. 발동 시각이 1000ms · 1025ms · 1050ms 라 항상 바깥이 먼저 포기하니까요. 재시도를 3배로 늘려도 성공률은 90.0% 그대로입니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/timeout/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/timeout/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/timeout/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/timeout/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="각자 1초씩 줬는데 왜 아무도 1초를 못 쓰나">
+<meta property="og:description" content="세 계층이 전부 1초입니다. 그래서 안쪽 타임아웃은 발동할 기회가 없습니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/timeout/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="각자 1초씩 줬는데 왜 아무도 1초를 못 쓰나">
+<meta name="twitter:description" content="재시도를 3배로 늘려도 성공률은 90.0% 그대로. 늘어난 호출은 전부 클라이언트가 떠난 뒤 시작됩니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/timeout-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/timeout/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>각자 1초씩 줬는데 왜 아무도 1초를 못 쓰나</h1>
+  <p class="lede">게이트웨이 1초, 서비스 1초, DB 클라이언트 1초. 세 계층이 각자 합리적으로 정했습니다. 그런데 이 설정에서 <strong>안쪽 타임아웃은 한 번도 발동하지 않습니다.</strong> 발동 시각이 1000ms · 1025ms · 1050ms 라서, 언제나 바깥이 먼저 포기하거든요.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>데드라인 전파</label>
+          <div class="seg prop" id="segProp" role="group" aria-label="데드라인 전파">
+            <button data-prop="0" aria-pressed="true">끔</button>
+            <button data-prop="1">켬</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sA">클라이언트 → A</label>
+          <span class="v" id="vA">1.0<small>초</small></span>
+          <input type="range" id="sA" min="300" max="4000" step="100" value="1000" aria-label="클라이언트가 A 에게 건 타임아웃">
+        </div>
+        <div class="dial">
+          <label for="sB">A → B</label>
+          <span class="v" id="vB">1.0<small>초</small></span>
+          <input type="range" id="sB" min="200" max="4000" step="100" value="1000" aria-label="A 가 B 에게 건 타임아웃">
+        </div>
+        <div class="dial">
+          <label for="sC">B → C</label>
+          <span class="v" id="vC">1.0<small>초</small></span>
+          <input type="range" id="sC" min="200" max="4000" step="100" value="1000" aria-label="B 가 C 에게 건 타임아웃">
+        </div>
+        <div class="dial">
+          <label for="sR">계층별 시도</label>
+          <span class="v" id="vR">3<small>회</small></span>
+          <input type="range" id="sR" min="1" max="3" step="1" value="3" aria-label="각 계층이 재시도를 포함해 시도하는 횟수">
+        </div>
+        <div class="dial">
+          <label for="sP">C 가 느린 비율</label>
+          <span class="v" id="vP">10<small>%</small></span>
+          <input type="range" id="sP" min="0" max="40" step="5" value="10" aria-label="C 의 응답이 느린 쪽으로 나오는 비율">
+        </div>
+        <div class="dial">
+          <label>C 의 느림</label>
+          <div class="seg" id="segMode" role="group" aria-label="C 의 느림이 재시도에 이어지는가">
+            <button data-mode="persist" aria-pressed="true">지속적</button>
+            <button data-mode="transient">일시적</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>&nbsp;</label>
+          <button id="btnRun">일시정지</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">C 가 느린 요청 하나 — 시간축</span>
+      <div class="board">
+        <div class="fall" id="fall"></div>
+        <div class="fallx" id="fallX"></div>
+        <div class="legend">
+          <span><i class="d"></i>클라이언트 기한</span>
+          <span><i class="g"></i>아무도 안 기다리는 구간</span>
+          <span><i class="f"></i>타임아웃 발동</span>
+          <span><i class="s"></i>C 가 느리게 일한 구간</span>
+          <span><i class="w"></i>C 가 빠르게 일한 구간</span>
+          <span><i class="o"></i>지킬 수 없는 약속</span>
+        </div>
+        <table class="fire-tbl" id="fireTbl"></table>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">같은 설정에서 전파만 뒤집으면</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+        <div class="speed" id="segSpeed" role="group" aria-label="재생 속도">
+          <button data-speed="0.5">0.5&times;</button>
+          <button data-speed="1" aria-pressed="true">1&times;</button>
+          <button data-speed="2">2&times;</button>
+        </div>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>데드라인 전파</td><td>켜면 각 계층이 <strong>자기 기본값이 아니라 넘겨받은 잔여 예산만큼만</strong> 씁니다. 남은 게 없으면 아예 부르지 않고 즉시 실패합니다.</td></tr>
+    <tr><td>세 개의 타임아웃</td><td>계층마다 따로 정한 값. <strong>같은 값으로 맞춰 보세요</strong> — 발동 시각 표의 순서가 뒤집힙니다.</td></tr>
+    <tr><td>계층별 시도</td><td>각 계층이 재시도를 포함해 몇 번 시도하는가. 두 계층에 같이 걸리니 <strong>C 호출은 최대 이 값의 제곱</strong>입니다.</td></tr>
+    <tr><td>C 가 느린 비율</td><td>C 는 65ms 아니면 1.2초에 답합니다. 이 슬라이더는 후자의 비율입니다.</td></tr>
+    <tr><td>C 의 느림</td><td><strong>지속적</strong>이면 그 요청은 다시 해도 느립니다(과부하·느린 쿼리·뜨거운 파티션). <strong>일시적</strong>이면 다음 시도에 다른 결과가 나옵니다(패킷 유실·순간 정지).</td></tr>
+  </table>
+
+  <p>시간축의 세로 파란 선이 <strong>클라이언트가 포기하는 순간</strong>입니다. 그 오른쪽 빗금 구간에서 일어나는 일은 전부 아무도 기다리지 않는 일이에요. 붉은 점선은 각 계층의 타임아웃이 발동하는 지점입니다. <strong>점선이 파란 선 오른쪽에 있으면 그 타임아웃은 발동할 기회가 없다는 뜻입니다.</strong></p>
+
+  <p>미터의 수치는 표본이 아닙니다. C 의 응답시간을 두 점(65ms · 1.2초)으로 줄였기 때문에 모든 경로를 확률 가중으로 <strong>전부 세어서</strong> 나온 정확한 기대값입니다. 같은 손잡이 조합이면 언제나 같은 숫자가 나옵니다.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 전부 1초 · 재시도 없음 — 발동 순서가 거꾸로다</h4>
+    <div class="seq">클라이언트→A 1.0초 · A→B 1.0초 · B→C 1.0초
+발동 시각 <em>1000ms</em> / <em>1025ms</em> / <em>1050ms</em>
+지킬 수 없는 약속 <em>1.00건</em> (호출 전부)</div>
+    <p class="why">홉마다 25ms 가 듭니다. 안쪽 계층은 25ms, 50ms 늦게 요청을 받으니 타이머도 그만큼 늦게 시작하고, 그만큼 늦게 발동합니다. <strong>바깥이 항상 먼저 포기하므로 안쪽 타임아웃은 발동할 기회가 없습니다.</strong> B 가 C 에게 준 1초는 B 자신이 기다려줄 수 있는 시간보다 길어요 — 지킬 수 없는 약속이고, 이 설정에서는 모든 호출이 그렇습니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 시도를 3회로 — 성공률이 소수점 한 자리도 안 움직인다</h4>
+    <div class="seq">계층별 시도 1 → 3회
+성공률 <em>90.0% → 90.0%</em>
+C 호출 1.00 → <em>1.80건</em> · 기한 뒤 시작 0.00 → <em>0.80건</em>
+느린 요청 하나: C 호출 <em>9건</em> · 동시 최대 <em>5건</em> · 마지막 작업 종료 <em>5.28초</em></div>
+    <p class="why">늘어난 0.80건이 <strong>전부</strong> 클라이언트가 떠난 뒤 시작됩니다. 성공률에 기여할 수 있는 시도는 첫 번째 하나뿐이에요. 1초를 준 요청 하나가 시스템 안에서 5.28초 동안, 한때는 C 를 동시에 5번 부르며 일합니다 — <a href="/retrystorm/">14번</a>이 이 낭비가 용량을 어떻게 무너뜨리는지 다룹니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 예산을 3초로 늘린다 — 재시도 없이 100%</h4>
+    <div class="seq">세 값 모두 3.0초 · 시도 1회
+성공률 90.0% → <em>100.0%</em></div>
+    <p class="why">C 의 꼬리는 1.2초입니다. 1초 창으로는 절대 못 받고 3초 창이면 받아요. <strong>성공률을 움직인 것은 재시도가 아니라 타임아웃이 응답시간 분포의 어디를 자르느냐였습니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. 같은 3초를 1초씩 세 번으로 쪼갠다 — 100%에서 90%로</h4>
+    <div class="seq">B→C 3.0 → 1.0초 · 시도 1 → 3회 (예산은 3초 그대로)
+성공률 <em>100.0% → 90.0%</em>
+C 호출 1.00 → <em>1.80건</em> · 평균 응답 329 → <em>1099ms</em></div>
+    <p class="why">재시도를 켜서 성공률을 <strong>10.0%p 깎았습니다.</strong> 1.2초 걸리는 응답은 1초 창으로 세 번 봐도 세 번 다 못 봅니다. 같은 예산을 한 번에 쓰면 받을 수 있었어요. <strong>재시도는 시간을 만들어내지 않고 나눕니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 느림이 일시적이라면 — 같은 설정에서 99.9%</h4>
+    <div class="seq">C 의 느림 지속적 → 일시적 (나머지는 4번 그대로)
+성공률 <em>90.0% → 99.9%</em> · C 호출 1.80 → <em>1.11건</em></div>
+    <p class="why">재시도가 값을 하는지는 <strong>실패가 다음 시도에 이어지는지</strong>에 달려 있습니다. 패킷 유실이나 순간 GC 정지는 안 이어지고, 과부하·느린 쿼리·뜨거운 파티션은 이어집니다. 그리고 <strong>예산을 쪼개는 대가는 어느 쪽이든 지불합니다</strong> — 4번과 5번의 차이는 이득이 있느냐일 뿐, 창이 좁아진 건 똑같아요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. 손으로 계단식 — 발동 순서는 바로 서는데</h4>
+    <div class="seq">클라이언트→A 1.0초 · A→B 0.9초 · B→C 0.3초 · 시도 3회
+발동 시각 <em>1000 / 925 / 350ms</em> — 순서가 바로 섰다
+지킬 수 없는 약속 1.80 → <em>0.30건</em>
+그런데 기한 뒤 시작 <em>0.50건</em> · 성공률 <em>90.0% 그대로</em></div>
+    <p class="why">안쪽이 먼저 포기하도록 값을 손으로 줄였습니다. 재시도도 이제 실제로 발동해요. 남은 건 <strong>A 의 재시도</strong>입니다 — A 는 925ms 에 두 번째 시도를 보내는데 클라이언트는 1000ms 에 떠납니다. A 는 그걸 모릅니다. <strong>손으로 고를 수 있는 것은 값이고, 값으로는 "지금 몇 ms 남았나"를 알 수 없습니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. 데드라인 전파를 켠다 — 성공률은 그대로, 일은 1/1.8</h4>
+    <div class="seq">1번 설정(전부 1초 · 시도 3회)에서 전파만 켬
+성공률 <em>90.0% 그대로</em>
+C 호출 1.80 → <em>1.00건</em> · 기한 뒤 시작 0.80 → <em>0.00건</em>
+지킬 수 없는 약속 1.80 → <em>0.00건</em>
+평균 응답 499 → <em>294ms</em> · 실패한 요청은 3.05초 → <em>1.00초</em></div>
+    <p class="why">C 가 받은 예산은 1000ms 가 아니라 <strong>900ms</strong> 입니다 — 클라이언트 기한에서 오갈 홉을 빼고 남은 값이죠. A 의 두 번째 시도는 예산이 없어 <strong>아예 나가지 않습니다.</strong> 그런데 성공률은 한 자리도 안 움직였어요. 이게 우연이 아닙니다.</p>
+  </div>
+
+  <h2>왜 안쪽 타임아웃은 발동하지 못하는가</h2>
+
+  <p>타임아웃은 <strong>부르는 쪽이 보내는 순간부터</strong> 잽니다. 그러니 안쪽 계층의 타이머는 언제나 더 늦게 시작해요. 세 값이 모두 <code>t</code> 라면 발동 시각은 이렇게 됩니다.</p>
+
+  <table class="keytable">
+    <tr><th>누가 걸었나</th><th>발동 시각</th></tr>
+    <tr><td>클라이언트 → A</td><td><code>t</code></td></tr>
+    <tr><td>A → B</td><td><code>t + 1홉</code> — 클라이언트보다 늦다</td></tr>
+    <tr><td>B → C</td><td><code>t + 2홉</code> — 더 늦다</td></tr>
+  </table>
+
+  <div class="callout">계층 타임아웃이 같으면 안쪽은 <strong>구조적으로 발동할 수 없습니다.</strong> 설정 파일에는 있고 코드는 실행되지만, 바깥이 항상 먼저 포기하므로 그 값이 무엇이든 결과가 같습니다. <strong>죽은 설정입니다.</strong></div>
+
+  <p>실제로 쓸 수 있는 시간은 더 짧습니다. C 의 답이 클라이언트까지 도달하려면 홉을 여섯 번 지나야 하니, 1초 예산에서 C 가 일할 수 있는 시간은 <strong>850ms</strong> 예요. 그런데 C 에게 알려준 값은 1초입니다. <strong>그 차이만큼 C 는 아무도 안 받을 답을 만들고 있습니다.</strong></p>
+
+  <h2>전파는 성공률을 올리지 않는다</h2>
+
+  <p>여기가 이 페이지에서 가장 뒤집히는 지점입니다. 타임아웃 3개 × 재시도 3단 × 느림 성격 2가지로 <strong>750개 조합을 전수 비교</strong>했습니다.</p>
+
+  <div class="callout">전파가 성공률을 <strong>올린 조합 0개, 낮춘 조합 0개.</strong> 750개 전부에서 소수점까지 같았습니다. 대신 평균 C 호출은 1.16 → 1.08건, 기한 뒤 시작은 0.06 → 0.00건, 고아 응답은 0.044 → 0.000건이 됐습니다.</div>
+
+  <p>우연이 아니라 <strong>산수가 그렇습니다.</strong> 전파 없이 C 의 응답을 받으려면 응답시간이 <code>tC − 2홉</code> 안에 들어와야 하고, 그 답이 <em>쓸모</em> 있으려면 부른 쪽 기한까지 도달해야 하니 <code>기한 − 보낸시각 − 3홉</code> 안에도 들어와야 합니다. 전파가 주는 예산은 정확히 <code>기한 − 보낸시각 − 1홉</code> 이라, 성공 조건이 뒤쪽 식과 <strong>글자 그대로 같아집니다.</strong></p>
+
+  <div class="callout"><strong>전파가 자르는 것은 어차피 버려질 응답뿐입니다.</strong> 그래서 성공률을 못 올리고, 못 낮춥니다.</div>
+
+  <p>그러니 전파는 성공률 장치가 아니라 <strong>비용과 정직성의 장치</strong>입니다. 같은 성공률을 절반 남짓의 일로 내고, 실패를 3.05초가 아니라 1.00초에 알려줍니다. 하위 서비스는 처음으로 <em>자기가 이미 늦었다</em>는 사실을 알 수 있게 됩니다 — 그걸 알면 부르지 않을 수 있고, 부르지 않으면 그 용량이 아직 기한이 남은 요청에게 갑니다. <a href="/backpressure/">11번</a>의 거부가 신호인 것과 같은 이야기예요.</p>
+
+  <h2>세 값은 동시에 성립할 수 없다</h2>
+
+  <p>기본 설정에는 서로 모순되는 세 값이 들어 있습니다.</p>
+
+  <table class="keytable">
+    <tr><th>값</th><th>무엇을 요구하나</th></tr>
+    <tr><td>예산 1초</td><td>홉 6개(150ms)를 빼면 실제 작업 창은 850ms</td></tr>
+    <tr><td>꼬리 1.2초</td><td>느린 응답을 받으려면 창이 최소 1.25초</td></tr>
+    <tr><td>시도 3회</td><td>재시도가 발동하려면 계층 타임아웃이 창의 1/3 이하 ≈ 283ms</td></tr>
+  </table>
+
+  <p>283ms 창으로 1.2초짜리 응답을 잡을 방법은 없습니다. <strong>재시도를 늘릴수록 창은 좁아지고, 창이 좁아질수록 꼬리는 더 확실하게 잘립니다.</strong> 셋 중 하나를 바꿔야 합니다.</p>
+
+  <table class="keytable">
+    <tr><th>무엇을 바꾸나</th><th>실험대에서</th></tr>
+    <tr><td>예산을 올린다</td><td>꼬리 1.2초 + 홉 6개 = <strong>1.35초</strong>가 최소치입니다. 세 값을 모두 1.3초로 두면 90.0%, <strong>1.4초로 올리면 100.0%</strong> 입니다(시도 1회). 대신 점유 시간이 늘어 용량이 줍니다 — <a href="/connpool/">8번</a>의 리틀의 법칙입니다</td></tr>
+    <tr><td>꼬리를 자른다</td><td>C 를 빠르게 만들거나, 캐시를 두거나, 느린 경로에 폴백을 답니다. 성공률을 실제로 올리는 유일한 방향입니다</td></tr>
+    <tr><td>재시도를 포기한다</td><td>느림이 <em>지속적</em>이면 재시도는 예산만 먹습니다. 실험대에서 지속적 90.0% vs 일시적 99.9% — 이 차이가 재시도를 켤 근거의 전부입니다</td></tr>
+  </table>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>gRPC</td><td>데드라인이 <code>grpc-timeout</code> 헤더로 <strong>자동 전파</strong>됩니다. 서버는 <code>Context.current().getDeadline()</code> 으로 남은 시간을 압니다. 여기 기대는 게 가장 싼 길입니다</td></tr>
+    <tr><td>HTTP</td><td>표준 헤더가 없어서 직접 넣어야 합니다. <strong>절대 시각</strong>을 넘기면 시계 동기가 필요하고, <strong>잔여 ms</strong>를 넘기면 넘기는 동안의 홉 지연이 빠집니다. 둘 다 완벽하지 않으니 여유값을 하나 빼두세요</td></tr>
+    <tr><td>connect 와 read</td><td><code>connectTimeout</code> 만 잡고 <code>readTimeout</code> 을 안 잡은 경우가 흔합니다. 연결은 성공하고 응답이 안 오는 게 대부분의 장애 모양이라, <strong>이건 타임아웃이 없는 것과 같습니다</strong></td></tr>
+    <tr><td>JDBC</td><td><code>socketTimeout</code>(또는 드라이버별 동등물)을 안 걸면 쿼리가 무한히 매달립니다. <strong><code>@Transactional(timeout)</code> 이 자르는 것은 쿼리 취소 요청이지 전체 요청이 아닙니다</strong> — 소켓이 죽어 있으면 그 취소도 안 나갑니다</td></tr>
+    <tr><td>RestClient · WebClient</td><td>기본값이 무제한인 조합이 있습니다. <strong>명시하지 않았다면 없는 것으로 보세요.</strong> 커넥션 풀 대기 시간도 별도 항목입니다 — 풀에서 기다린 시간은 read 타임아웃에 안 들어갑니다</td></tr>
+    <tr><td>계층 순서</td><td>전파를 못 넣는다면 최소한 <strong>안쪽 값이 바깥보다 작아야</strong> 합니다. 같게 두면 안쪽은 죽은 설정입니다. 다만 값만으로는 A 의 재시도가 눈을 갖지 못합니다(6번)</td></tr>
+    <tr><td>측정</td><td>타임아웃 발생 건수만 세지 마세요. <strong>"부른 쪽이 이미 떠난 뒤에 시작된 호출"</strong> 을 세야 이 문제가 보입니다. 요청 하나에 붙은 <a href="/correlation/">correlationId</a> 와 요청 시작 시각만 있으면 계산됩니다</td></tr>
+  </table>
+
+  <p><a href="/retrystorm/">14번</a>이 <em>포기한 뒤에도 일이 계속되면 용량이 어떻게 무너지는가</em>였다면, 이 페이지는 <em>애초에 왜 그 일이 시작되는가</em>입니다. 계층마다 따로 정한 값은 각자 합리적이었고, 곱해지는 순간 서로 모순됐습니다.</p>
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/timeout/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  pause:'일시정지', resume:'다시 시작',
+  uMs:'ms', uSec:'초', uTimes:'회',
+  lnClient:'클라이언트', lnA:'A', lnB:'B', lnC:'C 작업',
+  tkGiveUp:'포기 $1', tkFailFast:'예산 없음 — 즉시 실패',
+  lbWait:'기다린다', lbTry:'시도 $1',
+  ttA:'A 시도 $1 — 보냄 $2 · 포기 $3',
+  ttC:'B→C — 보냄 $1 · 준 예산 $2',
+  ttOver:'지킬 수 없는 약속 — 부른 쪽이 기다려줄 수 있는 시간을 넘어선 구간',
+  ttWork:'C 가 $1 부터 $2ms 동안 일한다',
+  fhWho:'누가 걸었나', fhVal:'값', fhAt:'발동 시각', fhVs:'클라이언트 기한 대비',
+  fwClient:'클라이언트 → A', fwA:'A → B', fwB:'B → C', fwUsable:'C 가 쓸 수 있는 실제 시간',
+  fvBase:'기준', fvLate:'$1ms 늦다 — 발동 기회 없음', fvEarly:'$1ms 이르다',
+  fvUsable:'홉 6개를 뺀 값', fvProp:'전파가 깎음',
+  mSucc:'기한 내 성공률', mCalls:'C 호출 / 요청', mAfter:'기한 뒤 시작',
+  mOver:'지킬 수 없는 약속', mOrphan:'고아 응답', mAnswer:'평균 응답',
+  cProp:'전파', cSucc:'성공률', cCalls:'C 호출', cAfter:'기한 뒤 시작', cOrphan:'고아 응답', cAnswer:'평균 응답',
+  cOff:'끔', cOn:'켬',
+  vInverted:'<b>안쪽 타임아웃이 $1ms 에 발동한다 — 클라이언트는 $2ms 에 이미 떠났다.</b><br>$3ms 늦으므로 이 값은 무엇으로 두든 결과가 같다 <span class="at">— 죽은 설정이다</span>',
+  vAfter:'<b>요청 1건당 $1개의 C 호출이 클라이언트가 떠난 뒤 시작된다</b> (전체 $2개 중).<br><span class="at">성공률에 기여할 수 없는 시도다 — 용량만 쓴다</span>',
+  vClean:'<b>모든 계층이 클라이언트보다 먼저 포기한다.</b> 성공률 <b>$1%</b> · C 호출 <b>$2건</b><br>평균 <b>$3ms</b> 에 답한다 <span class="at">— 실패도 기한 안에 알려준다</span>',
+  evStart:'클라이언트가 요청을 보냈다 — 기한은 $1',
+  evASend:'A 가 B 에게 시도 $1 을 보낸다 (타임아웃 $2 · 포기 $3)',
+  evCSend:'B 가 C 에게 시도 $1 을 보낸다 (준 예산 $2 · 포기 $3)',
+  evCDone:'C 가 $1ms 만큼 일해 답을 냈다 — 기한 안이다',
+  evCLate:'C 가 $1ms 만큼 일해 답을 냈다 — 부른 쪽은 이미 포기했다',
+  evCFire:'B 가 시도 $1 을 포기한다',
+  evAFire:'A 가 시도 $1 을 포기한다',
+  evGiveUp:'클라이언트가 포기한다 — 여기부터 일어나는 일은 아무도 기다리지 않는다',
+  evOrphan:'B 는 답을 얻었는데 A 가 $1 에 이미 떠났다 — 고아 응답',
+  evFailFast:'남은 예산이 없다 — C 를 부르지 않고 즉시 실패한다',
+  evWon:'클라이언트가 $1 에 답을 받았다',
+  evLost:'A 와 B 는 $1 에 실패를 확정한다 — 들을 사람이 없다',
+  scene:[
+    '세 계층이 각자 1초를 걸었습니다. 재시도는 아직 없어요. 발동 시각 표를 보세요 — 1000ms, 1025ms, 1050ms 입니다. 홉마다 25ms 가 드니 안쪽 타이머가 그만큼 늦게 시작하고, 그만큼 늦게 발동합니다. 바깥이 항상 먼저 포기하므로 안쪽 두 타임아웃은 발동할 기회가 없습니다. B 가 C 에게 준 1초는 B 자신이 기다려줄 수 있는 시간보다 길어요 — 지킬 수 없는 약속 미터가 1.00, 즉 호출 전부입니다.',
+    '시도를 3회로 올렸습니다. 성공률을 보세요 — 90.0% 에서 90.0% 입니다. 소수점 한 자리도 안 움직였어요. 대신 C 호출이 1.00 에서 1.80 건으로 늘고, 늘어난 0.80 건은 전부 클라이언트가 떠난 뒤 시작됩니다. 시간축에서 이 느린 요청 하나가 C 를 9번 부르고, 마지막 작업이 5.28초에 끝납니다. 1초를 준 요청인데요.',
+    '예산을 세 값 모두 3초로 올리고 재시도를 껐습니다. 성공률이 100.0% 가 됐어요. C 의 꼬리가 1.2초니까 1초 창으로는 절대 못 받고 3초 창이면 받습니다. 성공률을 움직인 것은 재시도가 아니라 타임아웃이 응답시간 분포의 어디를 자르느냐였습니다.',
+    '예산은 3초 그대로 두고, B→C 만 1초로 줄여 세 번 시도하게 했습니다. 총 시간은 같은데 성공률이 100.0% 에서 90.0% 로 떨어졌어요. 재시도를 켜서 성공률을 10%p 깎은 겁니다. 1.2초 걸리는 응답은 1초 창으로 세 번 봐도 세 번 다 못 봅니다. 재시도는 시간을 만들어내지 않고 나눕니다.',
+    '같은 설정에서 C 의 느림만 일시적으로 바꿨습니다. 성공률이 99.9% 로 올라갑니다. 재시도가 값을 하는지는 실패가 다음 시도에 이어지는지에 달려 있어요. 패킷 유실이나 순간 정지는 안 이어지고, 과부하나 느린 쿼리는 이어집니다. 그리고 창이 좁아진 대가는 어느 쪽이든 이미 지불했습니다.',
+    '예산을 1초로 되돌리고 값을 손으로 계단식으로 줄였습니다 — 1000 / 900 / 300ms. 발동 시각이 1000 / 925 / 350ms 로 순서가 바로 섰고, 지킬 수 없는 약속이 1.80 에서 0.30 으로 줄었습니다. 재시도도 이제 실제로 발동해요. 그런데 기한 뒤 시작이 아직 0.50 건입니다 — A 가 925ms 에 두 번째 시도를 보내는데 클라이언트는 1000ms 에 떠나거든요. 값으로는 "지금 몇 ms 남았나"를 알 수 없습니다.',
+    '1번 설정으로 돌아가 전파만 켰습니다. C 가 받은 예산이 1000ms 가 아니라 900ms 예요 — 클라이언트 기한에서 오갈 홉을 뺀 값입니다. A 의 두 번째 시도는 예산이 없어 아예 나가지 않습니다. C 호출 1.80 → 1.00, 기한 뒤 시작 0.80 → 0.00, 평균 응답 499 → 294ms. 그런데 성공률은 90.0% 그대로입니다. 전파는 성공률 장치가 아니라 비용과 정직성의 장치예요 — 자르는 게 어차피 버려질 응답뿐이니까요.'
+  ],
+};
+</script>
+<script src="/shared/timeout-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>

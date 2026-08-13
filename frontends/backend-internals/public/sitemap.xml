@@ -9,7 +9,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/"/>
-    <lastmod>2026-08-12</lastmod>
+    <lastmod>2026-08-13</lastmod>
   </url>
 
   <url>
@@ -17,7 +17,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/"/>
-    <lastmod>2026-08-12</lastmod>
+    <lastmod>2026-08-13</lastmod>
   </url>
 
   <url>
@@ -242,6 +242,22 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/stampede/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/stampede/"/>
     <lastmod>2026-08-12</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/timeout/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/timeout/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/timeout/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/timeout/"/>
+    <lastmod>2026-08-13</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/timeout/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/timeout/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/timeout/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/timeout/"/>
+    <lastmod>2026-08-13</lastmod>
   </url>
 
   <url>

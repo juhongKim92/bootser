@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Backend Internals — interactive visualizations</title>
-  <meta name="description" content="Twelve interactive labs you drive yourself: MVCC and VACUUM, G1 versus ZGC, consistent hashing, Raft, MQTT QoS, connection pool exhaustion, backpressure.">
+  <meta name="description" content="Seventeen interactive labs you drive yourself: MVCC and VACUUM, G1 versus ZGC, consistent hashing, Raft, MQTT QoS, connection pool exhaustion, backpressure, cache stampede, deadline propagation.">
   <link rel="canonical" href="https://lab.vermilion19.com/en/">
   <link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/">
   <link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/">
@@ -13,7 +13,7 @@
   <meta property="og:locale" content="en_US">
   <meta property="og:locale:alternate" content="ko_KR">
   <meta property="og:title" content="Backend Internals — interactive visualizations">
-  <meta property="og:description" content="Backend internals you can put your hands on — twelve labs across databases, the JVM, distributed systems, and real production failures.">
+  <meta property="og:description" content="Backend internals you can put your hands on — seventeen labs across databases, the JVM, distributed systems, and real production failures.">
   <meta property="og:url" content="https://lab.vermilion19.com/en/">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -202,7 +202,7 @@
       <summary>
         <span class="arw" aria-hidden="true"></span>
         <h2>How capacity collapses <em>the queries are fast and the system stalls anyway</em></h2>
-        <span class="count">3</span>
+        <span class="count">4</span>
       </summary>
       <div class="glist">
 
@@ -229,6 +229,15 @@
         <span>
           <h2>The load is gone and it still will not recover</h2>
           <p>Retry amplification and metastability. Put the slider back and the queue stays full — breaking and recovering have different thresholds.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
+
+      <a class="card" href="/en/timeout/">
+        <span class="no">17</span>
+        <span>
+          <h2>Everyone got a second and nobody gets to use one</h2>
+          <p>Deadline propagation. With all three layers at one second, the inner timeouts never get a chance — the outer layer always gives up first.</p>
         </span>
         <span class="tag live">live</span>
       </a>

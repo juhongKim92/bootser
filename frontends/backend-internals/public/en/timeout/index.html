@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Everyone got a second and nobody gets to use one — deadline propagation</title>
+<meta name="description" content="One second at the gateway, one at the service, one at the DB client. In that configuration the inner timeouts never fire at all: they expire at 1000ms, 1025ms and 1050ms, so the outer layer always gives up first. Tripling the retries leaves the success rate at 90.0%.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/timeout/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/timeout/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/timeout/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/timeout/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="Everyone got a second and nobody gets to use one">
+<meta property="og:description" content="Three layers, one second each. Which is why the inner timeouts never get a chance to fire.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/timeout/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Everyone got a second and nobody gets to use one">
+<meta name="twitter:description" content="Triple the retries and the success rate stays at 90.0%. Every added call starts after the client is gone.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/timeout-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/timeout/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>Everyone got a second and nobody gets to use one</h1>
+  <p class="lede">One second at the gateway, one at the service, one at the DB client. Three layers, each picking a reasonable number on its own. And in that configuration <strong>the inner timeouts never fire at all.</strong> They expire at 1000ms, 1025ms and 1050ms — the outer layer always gives up first.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>Deadline propagation</label>
+          <div class="seg prop" id="segProp" role="group" aria-label="Deadline propagation">
+            <button data-prop="0" aria-pressed="true">off</button>
+            <button data-prop="1">on</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sA">client &rarr; A</label>
+          <span class="v" id="vA">1.0<small>s</small></span>
+          <input type="range" id="sA" min="300" max="4000" step="100" value="1000" aria-label="Timeout the client applies to A">
+        </div>
+        <div class="dial">
+          <label for="sB">A &rarr; B</label>
+          <span class="v" id="vB">1.0<small>s</small></span>
+          <input type="range" id="sB" min="200" max="4000" step="100" value="1000" aria-label="Timeout A applies to B">
+        </div>
+        <div class="dial">
+          <label for="sC">B &rarr; C</label>
+          <span class="v" id="vC">1.0<small>s</small></span>
+          <input type="range" id="sC" min="200" max="4000" step="100" value="1000" aria-label="Timeout B applies to C">
+        </div>
+        <div class="dial">
+          <label for="sR">attempts per layer</label>
+          <span class="v" id="vR">3<small>&times;</small></span>
+          <input type="range" id="sR" min="1" max="3" step="1" value="3" aria-label="Attempts each layer makes including retries">
+        </div>
+        <div class="dial">
+          <label for="sP">share of slow C</label>
+          <span class="v" id="vP">10<small>%</small></span>
+          <input type="range" id="sP" min="0" max="40" step="5" value="10" aria-label="Share of C responses that come back slow">
+        </div>
+        <div class="dial">
+          <label>C's slowness</label>
+          <div class="seg" id="segMode" role="group" aria-label="Whether C's slowness carries into the retry">
+            <button data-mode="persist" aria-pressed="true">persistent</button>
+            <button data-mode="transient">transient</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>&nbsp;</label>
+          <button id="btnRun">pause</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">One request where C is slow — timeline</span>
+      <div class="board">
+        <div class="fall" id="fall"></div>
+        <div class="fallx" id="fallX"></div>
+        <div class="legend">
+          <span><i class="d"></i>client deadline</span>
+          <span><i class="g"></i>nobody is waiting here</span>
+          <span><i class="f"></i>timeout fires</span>
+          <span><i class="s"></i>C working, slow</span>
+          <span><i class="w"></i>C working, fast</span>
+          <span><i class="o"></i>promise it cannot keep</span>
+        </div>
+        <table class="fire-tbl" id="fireTbl"></table>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">Same configuration, propagation flipped</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">previous step</button>
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+        <div class="speed" id="segSpeed" role="group" aria-label="Playback speed">
+          <button data-speed="0.5">0.5&times;</button>
+          <button data-speed="1" aria-pressed="true">1&times;</button>
+          <button data-speed="2">2&times;</button>
+        </div>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Working the dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What changes</th></tr>
+    <tr><td>propagation</td><td>On, each layer spends <strong>the remaining budget it was handed, not its own default</strong>. With nothing left it fails immediately instead of calling at all.</td></tr>
+    <tr><td>three timeouts</td><td>The value each layer picked on its own. <strong>Set them all equal</strong> — the ordering in the fire table inverts.</td></tr>
+    <tr><td>attempts per layer</td><td>How many times each layer tries, retries included. It applies to both hops, so <strong>calls to C go up to the square of this</strong>.</td></tr>
+    <tr><td>share of slow C</td><td>C answers in either 65ms or 1.2s. This slider is the share of the latter.</td></tr>
+    <tr><td>C's slowness</td><td><strong>Persistent</strong> means this request is slow again if you retry it (overload, a slow query, a hot partition). <strong>Transient</strong> means the next attempt gets a different answer (a dropped packet, a brief pause).</td></tr>
+  </table>
+
+  <p>The vertical blue line is <strong>the moment the client gives up</strong>. Everything in the hatched region to its right is work nobody is waiting for. The dashed red lines are where each layer's timeout fires. <strong>A dashed line to the right of the blue one means that timeout never gets a chance to fire.</strong></p>
+
+  <p>The meters are not samples. Because C's latency is reduced to two points (65ms and 1.2s), every path is enumerated and probability-weighted, so the numbers are <strong>exact expectations</strong>. The same dial settings always produce the same figures.</p>
+
+  <h2>Try this</h2>
+
+  <div class="recipe">
+    <h4>1. One second each, no retries — the ordering is backwards</h4>
+    <div class="seq">client&rarr;A 1.0s · A&rarr;B 1.0s · B&rarr;C 1.0s
+fires at <em>1000ms</em> / <em>1025ms</em> / <em>1050ms</em>
+promises it cannot keep <em>1.00 per request</em> (every call)</div>
+    <p class="why">Each hop costs 25ms. An inner layer receives the request that much later, so its timer starts that much later and fires that much later. <strong>The outer layer always gives up first, so the inner timeouts never get a chance.</strong> The second B gave C is longer than B itself is willing to wait — a promise it cannot keep, and in this configuration every call is one.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Three attempts — the success rate does not move one decimal</h4>
+    <div class="seq">attempts per layer 1 &rarr; 3
+success <em>90.0% &rarr; 90.0%</em>
+calls to C 1.00 &rarr; <em>1.80</em> · started after the deadline 0.00 &rarr; <em>0.80</em>
+one slow request: <em>9 calls</em> to C · <em>5 at once</em> · last one ends at <em>5.28s</em></div>
+    <p class="why">All 0.80 of the added calls start after the client is gone. Only the first attempt can possibly contribute to the success rate. A request given one second works inside the system for 5.28 seconds, at one point calling C five times concurrently — <a href="/en/retrystorm/">no. 14</a> covers how that waste takes capacity down.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Raise the budget to three seconds — 100% with no retries at all</h4>
+    <div class="seq">all three values 3.0s · 1 attempt
+success 90.0% &rarr; <em>100.0%</em></div>
+    <p class="why">C's tail is 1.2s. A one-second window can never catch it and a three-second window always does. <strong>What moved the success rate was not the retry — it was where the timeout cuts the latency distribution.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Split the same three seconds into one second, three times — 100% down to 90%</h4>
+    <div class="seq">B&rarr;C 3.0 &rarr; 1.0s · attempts 1 &rarr; 3 (budget still 3s)
+success <em>100.0% &rarr; 90.0%</em>
+calls to C 1.00 &rarr; <em>1.80</em> · mean answer 329 &rarr; <em>1099ms</em></div>
+    <p class="why">Turning retries on cost <strong>10.0 points of success rate.</strong> A response that takes 1.2s is missed all three times through a one-second window. The same budget spent in one go would have caught it. <strong>Retries do not create time; they divide it.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. If the slowness is transient — 99.9% from the same settings</h4>
+    <div class="seq">C's slowness persistent &rarr; transient (rest as in 4)
+success <em>90.0% &rarr; 99.9%</em> · calls to C 1.80 &rarr; <em>1.11</em></div>
+    <p class="why">Whether a retry earns its keep depends on <strong>whether the failure carries into the next attempt</strong>. A dropped packet or a brief GC pause does not; overload, a slow query and a hot partition do. And <strong>you pay for narrowing the window either way</strong> — the difference between 4 and 5 is only whether there is any return on it.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Step them down by hand — the ordering comes right, and then</h4>
+    <div class="seq">client&rarr;A 1.0s · A&rarr;B 0.9s · B&rarr;C 0.3s · 3 attempts
+fires at <em>1000 / 925 / 350ms</em> — the ordering is right
+promises it cannot keep 1.80 &rarr; <em>0.30</em>
+but started after the deadline <em>0.50</em> · success <em>still 90.0%</em></div>
+    <p class="why">The values are now small enough that the inner layers give up first, and the retries actually fire. What is left is <strong>A's retry</strong> — A sends its second attempt at 925ms, and the client leaves at 1000ms. A has no way to know that. <strong>What you can choose by hand is a value, and a value cannot tell you how many milliseconds are left right now.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. Turn on deadline propagation — same success rate, a fraction of the work</h4>
+    <div class="seq">setting 1 (all 1s, 3 attempts) with propagation on
+success <em>90.0%, unchanged</em>
+calls to C 1.80 &rarr; <em>1.00</em> · started after the deadline 0.80 &rarr; <em>0.00</em>
+promises it cannot keep 1.80 &rarr; <em>0.00</em>
+mean answer 499 &rarr; <em>294ms</em> · a failing request answers at 3.05s &rarr; <em>1.00s</em></div>
+    <p class="why">The budget C receives is not 1000ms but <strong>900ms</strong> — the client deadline minus the hops the answer still has to cross. A's second attempt <strong>never leaves at all</strong>, because there is no budget for it. And the success rate did not move one decimal. That is not a coincidence.</p>
+  </div>
+
+  <h2>Why the inner timeout cannot fire</h2>
+
+  <p>A timeout is measured <strong>from the moment the caller sends</strong>. So an inner layer's timer always starts later. If all three values are <code>t</code>, they fire like this.</p>
+
+  <table class="keytable">
+    <tr><th>Who set it</th><th>Fires at</th></tr>
+    <tr><td>client &rarr; A</td><td><code>t</code></td></tr>
+    <tr><td>A &rarr; B</td><td><code>t + 1 hop</code> — later than the client</td></tr>
+    <tr><td>B &rarr; C</td><td><code>t + 2 hops</code> — later still</td></tr>
+  </table>
+
+  <div class="callout">When the layer timeouts are equal, the inner ones <strong>structurally cannot fire.</strong> They are in the config file and the code does run, but the outer layer always gives up first, so the result is the same whatever the value is. <strong>It is dead configuration.</strong></div>
+
+  <p>The time actually available is shorter still. C's answer has to cross six hops to reach the client, so out of a one-second budget C has <strong>850ms</strong> to work in. The value C was told is one second. <strong>That gap is C building an answer nobody will receive.</strong></p>
+
+  <h2>Propagation does not raise the success rate</h2>
+
+  <p>This is the sharpest turn on the page. Three timeouts, three retry depths and two kinds of slowness give <strong>750 combinations, compared exhaustively</strong>.</p>
+
+  <div class="callout">Propagation raised the success rate in <strong>0 combinations and lowered it in 0.</strong> All 750 matched to the decimal. What it did change: mean calls to C 1.16 &rarr; 1.08, started after the deadline 0.06 &rarr; 0.00, orphaned answers 0.044 &rarr; 0.000.</div>
+
+  <p>That is not luck, it is <strong>the arithmetic.</strong> Without propagation, getting C's answer at all requires the latency to land inside <code>tC − 2 hops</code>; for that answer to be <em>useful</em> it must also reach the caller before its deadline, so inside <code>deadline − sent − 3 hops</code>. The budget propagation hands down is exactly <code>deadline − sent − 1 hop</code>, which makes the success condition <strong>literally the same expression</strong> as the second one.</p>
+
+  <div class="callout"><strong>The only thing propagation cuts off is an answer that was going to be discarded.</strong> Which is why it cannot raise the success rate, and cannot lower it.</div>
+
+  <p>So propagation is not a success-rate mechanism but a <strong>cost and honesty</strong> mechanism. It buys the same success rate with a bit over half the work, and it reports failure at 1.00s instead of 3.05s. For the first time the downstream service can know <em>that it is already late</em> — and knowing that, it can decline to call, which hands that capacity to a request whose deadline has not passed. Same story as rejection being a signal in <a href="/en/backpressure/">no. 11</a>.</p>
+
+  <h2>Three values that cannot all hold</h2>
+
+  <p>The default configuration contains three numbers that contradict each other.</p>
+
+  <table class="keytable">
+    <tr><th>Value</th><th>What it demands</th></tr>
+    <tr><td>budget 1s</td><td>Take out six hops (150ms) and the real working window is 850ms</td></tr>
+    <tr><td>tail 1.2s</td><td>Catching a slow response needs a window of at least 1.25s</td></tr>
+    <tr><td>3 attempts</td><td>For retries to fire at all, the layer timeout must be a third of the window &asymp; 283ms</td></tr>
+  </table>
+
+  <p>There is no way to catch a 1.2-second response through a 283ms window. <strong>The more retries you add the narrower the window gets, and the narrower it gets the more reliably the tail is cut off.</strong> One of the three has to change.</p>
+
+  <table class="keytable">
+    <tr><th>What you change</th><th>In the lab</th></tr>
+    <tr><td>raise the budget</td><td>The floor is tail 1.2s + six hops = <strong>1.35s</strong>. All three set to 1.3s gives 90.0%; <strong>1.4s gives 100.0%</strong> (one attempt). The cost is longer occupancy, so less capacity — Little's law, as in <a href="/en/connpool/">no. 8</a></td></tr>
+    <tr><td>cut the tail</td><td>Make C faster, cache in front of it, or attach a fallback to the slow path. The only direction that genuinely raises the success rate</td></tr>
+    <tr><td>give up the retries</td><td>If the slowness is <em>persistent</em>, retries only eat budget. In the lab: persistent 90.0% vs transient 99.9% — that gap is the entire case for turning retries on</td></tr>
+  </table>
+
+  <h2>Out in the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>gRPC</td><td>The deadline <strong>propagates automatically</strong> in the <code>grpc-timeout</code> header, and the server can read what is left with <code>Context.current().getDeadline()</code>. Leaning on this is the cheapest path there is</td></tr>
+    <tr><td>HTTP</td><td>There is no standard header, so you carry it yourself. An <strong>absolute instant</strong> requires clock sync; a <strong>remaining-milliseconds</strong> value loses the hop latency spent carrying it. Neither is exact, so subtract a margin</td></tr>
+    <tr><td>connect vs read</td><td>Setting <code>connectTimeout</code> and leaving <code>readTimeout</code> unset is common. Connecting fine and then not answering is what most outages look like, so <strong>this is the same as having no timeout</strong></td></tr>
+    <tr><td>JDBC</td><td>Without <code>socketTimeout</code> (or the driver's equivalent) a query can hang indefinitely. <strong><code>@Transactional(timeout)</code> cuts a query-cancel request, not the whole request</strong> — and if the socket is dead that cancel does not get out either</td></tr>
+    <tr><td>RestClient · WebClient</td><td>Some combinations default to unlimited. <strong>If you did not set it, assume it is not there.</strong> Time spent waiting for a pooled connection is a separate item — it does not count against the read timeout</td></tr>
+    <tr><td>layer ordering</td><td>If you cannot get propagation in, then at minimum <strong>inner values must be smaller than outer ones</strong>. Equal values make the inner ones dead configuration. Values alone still leave A's retry blind, though (recipe 6)</td></tr>
+    <tr><td>measuring</td><td>Do not just count timeouts. Count <strong>"calls that started after the caller had already left"</strong> — that is what makes this visible. A <a href="/en/correlation/">correlationId</a> on the request plus its start time is enough to compute it</td></tr>
+  </table>
+
+  <p>If <a href="/en/retrystorm/">no. 14</a> was <em>how capacity collapses when work continues after everyone gave up</em>, this page is <em>why that work starts in the first place</em>. Each layer's number was reasonable on its own, and the moment they multiplied they contradicted each other.</p>
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">index</a> · <a href="/timeout/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  pause:'pause', resume:'resume',
+  uMs:'ms', uSec:'s', uTimes:'×',
+  lnClient:'client', lnA:'A', lnB:'B', lnC:'C works',
+  tkGiveUp:'gives up $1', tkFailFast:'no budget — fails at once',
+  lbWait:'waiting', lbTry:'try $1',
+  ttA:'A attempt $1 — sent $2 · gives up $3',
+  ttC:'B→C — sent $1 · budget given $2',
+  ttOver:'a promise it cannot keep — past the point the caller is willing to wait',
+  ttWork:'C works for $2ms starting at $1',
+  fhWho:'Who set it', fhVal:'Value', fhAt:'Fires at', fhVs:'vs client deadline',
+  fwClient:'client → A', fwA:'A → B', fwB:'B → C', fwUsable:'time C can actually use',
+  fvBase:'baseline', fvLate:'$1ms late — never gets to fire', fvEarly:'$1ms early',
+  fvUsable:'six hops removed', fvProp:'cut by propagation',
+  mSucc:'in-deadline success', mCalls:'calls to C / req', mAfter:'started after deadline',
+  mOver:'promises unkept', mOrphan:'orphaned answers', mAnswer:'mean answer',
+  cProp:'propagation', cSucc:'success', cCalls:'calls to C', cAfter:'after deadline', cOrphan:'orphaned', cAnswer:'mean answer',
+  cOff:'off', cOn:'on',
+  vInverted:'<b>The inner timeout fires at $1ms — the client left at $2ms.</b><br>It is $3ms late, so the value makes no difference whatever you set it to <span class="at">— dead configuration</span>',
+  vAfter:'<b>$1 calls to C per request start after the client is gone</b> (out of $2).<br><span class="at">Attempts that cannot contribute to the success rate — they only spend capacity</span>',
+  vClean:'<b>Every layer gives up before the client does.</b> Success <b>$1%</b> · calls to C <b>$2</b><br>answers at <b>$3ms</b> on average <span class="at">— failure is reported inside the deadline too</span>',
+  evStart:'The client sent the request — its deadline is $1',
+  evASend:'A sends attempt $1 to B (timeout $2 · gives up $3)',
+  evCSend:'B sends attempt $1 to C (budget given $2 · gives up $3)',
+  evCDone:'C worked $1ms and produced an answer — inside the deadline',
+  evCLate:'C worked $1ms and produced an answer — the caller had already given up',
+  evCFire:'B gives up on attempt $1',
+  evAFire:'A gives up on attempt $1',
+  evGiveUp:'The client gives up — nobody is waiting for anything from here on',
+  evOrphan:'B got an answer, but A left at $1 — an orphaned answer',
+  evFailFast:'No budget left — fails at once without calling C',
+  evWon:'The client got its answer at $1',
+  evLost:'A and B settle on failure at $1 — with nobody left to hear it',
+  scene:[
+    'Three layers each set one second. No retries yet. Look at the fire table — 1000ms, 1025ms, 1050ms. Every hop costs 25ms, so the inner timers start that much later and fire that much later. The outer layer always gives up first, so the two inner timeouts never get a chance. And the second B gave C is longer than B itself will wait — the promises-unkept meter reads 1.00, which is every call.',
+    'Attempts are now 3. Look at the success rate: 90.0% to 90.0%. Not one decimal. What did change is calls to C, 1.00 to 1.80, and all 0.80 of the added ones start after the client is gone. On the timeline this single slow request calls C nine times, and the last piece of work finishes at 5.28 seconds. For a request given one second.',
+    'All three budgets are 3 seconds now and retries are off. Success is 100.0%. C’s tail is 1.2s, so a one-second window can never catch it and a three-second one always does. What moved the success rate was not the retry — it was where the timeout cuts the latency distribution.',
+    'The budget stays at 3 seconds; only B→C drops to 1 second, tried three times. Same total time, and success falls from 100.0% to 90.0%. Turning retries on cost 10 points. A response that takes 1.2s is missed all three times through a one-second window. Retries do not create time, they divide it.',
+    'Same settings, with C’s slowness switched to transient. Success climbs to 99.9%. Whether a retry earns its keep depends on whether the failure carries into the next attempt — a dropped packet or a brief pause does not, overload and slow queries do. And the price of the narrower window was already paid either way.',
+    'Back to a one-second budget, with the values stepped down by hand — 1000 / 900 / 300ms. They fire at 1000 / 925 / 350ms, so the ordering is right, and promises-unkept drops from 1.80 to 0.30. The retries actually fire now. But 0.50 calls per request still start after the deadline — A sends its second attempt at 925ms and the client leaves at 1000ms. A value cannot tell you how many milliseconds are left right now.',
+    'Back to setting 1, with propagation on. The budget C receives is 900ms, not 1000ms — the client deadline minus the hops the answer still has to cross. A’s second attempt never leaves, because there is no budget for it. Calls to C 1.80 → 1.00, started after the deadline 0.80 → 0.00, mean answer 499 → 294ms. And success stays at 90.0%. Propagation is a cost and honesty mechanism, not a success-rate one — the only thing it cuts is an answer that was going to be discarded.'
+  ],
+};
+</script>
+<script src="/shared/timeout-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+/* ============================================================
+   17. 각자 1초씩 줬는데 왜 아무도 1초를 못 쓰나 — 데드라인 전파
+   ============================================================ */
+
+.lab{margin:32px 0 8px;border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);overflow:hidden}
+.lab section{border-bottom:1px solid var(--rule);padding:16px 18px}
+.lab section:last-child{border-bottom:none}
+.cap{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;display:block}
+
+/* --- 손잡이 --- */
+.dials{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end}
+.dial label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
+.dial input[type=range]{width:124px;max-width:42vw;accent-color:var(--horizon);vertical-align:middle}
+.dial .v{font-family:var(--mono);font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums;min-width:64px;display:inline-block}
+.dial .v small{font-size:11px;color:var(--ink-3)}
+.seg{display:flex;gap:0;border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+.seg button{border:none;border-right:1px solid var(--rule);border-radius:0;padding:6px 12px;font-size:11px;white-space:nowrap}
+.seg button:last-child{border-right:none}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.seg.prop button[aria-pressed="true"]{background:var(--horizon);color:var(--paper)}
+.hint{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:8px;min-height:14px}
+.hint.warn{color:var(--blocked)}
+
+/* --- 폭포수 --------------------------------------------------------------
+   가로축은 시간. 세로는 계층. 클라이언트 기한 오른쪽은 빗금 — 아무도 안 기다리는 구간. */
+.board{border:1px solid var(--rule);border-radius:3px;background:var(--paper);padding:13px 14px 10px}
+.fall{display:block}
+.lane{display:grid;grid-template-columns:64px 1fr;gap:9px;align-items:center;min-height:18px;margin-bottom:3px}
+.lane.cl{margin-top:15px}   /* "포기" 표식이 올라앉을 자리 */
+.lane .ln{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--ink-3);text-align:right;white-space:nowrap;overflow:hidden}
+.lane .tl{position:relative;height:15px;background:var(--paper-2);border-radius:2px}
+.lane.cl .tl{height:17px;background:var(--paper-3)}
+.lane.sub .ln{color:var(--rule)}
+
+.tl .gone{position:absolute;top:0;bottom:0;border-radius:0 2px 2px 0;
+  background:repeating-linear-gradient(135deg,transparent 0 3px,color-mix(in srgb,var(--ink-3) 26%,transparent) 3px 4px)}
+.tl .dl{position:absolute;top:-3px;bottom:-3px;width:0;border-left:1.5px solid var(--horizon);z-index:4}
+.tl .head{position:absolute;top:-1px;bottom:-1px;width:0;border-left:1px solid var(--ink);opacity:.45;z-index:5}
+
+/* 기다리는 창 — 이 계층이 응답을 기다리는 구간 */
+.tl .win{position:absolute;top:2px;height:11px;box-sizing:border-box;border-radius:1px;
+  border:1px solid var(--ink-3);background:color-mix(in srgb,var(--ink-3) 9%,transparent);
+  font-family:var(--mono);font-size:8.5px;line-height:9px;color:var(--ink-3);
+  padding:0 3px;overflow:hidden;white-space:nowrap}
+.tl .win.dead{border-color:var(--blocked);color:var(--blocked);background:color-mix(in srgb,var(--blocked) 9%,transparent)}
+/* 부른 쪽이 기다려줄 수 있는 시간을 넘어선 구간 = 지킬 수 없는 약속 */
+.tl .over{position:absolute;top:2px;height:11px;border-radius:0 1px 1px 0;
+  background:repeating-linear-gradient(90deg,var(--free) 0 1.5px,transparent 1.5px 4px)}
+/* 타임아웃이 발동하는 순간 */
+.tl .fire{position:absolute;top:-1px;bottom:-1px;width:0;border-left:1.5px dashed var(--blocked);z-index:3}
+/* C 가 실제로 일한 구간 */
+.tl .work{position:absolute;top:3px;height:9px;border-radius:1px;background:var(--live);overflow:hidden}
+.tl .work.slow{background:var(--blocked)}
+.tl .work .bey{position:absolute;top:0;bottom:0;right:0;
+  background:repeating-linear-gradient(135deg,transparent 0 2px,color-mix(in srgb,var(--paper) 80%,transparent) 2px 3.5px)}
+.tl .tick{position:absolute;top:-13px;font-family:var(--mono);font-size:8.5px;color:var(--horizon);white-space:nowrap;transform:translateX(-50%);z-index:4}
+.tl .tick.low{top:auto;bottom:-12px;color:var(--live)}
+
+.fallx{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin:6px 0 0 73px}
+
+/* --- 발동 시각 표 --- */
+.fire-tbl{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:14px}
+.fire-tbl th,.fire-tbl td{text-align:left;padding:5px 10px 5px 0;border-bottom:1px solid var(--rule);vertical-align:baseline}
+.fire-tbl th{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.fire-tbl td{font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.fire-tbl td:first-child{color:var(--ink);white-space:nowrap;padding-right:16px}
+.fire-tbl td.bad{color:var(--blocked)}
+.fire-tbl td.good{color:var(--live)}
+.fire-tbl tr.base td{color:var(--horizon)}
+.fire-tbl .cut{color:var(--horizon);font-size:9.5px;letter-spacing:.04em;margin-left:5px}
+
+/* --- 미터 --- */
+.meters{display:flex;gap:24px;flex-wrap:wrap;margin-top:14px}
+.meters .m{min-width:84px}
+.meters .k{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.meters .n{font-family:var(--mono);font-size:19px;color:var(--ink);font-variant-numeric:tabular-nums}
+.meters .n small{font-size:11px;color:var(--ink-3);margin-left:2px}
+.meters .m.bad .n{color:var(--blocked)}
+.meters .m.good .n{color:var(--live)}
+
+/* --- 판정 --- */
+.verdict{border-left:2px solid var(--rule);background:var(--paper);padding:10px 0 10px 13px;margin-top:14px;
+  font-family:var(--mono);font-size:10.5px;line-height:1.8;color:var(--ink-2)}
+.verdict.stuck{border-left-color:var(--blocked)}
+.verdict.stuck b{color:var(--blocked)}
+.verdict.ok{border-left-color:var(--live)}
+.verdict.ok b{color:var(--live)}
+.verdict b{font-weight:500;color:var(--ink)}
+.verdict .at{color:var(--ink-3)}
+
+/* --- 전파 끔/켬 비교 --- */
+.cmp{width:100%;border-collapse:collapse;font-size:13px}
+.cmp th,.cmp td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.cmp th{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.cmp td:first-child{font-size:12.5px;width:1%;white-space:nowrap;padding-right:16px}
+.cmp td.num{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
+.cmp tr.on td{background:var(--paper-3)}
+.cmp td.bad{color:var(--blocked)}
+.cmp td.good{color:var(--live)}
+.cmp td.same{color:var(--ink-3)}
+
+/* --- 조작대 --- */
+.transport{background:var(--paper-3);display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.transport .keys{display:flex;gap:6px;flex-wrap:wrap}
+.narration{flex:1;min-width:240px;font-family:var(--serif);font-size:14.5px;line-height:1.65;color:var(--ink)}
+.narration .n{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-3);display:block;margin-bottom:3px}
+
+/* --- 안내 --- */
+.recipe{border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);padding:14px 16px;margin:14px 0;max-width:68ch}
+.recipe h4{font-family:var(--sans);font-size:14px;font-weight:700;margin:0 0 4px}
+.recipe .seq{font-family:var(--mono);font-size:11px;line-height:1.9;background:var(--paper);border:1px solid var(--rule);
+  border-radius:2px;padding:9px 11px;margin:9px 0;white-space:pre-wrap;color:var(--ink-2)}
+.recipe .seq em{font-style:normal;color:var(--horizon)}
+.recipe .why{font-size:13.5px;color:var(--ink-2);margin:0}
+.keytable{width:100%;border-collapse:collapse;margin:12px 0;max-width:68ch;font-size:13.5px}
+.keytable th,.keytable td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.keytable th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.keytable td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap;width:1%;padding-right:18px;color:var(--ink)}
+
+/* 범례 */
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:11px;font-family:var(--mono);font-size:9.5px;color:var(--ink-3)}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend i{width:16px;height:8px;border-radius:1px;display:block;flex:none}
+.legend i.w{background:var(--live)}
+.legend i.s{background:var(--blocked)}
+.legend i.o{background:repeating-linear-gradient(90deg,var(--free) 0 1.5px,transparent 1.5px 4px)}
+.legend i.g{background:repeating-linear-gradient(135deg,transparent 0 3px,color-mix(in srgb,var(--ink-3) 26%,transparent) 3px 4px)}
+.legend i.d{border-left:1.5px solid var(--horizon);width:0;height:11px}
+.legend i.f{border-left:1.5px dashed var(--blocked);width:0;height:11px}
+
+@media (max-width:600px){
+  .lane{grid-template-columns:44px 1fr;gap:6px}
+  .fallx{margin-left:50px}
+  .lane .ln{font-size:8.5px}
+}
