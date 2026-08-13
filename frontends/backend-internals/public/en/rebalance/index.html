@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The consumers never stop and the lag never falls — the Kafka rebalance loop</title>
+<meta name="description" content="Consumer CPU is 98% busy and the committed offset does not move a single notch. Once max.poll.records × per-record processing time exceeds max.poll.interval.ms, the consumer is dropped from the group on every single batch and that batch is never committed. Effective throughput is exactly zero.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/rebalance/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/rebalance/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/rebalance/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/rebalance/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="The consumers never stop and the lag never falls">
+<meta property="og:description" content="Effective throughput is zero while the CPU is 98% busy. The cause is not feedback — it is an inequality.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/rebalance/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The consumers never stop and the lag never falls">
+<meta name="twitter:description" content="Scale to twelve consumers and effective throughput stays at zero. Only the waste multiplies.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/rebalance-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/rebalance/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>The consumers never stop and the lag never falls</h1>
+  <p class="lede">Consumer CPU is 98% busy. The logs keep scrolling. Records are clearly being processed, and <strong>the committed offset does not move a single notch.</strong> The lag keeps growing. The cause is not a feedback loop — it is <strong>one inequality</strong>.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sK">max.poll.records</label>
+          <span class="v" id="vK">500</span>
+          <input type="range" id="sK" min="0" max="7" step="1" value="5" aria-label="Records returned by one poll">
+        </div>
+        <div class="dial">
+          <label for="sT">per record</label>
+          <span class="v" id="vT">700<small>ms</small></span>
+          <input type="range" id="sT" min="10" max="1000" step="10" value="700" aria-label="Time to process one record">
+        </div>
+        <div class="dial">
+          <label for="sI">max.poll.interval</label>
+          <span class="v" id="vI">5m</span>
+          <input type="range" id="sI" min="0" max="8" step="1" value="5" aria-label="Maximum time allowed between poll calls">
+        </div>
+        <div class="dial">
+          <label for="sM">commit every</label>
+          <span class="v" id="vM">end of batch</span>
+          <input type="range" id="sM" min="0" max="4" step="1" value="0" aria-label="How often offsets are committed">
+        </div>
+        <div class="dial">
+          <label for="sN">consumers</label>
+          <span class="v" id="vN">3</span>
+          <input type="range" id="sN" min="1" max="12" step="1" value="3" aria-label="Members in the consumer group">
+        </div>
+        <div class="dial">
+          <label for="sD">rebalance takes</label>
+          <span class="v" id="vD">5s</span>
+          <input type="range" id="sD" min="500" max="20000" step="500" value="5000" aria-label="How long one rebalance takes">
+        </div>
+        <div class="dial">
+          <label for="sC">membership churn</label>
+          <span class="v" id="vC">0<small>/min</small></span>
+          <input type="range" id="sC" min="0" max="10" step="1" value="0" aria-label="How often membership changes from deploys or scaling">
+        </div>
+        <div class="dial">
+          <label>assignor</label>
+          <div class="seg" id="segStrat" role="group" aria-label="Partition assignment strategy">
+            <button data-coop="0" aria-pressed="true">eager</button>
+            <button data-coop="1">cooperative</button>
+          </div>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">The inequality — cross it and you are dropped on every batch</span>
+      <div class="board">
+        <div class="ineq" id="ineq"></div>
+        <div class="verdictline" id="ineqVerdict"></div>
+        <div class="cycle">
+          <span class="cap">Where the time goes in one cycle</span>
+          <div class="track" id="track"></div>
+          <div class="cyclex" id="cycleX"></div>
+          <div class="legend">
+            <span><i class="d"></i>processing that reached a commit</span>
+            <span><i class="w"></i>processed, never committed</span>
+            <span><i class="r"></i>rebalancing — nobody is consuming</span>
+          </div>
+        </div>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">Same configuration, only the assignor changes</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">previous step</button>
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Working the dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What changes</th></tr>
+    <tr><td>max.poll.records<br>per record</td><td>Their product is the <strong>batch processing time B</strong> — the left side of the inequality.</td></tr>
+    <tr><td>max.poll.interval</td><td>The right side. <strong>Raising it satisfies the inequality too</strong>, but it is also how long it takes to notice a consumer that has genuinely stopped.</td></tr>
+    <tr><td>commit every</td><td>Committing only at the end of the batch means <strong>losing all of it</strong> when you are dropped. Splitting the commits salvages that much.</td></tr>
+    <tr><td>consumers</td><td>The dial you reach for when the lag is growing. <strong>Try raising it while the inequality is violated.</strong></td></tr>
+    <tr><td>churn · assignor</td><td>How often deploys or scaling change the membership. <strong>Eager stops everyone on each change</strong>; cooperative stops only the share that moves.</td></tr>
+  </table>
+
+  <p>The two bars are the inequality. When the top one (batch processing time) exceeds the bottom one (<code>max.poll.interval.ms</code>) it turns red, and from that moment you are dropped from the group <strong>on every single batch</strong>. Not probabilistically, and not as a function of load — the arithmetic says so.</p>
+
+  <p>The strip below shows where the time goes in one cycle. The red span is time spent processing records that <strong>were never committed</strong>. At the default settings the whole strip is red or grey.</p>
+
+  <p>There is no randomness. Everything is closed-form, so the same dial settings always produce the same numbers.</p>
+
+  <h2>Try this</h2>
+
+  <div class="recipe">
+    <h4>1. Effective throughput is exactly zero — and the CPU is 98% busy</h4>
+    <div class="seq">max.poll.records 500 · 700ms per record · max.poll.interval 5m
+batch processing time <em>350s</em> &gt; limit <em>300s</em>
+records processed before the deadline <em>428</em> · of those, committed <em>0.0%</em>
+effective throughput <em>0.00 rec/s</em> · wasted <em>4.21 rec/s</em> · consumer busy <em>98.4%</em></div>
+    <p class="why">500 × 700ms = 350 seconds. It cannot finish inside five minutes. At the 300-second mark the coordinator drops this consumer from the group, and the consumer — <em>not knowing that</em> — keeps going to 428 records. And <strong>those 428 records are never committed</strong>, because auto-commit happens inside <code>poll()</code> and it never got back to <code>poll()</code>. <strong>Not near zero. Exactly zero.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Scale to twelve consumers to catch up — twelve times the waste</h4>
+    <div class="seq">consumers 3 → 12
+effective throughput <em>0.00 → 0.00 rec/s</em>
+wasted 4.21 → <em>16.84 rec/s</em></div>
+    <p class="why">The lag is growing, so you add consumers. The most natural reaction there is. <strong>And effective throughput stays at zero.</strong> Every one of them is crossing the same inequality, so twelve consumers each process 428 records and each throw them away. All you added is waste and broker load.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Raise max.poll.interval to an hour — the loop stops, but</h4>
+    <div class="seq">max.poll.interval 5m → 1h
+effective throughput 0.00 → <em>4.29 rec/s</em>
+failure-detection delay 300s → <em>3600s</em></div>
+    <p class="why">The inequality holds, the loop stops, throughput comes back. <strong>The most common fix, and the worst one.</strong> That value is also "how long before we decide a consumer is dead". At an hour, <strong>a consumer that has genuinely hung goes unnoticed for an hour</strong> — and nobody consumes its partitions for that hour.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Cut max.poll.records to 100 instead — same gain, no cost</h4>
+    <div class="seq">interval back to 5m · max.poll.records 500 → 100
+batch processing time 350s → <em>70s</em>
+effective throughput <em>4.29 rec/s</em> (same as recipe 3) · detection delay <em>still 300s</em></div>
+    <p class="why">You fixed <strong>the other variable</strong> of the same inequality. Throughput is identical to recipe 3 and the detection delay did not move, because <code>max.poll.records</code> is only a batch size and has nothing to do with detection. <strong>Both satisfy the inequality; the prices differ</strong> — shrink the left side.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Commit every 10 records — no longer zero, still looping</h4>
+    <div class="seq">max.poll.records back to 500 (inequality violated) · commit every 10
+commit ratio 0.0% → <em>98.1%</em> · effective throughput 0.00 → <em>4.13 rec/s</em>
+rebalances <em>still 0.20/min</em></div>
+    <p class="why">The 420 records processed before the deadline now get committed, and throughput is alive. <strong>But you did not fix the inequality.</strong> You are still dropped every cycle, a rebalance still runs, and everyone still stops for five seconds. You are making progress <em>while being repeatedly evicted</em> — this is first aid.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Inequality satisfied — now deploys are the problem (eager)</h4>
+    <div class="seq">max.poll.records 100 (inequality holds) · churn 6/min · eager
+effective throughput 4.29 → <em>2.14 rec/s</em>
+consumer busy <em>50.0%</em></div>
+    <p class="why">Frequent deploys, or one flapping consumer, mean frequent rebalances. <strong>With eager assignment, one rebalance stops everyone.</strong> Six times five seconds is thirty seconds — half of every minute is a stall. You stop even when none of your partitions move.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. Switch to cooperative-sticky — the blast radius shrinks, nothing else</h4>
+    <div class="seq">assignor eager → cooperative
+effective throughput 2.14 → <em>3.57 rec/s</em> (+66.7%)
+but go back to recipe 1's settings and it is <em>zero, same as eager</em></div>
+    <p class="why">Only the partitions that must move are revoked, so the rest keep consuming and the loss is divided by the consumer count. <strong>And in a state where the inequality is violated it can do nothing</strong> — everyone is being dropped, so every partition has to move, and cooperative becomes eager. Check the comparison table.</p>
+  </div>
+
+  <h2>The cause is not feedback, it is an inequality</h2>
+
+  <p>The name "rebalance loop" suggests something that snowballs. The primary cause is a single static inequality.</p>
+
+  <div class="callout"><code>max.poll.records × per-record time &gt; max.poll.interval.ms</code><br>While that is true you are dropped <strong>on every batch, deterministically.</strong> At low load too. With a single consumer too. And you never escape on your own until the inequality becomes false.</div>
+
+  <p>Which makes it different from the metastability in <a href="/en/retrystorm/">no. 14</a>. There, shedding load could bring you back under the threshold. Here, <strong>you could drop the load to zero and the very next batch drops you again.</strong> The exit exists only in the configuration.</p>
+
+  <h2>The heartbeat is fine and you are out of the group</h2>
+
+  <p>This is the most confusing part. Consumer liveness runs on <strong>two separate tracks</strong>.</p>
+
+  <table class="keytable">
+    <tr><th>What it measures</th><th>Who sends it</th><th>Does long processing trip it?</th></tr>
+    <tr><td><code>session.timeout.ms</code> (default 45s)</td><td>A <strong>background thread</strong>, every <code>heartbeat.interval.ms</code> (default 3s)</td><td><strong>No.</strong> However long the processing runs, heartbeats keep going out normally</td></tr>
+    <tr><td><code>max.poll.interval.ms</code> (default 5m)</td><td>The application thread, by calling <code>poll()</code> at all</td><td><strong>Yes.</strong> This is the one</td></tr>
+  </table>
+
+  <p>So the logs leave you with what looks like a contradiction: the consumer is alive and it is out of the group. The thread that sends heartbeats is perfectly healthy; the only problem is that <code>poll()</code> was never reached. <strong>Raising <code>session.timeout.ms</code> does nothing for this.</strong></p>
+
+  <h2>What this model leaves out</h2>
+
+  <p>This page is computed from the mechanism. These are not in it.</p>
+
+  <table class="keytable">
+    <tr><th>What</th><th>Why it is out</th></tr>
+    <tr><td>KIP-848, the new group protocol</td><td>The broker drives the rebalance and stop-the-world goes away. This page's <em>inequality</em> survives; the <em>blast radius of D</em> changes again — check the docs for the version you run</td></tr>
+    <tr><td>Skewed partitions</td><td>Consumers are assumed uniform. In practice only the consumer holding the heavy partition is dropped, and that is exactly where cooperative earns the most</td></tr>
+    <tr><td>The distribution of processing time</td><td>Per-record time is a constant here. With a long tail the inequality becomes true <em>sometimes</em>, so you are dropped intermittently — a much harder shape to find</td></tr>
+    <tr><td>Reprocessing feeding back</td><td>The cost of re-processing an uncommitted batch is counted in the waste meter, but its second-order effect of pushing the lag further up is not modelled</td></tr>
+  </table>
+
+  <h2>Out in the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>look here first</td><td><strong>Measure the p99 of how long one batch takes to process.</strong> Put that on the same graph as <code>max.poll.interval.ms</code> and this page's inequality becomes visible. Where the lines meet, the loop begins</td></tr>
+    <tr><td>order of fixes</td><td>① shrink <code>max.poll.records</code> ② pull the slow work (outbound API calls, DB writes) out of the batch or parallelise it ③ only then raise <code>max.poll.interval.ms</code>. <strong>Doing ③ first buys you that much blindness to real failures</strong></td></tr>
+    <tr><td>commit strategy</td><td>Committing only at the end of the batch loses all of it on eviction. Splitting salvages it but <strong>does not fix the inequality</strong> — use it as first aid only</td></tr>
+    <tr><td>assignor</td><td>Use <code>cooperative-sticky</code>. Just know that <strong>what it fixes is the blast radius of a rebalance</strong>, nothing else. Migrating from eager needs a two-step rolling upgrade</td></tr>
+    <tr><td>measuring</td><td>Counting rebalances will not find the cause. Measure <strong>the share of processed records that got committed</strong>. Low, with a busy CPU, is this page</td></tr>
+    <tr><td>easy to get wrong</td><td>Raising <code>session.timeout.ms</code> does nothing here. The heartbeats are already going out fine</td></tr>
+  </table>
+
+  <p>If <a href="/en/connpool/">no. 8</a> was <em>the queries are fast and the system stalls</em>, this page is <em>the consumer is busy and the offset does not move</em>. Both come from failing to separate busy from progressing — <strong>CPU utilisation is not a progress bar.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/connpool/"><span class="no">08</span><span><span class="t">A 17-millisecond query drains the pool</span><span class="why">The same accident from confusing busy with progressing — CPU utilisation is not a progress bar.</span></span></a></li>
+      <li><a href="/en/retrystorm/"><span class="no">14</span><span><span class="t">The load is gone and it still will not recover</span><span class="why">There, shedding load gets you under the threshold. This loop only opens in the configuration.</span></span></a></li>
+      <li><a href="/en/keepalive/"><span class="no">07</span><span><span class="t">Your server believes it for two hours</span><span class="why">The mirror case — the heartbeat is fine and it is treated as dead anyway.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">index</a> · <a href="/rebalance/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uSec:'s', uMin:'m', uRec:'', uUnit:'', uRps:'rec/s', uPm:'/min',
+  mEnd:'end of batch',
+  bBatch:'batch time ($1×$2ms)', bLimit:'max.poll.interval.ms',
+  iOver:'$1 > $2 — over by $3. Dropped from the group on every batch, deterministically.',
+  iOk:'$1 ≤ $2 — $3 of headroom. This inequality holds.',
+  sDone:'committed', sWaste:'discarded', sRebal:'rebalancing', sWork:'processing',
+  xEvict:'$1 — dropped', xSteady:'steady processing', xMin:'1 min',
+  mTput:'effective tput', mWaste:'wasted', mRatio:'commit ratio',
+  mRebal:'rebalances', mBusy:'consumer busy', mDetect:'detection delay',
+  cStrat:'assignor', cTput:'effective tput', cBusy:'consumer busy',
+  sEager:'eager (all stop)', sCoop:'cooperative-sticky',
+  hOver:'the inequality is violated — dropped on every batch',
+  hChurn:'the inequality holds — what is left is membership churn',
+  hOk:'inequality holds and no churn — steady processing',
+  vZero:'<b>Effective throughput is exactly zero.</b> It processes <b>$1 records</b> before the deadline and discards all of them.<br>The consumer is <b>$2</b> busy and <b>$3 records/s</b> are wasted <span class="at">— the offset does not move one notch</span>',
+  vPartial:'<b>Commit ratio $1 · effective throughput $2 rec/s.</b> Incremental commits are salvaging it.<br><span class="at">But the inequality is untouched — rebalances still run $3 times a minute</span>',
+  vChurn:'<b>The inequality holds. What is left is membership churn</b> — <b>$1</b> of the time is a stall.<br>Effective throughput <b>$2 rec/s</b> <span class="at">— current assignor is $3</span>',
+  vOk:'<b>$1 ≤ $2 — the inequality holds.</b> Effective throughput <b>$3 rec/s</b><br><span class="at">Nothing is dropped and nothing stalls</span>',
+  scene:[
+    'max.poll.records is 500 and each record takes 700ms. One batch is 350 seconds and max.poll.interval is 300. The inequality is violated. At the 300-second mark the coordinator drops this consumer from the group, and the consumer — not knowing that — keeps going to 428 records. Those 428 are never committed, because auto-commit happens inside poll() and it never got back to poll(). Effective throughput is not near zero, it is exactly zero, while the consumer is 98.4% busy.',
+    'The lag is growing, so you scale to twelve consumers. The most natural reaction there is. And effective throughput is still 0.00. Every one of them crosses the same inequality, so twelve consumers each process 428 records and each throw them away. The only thing that grew is waste — from 4.21 to 16.84 rec/s.',
+    'max.poll.interval raised to an hour. The inequality holds, the loop stops, throughput is back to 4.29 rec/s. The most common fix and the worst one, because that value is also how long before we decide a consumer is dead — a genuinely hung consumer now goes unnoticed for an hour. Watch the detection-delay meter.',
+    'Interval back to five minutes, and max.poll.records cut to 100. The batch is 70 seconds, so the inequality holds. Throughput is 4.29 rec/s — identical to recipe 3. But the detection delay stayed at 300 seconds. You fixed the other variable of the same inequality, and the prices differ. Shrinking the left side is the right move.',
+    'max.poll.records back to 500 so the inequality is violated again, and now commit every 10 records. The commit ratio goes from 0% to 98.1% and throughput to 4.13 rec/s — the 420 records processed before the deadline are salvaged. But rebalances still run 0.20 times a minute, because the inequality is untouched. This is first aid.',
+    'max.poll.records at 100 so the inequality holds, and now six membership changes a minute — frequent deploys, or one flapping consumer. Eager stops everyone on each rebalance, so six times five seconds is thirty: half of every minute is a stall. Throughput halves from 4.29 to 2.14.',
+    'Switched to cooperative-sticky. Only the partitions that must move are revoked, so the rest keep consuming — 3.57 rec/s, a 66.7% recovery. But go back to recipe 1 and cooperative is exactly zero too, same as eager: when everyone is dropped, every partition has to move. What cooperative fixes is the blast radius of a rebalance, not the inequality.'
+  ],
+};
+</script>
+<script src="/shared/rebalance-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "The consumers never stop and the lag never falls",
+  "description": "Consumer CPU is 98% busy and the committed offset does not move a single notch. Once max.poll.records × per-record processing time exceeds max.poll.interval.ms, the consumer is dropped from the group on every single batch and that batch is never committed. Effective throughput is exactly zero.",
+  "url": "https://lab.vermilion19.com/en/rebalance/",
+  "inLanguage": "en",
+  "datePublished": "2026-08-13",
+  "dateModified": "2026-08-13",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "The consumers never stop and the lag never falls"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+</body>
+</html>

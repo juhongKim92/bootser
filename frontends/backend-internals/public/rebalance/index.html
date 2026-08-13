@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>컨슈머는 쉬지 않고 도는데 lag 는 줄지 않는다 — Kafka 리밸런싱 루프</title>
+<meta name="description" content="컨슈머 CPU는 98% 바쁩니다. 그런데 커밋된 오프셋은 한 칸도 안 움직여요. max.poll.records × 레코드당 처리시간이 max.poll.interval.ms를 넘으면 매 배치마다 확정적으로 그룹에서 빠지고, 그 배치는 커밋되지 않습니다. 유효 처리량이 정확히 0입니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/rebalance/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/rebalance/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/rebalance/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/rebalance/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="컨슈머는 쉬지 않고 도는데 lag 는 줄지 않는다">
+<meta property="og:description" content="유효 처리량이 0인데 CPU는 98% 바쁩니다. 원인은 피드백이 아니라 부등식입니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/rebalance/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="컨슈머는 쉬지 않고 도는데 lag 는 줄지 않는다">
+<meta name="twitter:description" content="컨슈머를 12배로 늘려도 유효 처리량은 0 그대로. 낭비만 12배가 됩니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/rebalance-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/rebalance/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>컨슈머는 쉬지 않고 도는데 lag 는 줄지 않는다</h1>
+  <p class="lede">컨슈머 CPU 는 98% 바쁩니다. 로그도 계속 찍혀요. 레코드를 처리하고 있는 게 분명한데 <strong>커밋된 오프셋이 한 칸도 안 움직입니다.</strong> lag 는 계속 자라고요. 원인은 피드백 루프가 아니라 <strong>부등식 하나</strong>입니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sK">max.poll.records</label>
+          <span class="v" id="vK">500<small>건</small></span>
+          <input type="range" id="sK" min="0" max="7" step="1" value="5" aria-label="poll 한 번이 돌려주는 레코드 수">
+        </div>
+        <div class="dial">
+          <label for="sT">레코드당 처리</label>
+          <span class="v" id="vT">700<small>ms</small></span>
+          <input type="range" id="sT" min="10" max="1000" step="10" value="700" aria-label="레코드 하나를 처리하는 데 걸리는 시간">
+        </div>
+        <div class="dial">
+          <label for="sI">max.poll.interval</label>
+          <span class="v" id="vI">5분</span>
+          <input type="range" id="sI" min="0" max="8" step="1" value="5" aria-label="poll 호출 사이에 허용되는 최대 시간">
+        </div>
+        <div class="dial">
+          <label for="sM">커밋 주기</label>
+          <span class="v" id="vM">배치 끝에만</span>
+          <input type="range" id="sM" min="0" max="4" step="1" value="0" aria-label="몇 건마다 커밋하나">
+        </div>
+        <div class="dial">
+          <label for="sN">컨슈머</label>
+          <span class="v" id="vN">3<small>대</small></span>
+          <input type="range" id="sN" min="1" max="12" step="1" value="3" aria-label="컨슈머 그룹의 멤버 수">
+        </div>
+        <div class="dial">
+          <label for="sD">리밸런싱 소요</label>
+          <span class="v" id="vD">5초</span>
+          <input type="range" id="sD" min="500" max="20000" step="500" value="5000" aria-label="리밸런싱 한 번에 걸리는 시간">
+        </div>
+        <div class="dial">
+          <label for="sC">멤버 변동</label>
+          <span class="v" id="vC">0<small>회/분</small></span>
+          <input type="range" id="sC" min="0" max="10" step="1" value="0" aria-label="배포·스케일로 멤버가 바뀌는 빈도">
+        </div>
+        <div class="dial">
+          <label>배정 전략</label>
+          <div class="seg" id="segStrat" role="group" aria-label="파티션 배정 전략">
+            <button data-coop="0" aria-pressed="true">eager</button>
+            <button data-coop="1">cooperative</button>
+          </div>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">부등식 — 위가 아래를 넘으면 매 배치마다 쫓겨난다</span>
+      <div class="board">
+        <div class="ineq" id="ineq"></div>
+        <div class="verdictline" id="ineqVerdict"></div>
+        <div class="cycle">
+          <span class="cap">한 사이클에서 시간이 어디로 가나</span>
+          <div class="track" id="track"></div>
+          <div class="cyclex" id="cycleX"></div>
+          <div class="legend">
+            <span><i class="d"></i>커밋까지 간 처리</span>
+            <span><i class="w"></i>처리했는데 커밋 안 됨</span>
+            <span><i class="r"></i>리밸런싱 — 아무도 안 먹는다</span>
+          </div>
+        </div>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">같은 설정에서 배정 전략만 바꾸면</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>max.poll.records<br>레코드당 처리</td><td>둘의 곱이 <strong>배치 처리시간 B</strong> 입니다. 부등식의 왼쪽이에요.</td></tr>
+    <tr><td>max.poll.interval</td><td>부등식의 오른쪽. <strong>이걸 늘려도 부등식은 만족되지만</strong> 진짜 멈춘 컨슈머를 찾는 시간이 그만큼 늘어납니다.</td></tr>
+    <tr><td>커밋 주기</td><td>배치 끝에만 커밋하면 쫓겨날 때 <strong>전부 날아갑니다.</strong> 중간에 쪼개면 그만큼 건집니다.</td></tr>
+    <tr><td>컨슈머</td><td>lag 를 따라잡으려고 늘리는 그 손잡이입니다. <strong>부등식을 넘은 상태에서 늘려보세요.</strong></td></tr>
+    <tr><td>멤버 변동 · 배정 전략</td><td>배포·스케일로 멤버가 바뀌는 빈도. <strong>eager 는 한 번에 전원이 멈추고</strong> cooperative 는 움직이는 몫만 멈춥니다.</td></tr>
+  </table>
+
+  <p>막대 두 개가 부등식입니다. 위(배치 처리시간)가 아래(<code>max.poll.interval.ms</code>)를 넘으면 붉어지고, 그 순간부터 <strong>매 배치마다 확정적으로</strong> 그룹에서 빠집니다. 확률이 아니고 부하와도 무관합니다 — 산수가 그렇습니다.</p>
+
+  <p>아래 띠는 한 사이클에서 시간이 어디로 가는지입니다. 붉은 구간이 <strong>처리는 했는데 커밋되지 않은</strong> 시간이에요. 기본 설정에서는 띠 전체가 붉거나 회색입니다.</p>
+
+  <p>난수는 없습니다. 전부 해석식이라 같은 손잡이 조합이면 언제나 같은 숫자가 나옵니다.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 유효 처리량이 정확히 0 — 그런데 CPU 는 98% 바쁘다</h4>
+    <div class="seq">max.poll.records 500 · 레코드당 700ms · max.poll.interval 5분
+배치 처리시간 <em>350초</em> &gt; 한도 <em>300초</em>
+마감 전까지 처리한 건수 <em>428</em> · 그중 커밋 <em>0.0%</em>
+유효 처리량 <em>0.00 rec/s</em> · 낭비 <em>4.21 rec/s</em> · 컨슈머 바쁜 비율 <em>98.4%</em></div>
+    <p class="why">500건 × 700ms = 350초입니다. 5분(300초) 안에 못 끝내요. 300초가 되는 순간 코디네이터가 이 컨슈머를 그룹에서 빼고, 컨슈머는 <em>그것도 모른 채</em> 428건까지 처리합니다. 그리고 <strong>그 428건은 커밋되지 않습니다</strong> — auto-commit 은 <code>poll()</code> 안에서 일어나는데 <code>poll()</code> 로 돌아가지 못했으니까요. <strong>0에 가까운 게 아니라 정확히 0입니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. lag 를 따라잡으려고 컨슈머를 12대로 — 낭비만 12배</h4>
+    <div class="seq">컨슈머 3 → 12대
+유효 처리량 <em>0.00 → 0.00 rec/s</em>
+낭비 4.21 → <em>16.84 rec/s</em></div>
+    <p class="why">lag 가 자라니 컨슈머를 늘립니다. 가장 자연스러운 반응이에요. <strong>그런데 유효 처리량은 0 그대로입니다.</strong> 컨슈머 하나하나가 같은 부등식을 넘고 있으니, 12대가 각자 428건씩 처리하고 각자 버립니다. 늘어난 것은 낭비와 브로커 부하뿐입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. max.poll.interval 을 1시간으로 — 루프는 멈추는데</h4>
+    <div class="seq">max.poll.interval 5분 → 1시간
+유효 처리량 0.00 → <em>4.29 rec/s</em>
+장애 감지 지연 300초 → <em>3600초</em></div>
+    <p class="why">부등식이 만족되니 루프가 멈추고 처리량이 돌아옵니다. <strong>가장 흔한 처방이고, 가장 나쁜 처방입니다.</strong> 이 값은 "컨슈머가 죽었다고 판단하는 시간"이기도 하거든요. 1시간으로 두면 <strong>정말로 멈춘 컨슈머를 한 시간 동안 못 찾습니다.</strong> 그 파티션은 한 시간 동안 아무도 안 먹습니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. max.poll.records 를 100 으로 — 같은 효과, 대가 없음</h4>
+    <div class="seq">max.poll.interval 5분으로 되돌리고 · max.poll.records 500 → 100
+배치 처리시간 350초 → <em>70초</em>
+유효 처리량 <em>4.29 rec/s</em> (3번과 같다) · 장애 감지 지연 <em>300초 그대로</em></div>
+    <p class="why">같은 부등식의 <strong>다른 변수</strong>를 고쳤습니다. 처리량은 3번과 똑같은데 감지 지연은 그대로예요. <code>max.poll.records</code> 는 배치 크기일 뿐이고 감지와 무관하니까요. <strong>둘 다 부등식을 만족시키지만 대가가 다릅니다</strong> — 왼쪽을 줄이세요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 10건마다 커밋한다 — 0은 아니게 되지만 루프는 그대로</h4>
+    <div class="seq">max.poll.records 500 으로 되돌리고 (부등식 위반 상태) · 커밋을 10건마다
+커밋 비율 0.0% → <em>98.1%</em> · 유효 처리량 0.00 → <em>4.13 rec/s</em>
+리밸런싱 <em>0.20회/분 그대로</em></div>
+    <p class="why">마감 전에 처리한 420건이 커밋됩니다. 처리량이 살아났어요. <strong>그런데 부등식은 안 고쳤습니다.</strong> 여전히 매 사이클 쫓겨나고 리밸런싱이 돌고, 5초씩 전원이 멈춥니다. 진행은 하지만 <em>계속 쫓겨나면서</em> 진행하는 상태예요 — 응급처치입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. 부등식은 지켰다 — 이제 배포가 문제다 (eager)</h4>
+    <div class="seq">max.poll.records 100 (부등식 준수) · 멤버 변동 6회/분 · eager
+유효 처리량 4.29 → <em>2.14 rec/s</em>
+컨슈머 바쁜 비율 <em>50.0%</em></div>
+    <p class="why">배포가 잦거나 컨슈머 하나가 오락가락하면 리밸런싱이 자주 돕니다. <strong>eager 는 리밸런싱 한 번에 전원이 멈춥니다.</strong> 6회 × 5초 = 30초, 1분 중 절반이 정지입니다. 내 파티션이 안 움직여도 멈춥니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. cooperative-sticky 로 — 폭발 반경만 줄어든다</h4>
+    <div class="seq">배정 전략 eager → cooperative
+유효 처리량 2.14 → <em>3.57 rec/s</em> (+66.7%)
+그런데 1번 설정으로 돌아가면 eager 와 <em>똑같이 0</em></div>
+    <p class="why">움직여야 하는 파티션만 회수하니 나머지는 계속 먹습니다. 손실이 컨슈머 수만큼 나뉘어요. <strong>그런데 부등식을 넘은 상태에서는 아무것도 못 합니다</strong> — 전원이 쫓겨나니 움직여야 하는 파티션이 전부이고, cooperative 도 eager 와 같아집니다. 비교표에서 확인해보세요.</p>
+  </div>
+
+  <h2>원인은 피드백이 아니라 부등식이다</h2>
+
+  <p>"리밸런싱 루프"라는 이름은 뭔가 눈덩이처럼 커지는 현상을 떠올리게 합니다. 그런데 이 루프의 1차 원인은 정적인 부등식 하나예요.</p>
+
+  <div class="callout"><code>max.poll.records × 레코드당 처리시간 &gt; max.poll.interval.ms</code><br>이게 참이면 <strong>매 배치마다, 확정적으로</strong> 쫓겨납니다. 부하가 낮아도, 컨슈머가 한 대여도 그렇습니다. 부등식이 거짓이 되기 전까지 절대 스스로 빠져나오지 못합니다.</div>
+
+  <p>그래서 <a href="/retrystorm/">14번</a>의 메타스터블과 다릅니다. 14번은 부하를 걷으면 임계 아래로 내려갈 수 있었어요. 여기서는 <strong>부하를 0으로 만들어도 배치 하나만 들어오면 다시 쫓겨납니다.</strong> 나가는 문은 설정값에만 있습니다.</p>
+
+  <h2>하트비트는 정상인데 그룹에서 빠진다</h2>
+
+  <p>여기가 가장 헷갈리는 지점입니다. 컨슈머의 생존 판정은 <strong>두 갈래</strong>로 돌아갑니다.</p>
+
+  <table class="keytable">
+    <tr><th>무엇이 재나</th><th>누가 보내나</th><th>긴 처리에 걸리나</th></tr>
+    <tr><td><code>session.timeout.ms</code> (기본 45초)</td><td><strong>백그라운드 스레드</strong>가 <code>heartbeat.interval.ms</code>(기본 3초)마다 보낸다</td><td><strong>아니오.</strong> 처리가 아무리 길어도 하트비트는 정상으로 나간다</td></tr>
+    <tr><td><code>max.poll.interval.ms</code> (기본 5분)</td><td>애플리케이션 스레드가 <code>poll()</code> 을 호출하는 것 자체</td><td><strong>예.</strong> 여기 걸린다</td></tr>
+  </table>
+
+  <p>그래서 로그에는 "컨슈머가 살아 있는데 그룹에서 빠졌다"는 모순처럼 보이는 상황이 남습니다. 하트비트를 담당하는 스레드는 멀쩡하고, <code>poll()</code> 로 돌아오지 못한 것만 문제니까요. <strong><code>session.timeout.ms</code> 를 올리는 것은 이 문제에 아무 효과가 없습니다.</strong></p>
+
+  <h2>모델링하지 않은 것</h2>
+
+  <p>이 페이지는 메커니즘에서 계산한 것이고, 아래는 다루지 않았습니다.</p>
+
+  <table class="keytable">
+    <tr><th>무엇</th><th>왜 빼뒀나</th></tr>
+    <tr><td>KIP-848 새 그룹 프로토콜</td><td>리밸런싱을 브로커가 주도해 stop-the-world 가 사라집니다. 이 페이지의 <em>부등식</em>은 그대로 남지만 <em>D 의 폭발 반경</em>은 또 달라집니다 — 쓰는 버전의 문서를 보세요</td></tr>
+    <tr><td>파티션 편중</td><td>한 파티션만 무거운 경우를 균등하다고 가정했습니다. 실제로는 그 파티션을 잡은 컨슈머만 쫓겨나고, 그때가 cooperative 가 가장 값을 하는 자리입니다</td></tr>
+    <tr><td>처리 시간의 분포</td><td>레코드당 처리시간을 상수로 뒀습니다. 꼬리가 긴 분포라면 부등식이 <em>가끔</em> 참이 되어 간헐적으로 쫓겨납니다 — 훨씬 찾기 어려운 모양입니다</td></tr>
+    <tr><td>재처리로 늘어나는 총량</td><td>커밋 안 된 배치가 다시 처리되는 비용을 낭비 미터로만 셌고, 그것이 lag 를 더 밀어올리는 2차 효과는 넣지 않았습니다</td></tr>
+  </table>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>먼저 볼 것</td><td><strong>배치 하나를 처리하는 데 걸리는 시간의 p99 를 재세요.</strong> 그 값과 <code>max.poll.interval.ms</code> 를 같은 그래프에 올리면 이 페이지의 부등식이 그대로 보입니다. 두 선이 만나면 그 순간부터 루프입니다</td></tr>
+    <tr><td>고칠 순서</td><td>① <code>max.poll.records</code> 를 줄인다 ② 배치 안의 느린 작업(외부 API·DB 쓰기)을 빼내거나 병렬화한다 ③ 그래도 안 되면 <code>max.poll.interval.ms</code> 를 올린다. <strong>③을 먼저 하면 장애 감지가 그만큼 늦어집니다</strong></td></tr>
+    <tr><td>커밋 전략</td><td>배치 끝에만 커밋하면 쫓겨날 때 전부 날아갑니다. 쪼개면 건지지만 <strong>부등식은 안 고쳐집니다</strong> — 응급처치로만 쓰세요</td></tr>
+    <tr><td>배정 전략</td><td><code>cooperative-sticky</code> 를 쓰세요. 다만 <strong>고치는 것은 리밸런싱의 폭발 반경뿐</strong>입니다. eager 에서 옮길 때는 두 단계 롤링 업그레이드가 필요합니다</td></tr>
+    <tr><td>측정</td><td>리밸런싱 횟수만 보면 원인을 못 찾습니다. <strong>처리한 레코드 중 커밋된 비율</strong>을 재세요. 그 값이 낮으면서 CPU 가 바쁘면 이 페이지입니다</td></tr>
+    <tr><td>착각하기 쉬운 것</td><td><code>session.timeout.ms</code> 를 올려도 아무 효과가 없습니다. 하트비트는 이미 정상으로 나가고 있습니다</td></tr>
+  </table>
+
+  <p><a href="/connpool/">8번</a>이 <em>쿼리는 빠른데 시스템이 멈추는</em> 이야기였다면, 이 페이지는 <em>컨슈머는 바쁜데 오프셋이 안 움직이는</em> 이야기입니다. 둘 다 바쁨과 진행을 구별하지 못해서 생깁니다 — <strong>CPU 사용률은 진행률이 아닙니다.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/connpool/"><span class="no">08</span><span><span class="t">17밀리초 쿼리가 커넥션 풀을 말린다</span><span class="why">바쁨과 진행을 구별하지 못해서 생기는 같은 사고 — CPU 사용률은 진행률이 아닙니다.</span></span></a></li>
+      <li><a href="/retrystorm/"><span class="no">14</span><span><span class="t">부하는 걷혔는데 돌아오지 않는다</span><span class="why">이쪽은 부하를 걷으면 임계 아래로 내려옵니다. 리밸런싱 루프는 설정을 바꿔야 나옵니다.</span></span></a></li>
+      <li><a href="/keepalive/"><span class="no">07</span><span><span class="t">서버는 두 시간 동안 살아있다고 믿는다</span><span class="why">하트비트가 정상인데 죽은 것으로 처리되는 반대 경우.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/rebalance/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uSec:'초', uMin:'분', uRec:'건', uUnit:'대', uRps:'rec/s', uPm:'회/분',
+  mEnd:'배치 끝에만',
+  bBatch:'배치 처리시간 ($1×$2ms)', bLimit:'max.poll.interval.ms',
+  iOver:'$1 > $2 — $3 초과. 매 배치마다 확정적으로 그룹에서 빠진다.',
+  iOk:'$1 ≤ $2 — $3 여유. 이 부등식은 지켜진다.',
+  sDone:'커밋됨', sWaste:'버려짐', sRebal:'리밸런싱', sWork:'처리',
+  xEvict:'$1 — 쫓겨남', xSteady:'정상 처리', xMin:'1분',
+  mTput:'유효 처리량', mWaste:'낭비', mRatio:'커밋 비율',
+  mRebal:'리밸런싱', mBusy:'컨슈머 바쁨', mDetect:'장애 감지 지연',
+  cStrat:'배정 전략', cTput:'유효 처리량', cBusy:'컨슈머 바쁨',
+  sEager:'eager (전원 정지)', sCoop:'cooperative-sticky',
+  hOver:'부등식을 넘었다 — 매 배치마다 쫓겨난다',
+  hChurn:'부등식은 지켰다 — 남은 비용은 멤버 변동이다',
+  hOk:'부등식을 지키고 멤버 변동도 없다 — 정상 처리',
+  vZero:'<b>유효 처리량이 정확히 0 이다.</b> 마감 전까지 <b>$1건</b>을 처리하고 전부 버린다.<br>컨슈머는 <b>$2</b> 바쁘고 초당 <b>$3건</b>이 낭비된다 <span class="at">— 오프셋은 한 칸도 안 움직인다</span>',
+  vPartial:'<b>커밋 비율 $1 · 유효 처리량 $2 rec/s.</b> 중간 커밋으로 건지고 있다.<br><span class="at">그런데 부등식은 그대로다 — 리밸런싱이 분당 $3회 계속 돈다</span>',
+  vChurn:'<b>부등식은 지켰다. 남은 손실은 멤버 변동이다</b> — 시간의 <b>$1</b>이 정지다.<br>유효 처리량 <b>$2 rec/s</b> <span class="at">— 지금 전략은 $3 다</span>',
+  vOk:'<b>$1 ≤ $2 — 부등식이 지켜진다.</b> 유효 처리량 <b>$3 rec/s</b><br><span class="at">쫓겨나지 않고, 멈추는 시간도 없다</span>',
+  scene:[
+    'max.poll.records 500 에 레코드당 700ms 입니다. 배치 하나가 350초인데 max.poll.interval 은 300초예요. 부등식을 넘었습니다. 300초가 되는 순간 코디네이터가 이 컨슈머를 그룹에서 빼고, 컨슈머는 그것도 모른 채 428건까지 처리합니다. 그리고 그 428건은 커밋되지 않아요 — auto-commit 은 poll() 안에서 일어나는데 poll() 로 돌아가지 못했으니까요. 유효 처리량이 0에 가까운 게 아니라 정확히 0 이고, 컨슈머는 98.4% 바쁩니다.',
+    'lag 가 자라니 컨슈머를 12대로 늘렸습니다. 가장 자연스러운 반응이죠. 그런데 유효 처리량은 0.00 그대로입니다. 컨슈머 하나하나가 같은 부등식을 넘고 있으니, 12대가 각자 428건씩 처리하고 각자 버립니다. 늘어난 건 낭비뿐이에요 — 4.21 에서 16.84 rec/s 가 됐습니다.',
+    'max.poll.interval 을 1시간으로 올렸습니다. 부등식이 만족되니 루프가 멈추고 처리량이 4.29 rec/s 로 돌아왔어요. 가장 흔한 처방이고 가장 나쁜 처방입니다. 이 값은 "컨슈머가 죽었다고 판단하는 시간"이기도 하니까요 — 정말로 멈춘 컨슈머를 한 시간 동안 못 찾습니다. 감지 지연 미터를 보세요.',
+    'interval 을 5분으로 되돌리고 max.poll.records 를 100 으로 줄였습니다. 배치가 70초가 되어 부등식을 지킵니다. 처리량은 4.29 rec/s — 3번과 똑같아요. 그런데 감지 지연은 300초 그대로입니다. 같은 부등식의 다른 변수를 고쳤고, 대가가 다릅니다. 왼쪽을 줄이는 게 맞습니다.',
+    'max.poll.records 를 500 으로 되돌려 다시 부등식을 넘긴 뒤, 커밋을 10건마다 하도록 바꿨습니다. 커밋 비율이 0% 에서 98.1% 로 오르고 처리량이 4.13 rec/s 가 됐어요. 마감 전에 처리한 420건을 건진 겁니다. 그런데 리밸런싱은 여전히 분당 0.20회 돕니다 — 부등식은 안 고쳤으니까요. 응급처치입니다.',
+    'max.poll.records 를 100 으로 두어 부등식을 지키고, 이번엔 멤버 변동을 분당 6회로 넣었습니다. 배포가 잦거나 컨슈머 하나가 오락가락하는 상황이죠. eager 는 리밸런싱 한 번에 전원이 멈추니까 6회 × 5초 = 30초, 1분의 절반이 정지입니다. 처리량이 4.29 에서 2.14 로 반토막 났어요.',
+    'cooperative-sticky 로 바꿨습니다. 움직여야 하는 파티션만 회수하니 나머지는 계속 먹습니다. 3.57 rec/s 로 66.7% 회복했어요. 그런데 1번 설정으로 돌아가 보면 cooperative 도 eager 와 똑같이 0 입니다 — 전원이 쫓겨나면 움직여야 하는 파티션이 전부니까요. cooperative 가 고치는 것은 리밸런싱의 폭발 반경이고, 부등식은 아닙니다.'
+  ],
+};
+</script>
+<script src="/shared/rebalance-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "컨슈머는 쉬지 않고 도는데 lag 는 줄지 않는다",
+  "description": "컨슈머 CPU는 98% 바쁩니다. 그런데 커밋된 오프셋은 한 칸도 안 움직여요. max.poll.records × 레코드당 처리시간이 max.poll.interval.ms를 넘으면 매 배치마다 확정적으로 그룹에서 빠지고, 그 배치는 커밋되지 않습니다. 유효 처리량이 정확히 0입니다.",
+  "url": "https://lab.vermilion19.com/rebalance/",
+  "inLanguage": "ko",
+  "datePublished": "2026-08-13",
+  "dateModified": "2026-08-13",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "컨슈머는 쉬지 않고 도는데 lag 는 줄지 않는다"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+</body>
+</html>

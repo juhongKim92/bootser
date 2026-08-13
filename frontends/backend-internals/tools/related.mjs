@@ -16,7 +16,7 @@ export const NO = {
   mvcc: '01', gc: '02', hashring: '03', raft: '04', mqtt: '05', websocket: '06',
   keepalive: '07', connpool: '08', jobclaim: '09', retryloop: '10', backpressure: '11',
   correlation: '12', genericplan: '13', retrystorm: '14', writeskew: '15', stampede: '16',
-  timeout: '17', lockttl: '18', throughput: '19'
+  timeout: '17', lockttl: '18', throughput: '19', rebalance: '20'
 };
 
 /* slug → [{ to, ko, en }] */
@@ -91,7 +91,8 @@ export const RELATED = {
   retrystorm: [
     { to: 'backpressure', ko: '거부를 신호로 쓰면 애초에 이 상태에 들어가지 않습니다.', en: 'Use rejection as a signal and you never enter this state.' },
     { to: 'timeout', ko: '아무도 안 기다리는 그 일이 애초에 왜 시작되는가.', en: 'Why the work nobody is waiting for starts in the first place.' },
-    { to: 'connpool', ko: '용량이 왜 그렇게 작은지 — 리틀의 법칙.', en: 'Why the capacity is that small — Little’s law.' }
+    { to: 'connpool', ko: '용량이 왜 그렇게 작은지 — 리틀의 법칙.', en: 'Why the capacity is that small — Little’s law.' },
+    { to: 'rebalance', ko: '부하를 걷어도 안 나오는 루프 — 나가는 문이 설정값에만 있는 경우.', en: 'A loop that shedding load will not end — where the exit exists only in the configuration.' }
   ],
   writeskew: [
     { to: 'jobclaim', ko: '그래서 락을 어디에 걸어야 하는가.', en: 'So where does the lock have to go?' },
@@ -117,5 +118,10 @@ export const RELATED = {
     { to: 'connpool', ko: '같은 식을 커넥션 풀에서 만납니다 — 동시성 = 처리량 × 지연.', en: 'The same formula met at the connection pool — concurrency = throughput × latency.' },
     { to: 'mqtt', ko: 'Receive Maximum 이 그 식의 또 다른 단위입니다.', en: 'Receive Maximum is that formula in yet another unit.' },
     { to: 'timeout', ko: '같은 RTT 가 처리량도 정하고 타임아웃 예산도 먹습니다.', en: 'The same RTT sets your throughput and eats your timeout budget.' }
+  ],
+  rebalance: [
+    { to: 'connpool', ko: '바쁨과 진행을 구별하지 못해서 생기는 같은 사고 — CPU 사용률은 진행률이 아닙니다.', en: 'The same accident from confusing busy with progressing — CPU utilisation is not a progress bar.' },
+    { to: 'retrystorm', ko: '이쪽은 부하를 걷으면 임계 아래로 내려옵니다. 리밸런싱 루프는 설정을 바꿔야 나옵니다.', en: 'There, shedding load gets you under the threshold. This loop only opens in the configuration.' },
+    { to: 'keepalive', ko: '하트비트가 정상인데 죽은 것으로 처리되는 반대 경우.', en: 'The mirror case — the heartbeat is fine and it is treated as dead anyway.' }
   ]
 };

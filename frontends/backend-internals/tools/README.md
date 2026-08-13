@@ -17,13 +17,14 @@
 ```bash
 cd frontends/backend-internals
 
-node tools/check-pages.mjs         # 전 페이지 공통 검사 (40개 페이지)
-node tools/verify-timeout.mjs      # 17편 인용 수치 대조 (단언 98건)
-node tools/verify-lockttl.mjs      # 18편 인용 수치 대조 (단언 73건)
-node tools/verify-throughput.mjs   # 19편 인용 수치 대조 (단언 50건)
+node tools/check-pages.mjs         # 전 페이지 공통 검사
+node tools/verify-timeout.mjs      # 17편 인용 수치 대조
+node tools/verify-lockttl.mjs      # 18편
+node tools/verify-throughput.mjs   # 19편
+node tools/verify-rebalance.mjs    # 20편
 
-node tools/gen-related.mjs         # "이어서 볼 것" 블록을 38개 페이지에 박는다
-node tools/gen-jsonld.mjs          # JSON-LD(Article + BreadcrumbList)를 40개 페이지에 박는다
+node tools/gen-related.mjs         # "이어서 볼 것" 블록을 박는다
+node tools/gen-jsonld.mjs          # JSON-LD(Article + BreadcrumbList)를 박는다
 node tools/gen-related.mjs --check # 고치지 않고 최신인지만 본다 (두 생성기 모두 지원)
 ```
 
@@ -99,7 +100,7 @@ no-op 이다(`hashring` · `raft` 가 쓴다). 픽셀은 검사 대상이 아니
 
 ## "이어서 볼 것" 생성기
 
-`related.mjs` 가 링크 맵의 **유일한 출처**이고, `gen-related.mjs` 가 그것을 36개 페이지의
+`related.mjs` 가 링크 맵의 **유일한 출처**이고, `gen-related.mjs` 가 그것을 각 페이지의
 `</main>` 앞에 써 넣는다. 본문을 JS 로 주입하면 색인되지 않으므로 HTML 에 직접 박는다.
 
 - 블록은 `<!-- onward:start -->` / `<!-- onward:end -->` 표식 사이에 들어가므로

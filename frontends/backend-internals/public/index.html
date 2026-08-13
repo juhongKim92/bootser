@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Backend Internals — 백엔드 개념 인터랙티브 시각화</title>
-  <meta name="description" content="백엔드 내부 동작을 직접 조작하며 확인하는 시각화 19편. MVCC와 VACUUM, G1과 ZGC, 컨시스턴트 해싱, Raft, MQTT QoS, 커넥션 풀 고갈, 백프레셔, 캐시 스탬피드, 데드라인 전파, 분산 락 만료, BDP.">
+  <meta name="description" content="백엔드 내부 동작을 직접 조작하며 확인하는 시각화 20편. MVCC와 VACUUM, G1과 ZGC, 컨시스턴트 해싱, Raft, MQTT QoS, 커넥션 풀 고갈, 백프레셔, 캐시 스탬피드, 데드라인 전파, 분산 락 만료, BDP, Kafka 리밸런싱.">
   <link rel="canonical" href="https://lab.vermilion19.com/">
   <link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/">
   <link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/">
@@ -13,7 +13,7 @@
   <meta property="og:locale" content="ko_KR">
   <meta property="og:locale:alternate" content="en_US">
   <meta property="og:title" content="Backend Internals — 백엔드 개념 인터랙티브 시각화">
-  <meta property="og:description" content="손으로 만져보는 백엔드 내부 동작 19편 — 데이터베이스와 JVM, 분산 시스템, 그리고 실제 장애에서 나온 것들.">
+  <meta property="og:description" content="손으로 만져보는 백엔드 내부 동작 20편 — 데이터베이스와 JVM, 분산 시스템, 그리고 실제 장애에서 나온 것들.">
   <meta property="og:url" content="https://lab.vermilion19.com/">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -202,7 +202,7 @@
       <summary>
         <span class="arw" aria-hidden="true"></span>
         <h2>용량은 왜 무너지는가 <em>쿼리는 빠른데 시스템이 멈춘다</em></h2>
-        <span class="count">5편</span>
+        <span class="count">6편</span>
       </summary>
       <div class="glist">
 
@@ -247,6 +247,15 @@
         <span>
           <h2>대역폭은 남는데 처리량이 안 나온다</h2>
           <p>BDP 와 제곱근 법칙. 회선을 10배로 올려도 처리량은 1.0배입니다 — 대역폭은 식에 없습니다.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
+
+      <a class="card" href="/rebalance/">
+        <span class="no">20</span>
+        <span>
+          <h2>컨슈머는 쉬지 않고 도는데 lag 는 줄지 않는다</h2>
+          <p>Kafka 리밸런싱 루프. 유효 처리량이 정확히 0 인데 CPU 는 98% 바쁩니다. 원인은 부등식 하나입니다.</p>
         </span>
         <span class="tag live">공개</span>
       </a>
@@ -323,7 +332,7 @@
   "@context": "https://schema.org",
   "@type": "CollectionPage",
   "name": "Backend Internals",
-  "description": "백엔드 내부 동작을 직접 조작하며 확인하는 시각화 19편. MVCC와 VACUUM, G1과 ZGC, 컨시스턴트 해싱, Raft, MQTT QoS, 커넥션 풀 고갈, 백프레셔, 캐시 스탬피드, 데드라인 전파, 분산 락 만료, BDP.",
+  "description": "백엔드 내부 동작을 직접 조작하며 확인하는 시각화 20편. MVCC와 VACUUM, G1과 ZGC, 컨시스턴트 해싱, Raft, MQTT QoS, 커넥션 풀 고갈, 백프레셔, 캐시 스탬피드, 데드라인 전파, 분산 락 만료, BDP, Kafka 리밸런싱.",
   "url": "https://lab.vermilion19.com/",
   "inLanguage": "ko",
   "dateModified": "2026-08-13",

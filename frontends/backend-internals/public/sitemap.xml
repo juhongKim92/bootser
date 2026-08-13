@@ -213,6 +213,22 @@
   </url>
 
   <url>
+    <loc>https://lab.vermilion19.com/rebalance/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/rebalance/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/rebalance/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/rebalance/"/>
+    <lastmod>2026-08-13</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/rebalance/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/rebalance/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/rebalance/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/rebalance/"/>
+    <lastmod>2026-08-13</lastmod>
+  </url>
+
+  <url>
     <loc>https://lab.vermilion19.com/retryloop/</loc>
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/retryloop/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/retryloop/"/>
