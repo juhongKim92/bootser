@@ -10,9 +10,9 @@
     requestAnimationFrame · matchMedia · canvas 2d · classList · localStorage)
    최소 스텁으로 충분하고, 저장소에 의존성을 늘리지 않는 게 낫다.
 
-   한계 — 레이아웃이 없다. getBoundingClientRect 는 고정값을 돌려주므로
-   "화면에서 실제로 어떻게 보이나" 는 검증하지 못한다. 이 하니스가 보는 것은
-   모델의 수치와 렌더된 문자열이다.
+   검사 범위 — 모델의 수치와 렌더된 문자열이다. 레이아웃은 없고
+   (getBoundingClientRect 가 고정값) 캔버스도 no-op 이다. 픽셀은 대상이 아니니
+   깨지면 안 되는 것은 문자열로 판정할 수 있는 형태로 옮겨 담는다.
    ============================================================ */
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
