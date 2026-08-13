@@ -154,6 +154,9 @@
 - [ ] 인덱스 두 벌에 카드 추가 — 그룹은 `<details class="group">` 이므로
       `<h2 class="group">` 이 아니라 `<summary>` 안의 `<h2>` 를 앵커로 잡고,
       `<summary>` 의 `<span class="count">` 개수도 함께 올린다
+- [ ] **검증을 돌린다** — `node tools/check-pages.mjs` (전 페이지 구동 · i18n 키 누락 ·
+      태그 짝 · ko/en 키 집합 · 인덱스 카드 수)와, 수치를 인용했다면 `verify-<slug>.mjs`.
+      `inject-beacon.mjs` **앞에서** 돌린다. 자세한 것은 `tools/README.md`
 - [ ] `sitemap.xml` 은 **손으로 고치지 않는다** — `node gen-sitemap.mjs` 가
       각 페이지의 실제 마지막 커밋 날짜로 다시 만든다
 - [ ] 배포는 이 순서로 — ① `gen-sitemap.mjs`(트리가 깨끗할 때) ② `inject-beacon.mjs`
