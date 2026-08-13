@@ -281,15 +281,43 @@
   - 07 과 축이 겹치지 않는다 — 07 은 "안 끊긴 걸 못 알아챈다", 이쪽은 "정상 종료가 유실을 만든다"
   - 05 의 "홉 단위 보장" 구조와 같은 이야기라 링크가 자연히 붙는다
 
-  > **착수 시 반드시 외부 확인할 것.** 아래는 아직 1차 출처로 확인하지 않았다.
-  > - NLB 는 **L4 다.** 커넥션이 쪼개지는 이유는 "L7 이라서" 가 아니라 **"TLS 를 종단해서"** 다.
-  >   TCP 리스너만 쓰는 NLB 는 종단하지 않아 쪼개지지 않는다. 축을 "L7 프록시" 로 잡으면
-  >   원래 사건과 안 맞는다 — 페이지에서는 "TLS 를 종단하는 로드밸런서" 로 일반화한다
-  > - 프록시가 앞단 RST 를 받았을 때 뒷단으로 버퍼를 flush 하는지 끊는지 — 벤더 문서 확인
-  > - `server.shutdown=graceful` 은 in-flight 요청을 **지키려는** 설정이다. 문제는 미설정이거나
-  >   grace 기간이 끝난 경우다. 체크리스트에 쓸 때 방향을 뒤집지 말 것
-  > - ALB access log 에서 무엇이 이 사고의 신호인지 (필드명과 값) — 실제 로그 스펙 확인
-  > - RFC 1122 §4.2.2.13 원문 인용은 확인했다. RFC 9293(TCP 통합본)에서 해당 서술 위치도 확인할 것
+  > **1차 출처 확인 완료 (2026-08-13).** 페이지에 쓸 인용은 아래로 확정한다.
+  >
+  > - **RFC 9293 §3.6.1** (TCP 통합본) — *"If such a host issues a CLOSE call while received
+  >   data is still pending in the TCP connection, or if new data is received after CLOSE is
+  >   called, its TCP implementation SHOULD send a RST to show that data was lost (SHLD-3)."*
+  >   RFC 1122 §4.2.2.13 의 계승본이다. **SHOULD 이지 MUST 가 아니다** — 페이지에 그대로 적는다
+  > - **RST 를 받은 쪽이 수신 버퍼를 버리는 것은 RFC 에 명시돼 있지 않다.** §3.5.3 은
+  >   "aborts the connection and advises the user" 까지만 말하고 버퍼 처분을 규정하지 않는다.
+  >   실제 구현이 전부 그렇게 동작하는 것이고, **"구현 동작" 으로 써야 한다.** "규격이 그렇다"
+  >   로 쓰면 21편이 또 같은 종류의 오류가 된다
+  > - **FIN 이 EOF 로 올라가는 순서도 RFC 가 한 문장으로 규정하진 않는다.** §3.4 는 FIN 이
+  >   시퀀스 공간을 차지한다는 것만 말한다("the FIN is considered to occur after the last
+  >   actual data octet"). **"구멍 있는 EOF 가 없다" 는 순서 보장 서비스 모델의 귀결**로
+  >   서술한다 — 인용이 아니라 논증으로
+  > - **AWS NLB — 확인됐고 예상보다 강하다.** TLS 리스너는 *"uses a server certificate to
+  >   **terminate the front-end connection** and then to decrypt requests from clients before
+  >   sending them to the targets"*. 즉 **커넥션이 둘로 쪼개진다.** TCP 리스너는 *"passes the
+  >   request to the target as is, without decrypting it"* 라 쪼개지지 않는다.
+  >   → 축은 **"TLS 를 종단하는가"** 다. "L7 인가" 가 아니다. NLB 는 L4 인데도 쪼개진다
+  > - **nginx `proxy_half_close` 기본값은 `off`** 다 — *"Enables or disables closing each
+  >   direction of a TCP connection independently."* 기본이 off 라는 게 메커니즘 2 의 가장
+  >   구체적인 근거다. 한쪽이 닫으면 프록시가 양쪽을 닫는다
+  > - **`server.shutdown` 은 현재 기본값이 `graceful`** 이고 in-flight 요청을 **지키는** 쪽이다
+  >   (`spring.lifecycle.timeout-per-shutdown-phase` 가 유예 시간). 리뷰의 *"graceful 이
+  >   in-flight 를 RST 로 죽인다"* 는 **방향이 뒤집혀 있다.** 실제 위험은 `immediate` 로
+  >   두거나, 유예 시간이 플랫폼의 종료 유예(k8s `terminationGracePeriodSeconds`)보다 길어
+  >   먼저 SIGKILL 을 받는 경우다
+  > - 아직 못 확인한 것 — **프록시가 앞단 RST 를 받았을 때 뒷단 버퍼를 flush 하는지 끊는지**는
+  >   문서화돼 있지 않다. 페이지에서는 `proxy_half_close` 기본값을 근거로
+  >   **"구현에 달렸다"** 로 쓰고 단정하지 않는다. ALB access log 필드도 확정 못 했으니
+  >   "현장에서" 표에서는 `netstat -s` 의 `connections reset` 과 tcpdump 쪽만 쓴다
+  > - 덤 — NLB 는 *"TCP data packets … that are not new connections or part of an active TCP
+  >   connection are rejected with a TCP reset (RST)"*. `tcp.idle_timeout.seconds` 기본 350초.
+  >   유휴로 끊긴 커넥션에 뒤늦게 쓰면 RST 를 받는다 — 07 과 이어지는 재료다
+  > - TLS: **RFC 8446 §6.1** — *"Each party MUST send a close_notify alert before closing its
+  >   write side"*, 그리고 close_notify 를 요구하지 않는 구현은 절단 공격에 취약하다.
+  >   **§5.1** 최대 평문 레코드 2^14 = 16,384 바이트
 
   - **추천 1순위.** 정정 후에 오히려 더 좋아졌다 — 훅이 "흔한 오해를 정면으로 깬다" 가 됐다
 
