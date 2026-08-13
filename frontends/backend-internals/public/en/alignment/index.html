@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The fields add up and the size does not — alignment and padding</title>
+<meta name="description" content="The field sizes add up to 16 bytes and sizeof says 24. The compiler inserts padding between members and at the end, and once one field shifts every field after it shifts too. In an array the trailing padding accumulates — except with a single element the drift is exactly zero, so the test passes. Java's FFM inserts no padding for you.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/alignment/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/alignment/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/alignment/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/alignment/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="The fields add up and the size does not">
+<meta property="og:description" content="Once one field shifts, every field after it shifts. And with one array element the drift is zero.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/alignment/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The fields add up and the size does not">
+<meta name="twitter:description" content="Reorder the same fields and sizeof drops from 24 to 16.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/alignment-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/alignment/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>The fields add up and the size does not</h1>
+  <p class="lede">You wrote the parser from the header file. The field sizes add up to 16 bytes and the actual data is 24. Get one offset wrong and <strong>every field after it shifts.</strong> The resolution comes out nonsensical and so does the frame rate — not one field looking odd, but <strong>everything from the middle onward.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>field order</label>
+          <div class="seg" id="segLayout" role="group" aria-label="Struct field layout">
+            <button data-l="decl" aria-pressed="true">as declared</button>
+            <button data-l="big">largest first</button>
+            <button data-l="tail">trailing padding</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>alignment rule</label>
+          <div class="seg" id="segPack" role="group" aria-label="Alignment rule">
+            <button data-p="0" aria-pressed="true">ABI default</button>
+            <button data-p="1">pack(1)</button>
+            <button data-p="4">pack(4)</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sN">array elements</label>
+          <span class="v" id="vN">3</span>
+          <input type="range" id="sN" min="1" max="8" step="1" value="3" aria-label="How many elements are read as an array">
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">Byte ruler — the real layout on top, the naive sum below</span>
+      <div class="board">
+        <div class="rulerwrap"><div id="ruler"></div></div>
+        <table class="ftbl" id="ftbl"></table>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">Same fields, different order</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">previous step</button>
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Working the dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What changes</th></tr>
+    <tr><td>field order</td><td><strong>As declared</strong> and <strong>largest first</strong> are the same five fields in a different order. Compare the sizeof.</td></tr>
+    <tr><td>alignment rule</td><td><code>pack(1)</code> removes padding and <code>pack(4)</code> caps alignment at 4. <strong>The same fields give 24, 20 and 16.</strong></td></tr>
+    <tr><td>array elements</td><td>How many to read back to back. <strong>With one, the drift is zero</strong> — which is why this bug passes its test.</td></tr>
+  </table>
+
+  <p>The fields are <code>u8 type</code>, <code>u32 width</code>, <code>u16 shape</code>, <code>u8 flag</code>, <code>u64 ts</code>. On the ruler, red hatching is <strong>padding between fields</strong>, yellow hatching is <strong>padding at the end of the struct</strong>, and a red outline marks <strong>the fields that land wrong if you compute offsets by adding sizes</strong>.</p>
+
+  <h2>Try this</h2>
+
+  <div class="recipe">
+    <h4>1. As declared — the sum is 16 and sizeof is 24</h4>
+    <div class="seq">field order as declared · ABI default alignment
+sum of field sizes <em>16</em> · sizeof <em>24</em> · padding between fields <em>8</em>
+first misplaced field <em>width</em> — really at @4, naively @1</div>
+    <p class="why"><code>type</code> takes one byte, so the next free offset is 1. But a <code>u32 width</code> has to sit on a multiple of 4, so <strong>three bytes are thrown away and it goes to 4.</strong> Five more are thrown away before <code>ts</code>. A parser that adds sizes reads <code>width</code> at offset 1, and <strong>the four fields after it are all shifted.</strong> Look at the lower row of the ruler — once the two rows diverge they never meet again.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Put the large ones first — the same fields in 16 bytes</h4>
+    <div class="seq">field order as declared → largest first (fields unchanged)
+sizeof 24 → <em>16</em> · padding between fields 8 → <em>0</em>
+first misplaced field <em>none</em></div>
+    <p class="why">Not a single field changed — only the order, largest first. <strong>Padding goes to zero and eight bytes disappear.</strong> Put the big alignments first and the smaller fields that follow land on already-valid offsets. In this order adding sizes happens to give the right answer — <strong>happens to.</strong> Add one field and it breaks again.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. pack(1) — the padding goes away, and so does something else</h4>
+    <div class="seq">field order back to as declared · alignment pack(1)
+sizeof 24 → <em>16</em> · padding 8 → <em>0</em> · struct alignment 8 → <em>1</em></div>
+    <p class="why">Force the padding out and the sum matches sizeof. The parser gets easy. The price is <strong>unaligned access</strong> — depending on the architecture that is slower (x86), or a fault (some ARM configurations), or the compiler quietly splitting it into byte-wise reads. <strong>Taking the address of a packed member can be undefined behaviour.</strong> It is a common choice for protocol structs, but it is not free.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. pack(4) — a third size from the same fields</h4>
+    <div class="seq">alignment pack(1) → pack(4)
+sizeof <em>20</em> (ABI default 24 · pack(1) 16)
+padding between fields <em>4</em> · first misplaced <em>width</em></div>
+    <p class="why">Capping alignment at 4 shrinks the padding before <code>ts</code> from five bytes to one. <strong>The same field list has three different sizes depending on the alignment rule.</strong> And that rule is not in the header file — it is in a compile flag or a <code>#pragma pack</code>, and failing that it is the ABI default.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. A layout with trailing padding — sum 13, sizeof 24</h4>
+    <div class="seq">field order trailing padding (u32 width · u64 ts · u8 flag) · ABI default
+sum <em>13</em> · sizeof <em>24</em> · between fields <em>4</em> · <strong>trailing 7</strong></div>
+    <p class="why">The last field writes one byte at offset 16 and sizeof is 24, <strong>because the struct's alignment is 8 and the end is rounded up to a multiple of it.</strong> Those seven bytes are not a field and hold no value. <strong>And in an array they become the element stride.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Read it as an array — the first element is fine and the second is not</h4>
+    <div class="seq">array elements 1 → 3 (trailing-padding layout)
+n=1 drift <em>0</em> · n=2 drift <em>11</em> · n=3 drift <em>22</em> · n=8 drift <em>77</em></div>
+    <p class="why"><strong>This is the frightening part.</strong> With one element the drift is exactly zero — the first element starts at offset 0 and every field reads correctly. <strong>So a test built from a single sample passes.</strong> From the second element it slips 11 bytes each time, and at eight elements it is 77 bytes out. It breaks in production, on the day more than one arrives.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. Fix the layout and the array is safe too</h4>
+    <div class="seq">field order trailing padding → largest first (3 elements)
+sizeof 24 → <em>16</em> · trailing padding 7 → <em>0</em> · array drift 22 → <em>0</em></div>
+    <p class="why">Putting the large fields first drives the padding to zero and the array drift with it. <strong>But this only worked out for the current field list</strong> — add a field or change the order and it breaks again. A parser that computes offsets by hand <strong>will be wrong eventually.</strong></p>
+  </div>
+
+  <h2>Once one field shifts, every field after it shifts</h2>
+
+  <p>This is the property that makes the bug hard to find. The error is not local.</p>
+
+  <div class="callout">Read one field at the wrong offset and <strong>everything from that field to the end is wrong.</strong> The symptom is not "the resolution looks off", it is "everything from the middle on looks off" — and then <strong>you cannot work backwards from the symptom to the field that caused it.</strong></div>
+
+  <p>Which is why the way this actually got solved was <strong>to stop guessing, dump the received bytes to a file, and derive the offsets from real data.</strong> Rereading the header a few more times does not get you there.</p>
+
+  <h2>Layout is decided by the ABI, not by the language standard</h2>
+
+  <p>Here is why the header file cannot answer the question. Worth separating the kinds of evidence.</p>
+
+  <table class="keytable">
+    <tr><th>Claim</th><th>Kind of evidence</th></tr>
+    <tr><td>Padding may appear between members and at the end of a struct</td><td>The C standard <strong>permits</strong> it. It does not specify the rules</td></tr>
+    <tr><td>Each type aligns to its own size, a struct's alignment is the maximum of its members', and sizeof is a multiple of that</td><td><strong>ABI rules.</strong> True on x86-64 and AArch64; another ABI or another compiler configuration can differ. The lab models these rules</td></tr>
+    <tr><td>How bit-fields are laid out</td><td><strong>Far more implementation-defined.</strong> Bit order and storage-unit boundary handling vary by compiler, so this lab does not model bit-fields at all</td></tr>
+  </table>
+
+  <div class="callout">In other words, <strong>a header file alone cannot pin down the layout.</strong> The same declaration produces different byte arrangements across compiler, architecture and <code>pragma</code> combinations. Which is what makes real data the only usable evidence.</div>
+
+  <h2>Java will not insert the padding for you</h2>
+
+  <p>Porting a C struct to Java has one more trap in it, and the <code>java.lang.foreign</code> <code>MemoryLayout</code> documentation is explicit about it.</p>
+
+  <table class="keytable">
+    <tr><th>What</th><th>What the documentation says</th></tr>
+    <tr><td>automatic padding</td><td><strong>There is none.</strong> <em>"This factory does not automatically align element layouts, by inserting additional padding layout elements"</em> — so <code>structLayout(JAVA_SHORT, JAVA_INT)</code> fails with an <strong><code>IllegalArgumentException</code></strong></td></tr>
+    <tr><td>how to fix it</td><td>Write the padding yourself, as in <code>structLayout(JAVA_SHORT, MemoryLayout.paddingLayout(2), JAVA_INT)</code>, or lower the alignment with <code>JAVA_INT.withByteAlignment(2)</code></td></tr>
+    <tr><td>struct size</td><td><strong>It is the plain sum of member sizes</strong> — <em>"S1 + S2 + ... + Sn"</em>. Meaning <strong>no trailing padding is added for you</strong></td></tr>
+    <tr><td>natural alignment</td><td><em>"The natural alignment of a value layout whose size is N is N"</em> — the size is the alignment</td></tr>
+  </table>
+
+  <p>An alignment violation at least throws, which is the good case. <strong>The dangerous one is trailing padding</strong> — leave it out and nothing throws, the size just quietly gets smaller. Read an array with that layout and recipe 6 replays exactly. <strong>And it passes with one element.</strong></p>
+
+  <h2>When the size differs by version</h2>
+
+  <p>Sometimes the same struct has a different size depending on firmware version, because fields were added.</p>
+
+  <table class="keytable">
+    <tr><th>Approach</th><th>Outcome</th></tr>
+    <tr><td>Branch on a version field</td><td>If the version field is <strong>inside</strong> the struct, you need the layout to read it. That is circular</td></tr>
+    <tr><td>Identify the layout by the received length</td><td><strong>This works.</strong> When each version has a different total size, the length is the identifier. Set the minimum-length check against the smallest version</td></tr>
+    <tr><td>If two versions share a length</td><td>The method collapses. Then the protocol needs a version marker <strong>outside</strong> the struct, and that is something to negotiate</td></tr>
+  </table>
+
+  <h2>Out in the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>do this first</td><td><strong>Dump the received bytes to a file and print them as hex.</strong> It is faster than rereading the header. Find a value you already know — a resolution, say — and work the offsets back from it</td></tr>
+    <tr><td>golden-file tests</td><td>Pin a sample input and its expected output. <strong>With two or more elements</strong> — one element lets the trailing-padding bug through</td></tr>
+    <tr><td>never hand-write offsets</td><td>Make the offsets <strong>computed</strong> from a field list, with the alignment rule in the calculator. Offsets baked in as constants are all wrong the day a field is added</td></tr>
+    <tr><td>assert the total size</td><td>Put <code>assert sizeof == expected</code> in the parser. <strong>It is the cheapest single line that tells you the layout is wrong</strong></td></tr>
+    <tr><td>Java FFM</td><td>It inserts no padding. Alignment violations throw, but <strong>missing trailing padding is silent</strong> — add a test that compares your struct size against the C-side <code>sizeof</code></td></tr>
+    <tr><td>using pack</td><td>The parser gets simpler and you get unaligned access. Depending on the architecture that is slower or a fault, and <strong>taking the address of a packed member is dangerous</strong></td></tr>
+    <tr><td>byte order</td><td>This page only covers alignment. <strong>Endianness is a separate problem</strong> and the two together are more confusing — if the offsets are right and the values are strange, look at endianness</td></tr>
+  </table>
+
+  <p>If <a href="/en/tcpclose/">no. 21</a> was <em>what went out on the wire</em>, this page is <em>how to read the bytes that arrived</em>. Both end at "the documentation will not tell you; you have to measure" — no. 21 had implementation behaviour the RFC does not specify, and here <strong>the layout is decided by the ABI rather than the language standard.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/tcpclose/"><span class="no">21</span><span><span class="t">One close() call, and a RST goes out on the wire</span><span class="why">If no. 21 was what went out on the wire, this is how to read the bytes that arrived.</span></span></a></li>
+      <li><a href="/en/mqtt/"><span class="no">05</span><span><span class="t">What "exactly once" actually costs</span><span class="why">The same territory of fixed-layout packets — why a spec has to be verified by measurement.</span></span></a></li>
+      <li><a href="/en/correlation/"><span class="no">12</span><span><span class="t">When does matching responses by order go wrong</span><span class="why">The same shape of never recovering once it has slipped once.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">index</a> · <a href="/alignment/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uByte:'B', uElem:'', none:'none',
+  tPad:'padding between fields — bytes thrown away for alignment',
+  tTail:'padding at the end — becomes the element stride in an array',
+  rReal:'real layout (ABI rules) — sizeof $1',
+  rNaive:'computed by adding sizes — $1',
+  hField:'field', hSize:'size', hAlign:'align', hPad:'pad before',
+  hReal:'real offset', hNaive:'naive offset', hDrift:'drift',
+  mSum:'sum of sizes', mSize:'sizeof', mInner:'padding between', mTail:'trailing padding',
+  mAlign:'struct alignment', mFirst:'first misplaced', mDrift:'array drift',
+  cLayout:'field order', cSum:'sum', cSize:'sizeof', cInner:'between', cTail:'trailing',
+  n_decl:'as declared', n_big:'largest first', n_tail:'order with trailing padding',
+  vClean:'<b>The sum and sizeof agree ($1 bytes).</b> No padding, so adding sizes gives the right answer.<br><span class="at">It worked out for this field list — add one field and it breaks again</span>',
+  vSizeOnly:'<b>The sum is $1 and sizeof is $2.</b> Every offset is right and the size is not.<br><span class="at">Read it as an array and the element stride is wrong — raise the element count</span>',
+  vMis:'<b>$1 is the first field placed wrong</b> — really at $2, naively at $3.<br><b>All $4 fields after it</b> are shifted <span class="at">— the error is not local</span>',
+  vTail:'<b>$1 bytes of trailing padding accumulate in an array.</b> At $2 elements you are <b>$3 bytes</b> out.<br><span class="at">Drop the element count to 1 — the drift is exactly zero and the test passes</span>',
+  hOk:'the sum and sizeof agree — no padding in this order',
+  hMis:'$1 is placed wrong — everything after it shifts',
+  hTail:'$1 bytes of trailing padding — the element stride in an array',
+  scene:[
+    'Fields as declared. The sizes add up to 16 and sizeof is 24. type takes one byte so the next free offset is 1, but a u32 width has to sit on a multiple of 4, so three bytes are thrown away and it goes to 4. Five more before ts. The lower row of the ruler is the naive computation, and once it diverges at width it never meets the real layout again — the four fields after it are all shifted.',
+    'Not a single field changed, only the order, largest first. sizeof drops from 24 to 16 and the padding is gone. Put the big alignments first and the smaller fields that follow land on already-valid offsets. In this order adding sizes happens to work — happens to. Add one field and it breaks again.',
+    'Back to declared order, with pack(1). The padding is forced out so the sum matches sizeof, and the parser gets easy. The price is unaligned access: slower or a fault depending on the architecture, and taking the address of a packed member is dangerous. A common choice for protocol structs, but not a free one.',
+    'pack(4). sizeof is 20 — the ABI default was 24 and pack(1) was 16. The same field list has three different sizes depending on the alignment rule. And that rule is not in the header file: it is in a compile flag or a pragma, and failing that it is the ABI default.',
+    'A layout that produces trailing padding. The last field writes one byte at offset 16 and sizeof is 24, because the struct alignment is 8 and the end rounds up to a multiple of it. The sum is 13 against a sizeof of 24 — those seven bytes are not a field and hold no value.',
+    'Element count raised to 3. The array drift is 22 bytes. Now drop it to 1 — the drift is exactly zero, because the first element starts at offset 0 and every field reads correctly. That is why a test built from a single sample passes, and why it breaks in production on the day more than one arrives.',
+    'Field order switched to largest first. The padding goes to zero and so does the array drift. But this only worked out for the current field list — add a field or change the order and it breaks again. A parser that computes offsets by hand will be wrong eventually; make it compute them from a field list instead.'
+  ],
+};
+</script>
+<script src="/shared/alignment-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "The fields add up and the size does not",
+  "description": "The field sizes add up to 16 bytes and sizeof says 24. The compiler inserts padding between members and at the end, and once one field shifts every field after it shifts too. In an array the trailing padding accumulates — except with a single element the drift is exactly zero, so the test passes. Java's FFM inserts no padding for you.",
+  "url": "https://lab.vermilion19.com/en/alignment/",
+  "inLanguage": "en",
+  "datePublished": "2026-08-13",
+  "dateModified": "2026-08-13",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "The fields add up and the size does not"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+</body>
+</html>

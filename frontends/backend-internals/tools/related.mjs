@@ -17,7 +17,7 @@ export const NO = {
   keepalive: '07', connpool: '08', jobclaim: '09', retryloop: '10', backpressure: '11',
   correlation: '12', genericplan: '13', retrystorm: '14', writeskew: '15', stampede: '16',
   timeout: '17', lockttl: '18', throughput: '19', rebalance: '20', tcpclose: '21',
-  aggregate: '22'
+  aggregate: '22', alignment: '23'
 };
 
 /* slug → [{ to, ko, en }] */
@@ -84,7 +84,8 @@ export const RELATED = {
   correlation: [
     { to: 'timeout', ko: '타임아웃으로 포기한 요청의 응답이 늦게 오면, 그게 다음 요청의 짝이 됩니다.', en: 'When the answer to a timed-out request arrives late, it becomes the next request’s pair.' },
     { to: 'mqtt', ko: '패킷 식별자로 짝을 맞추는 같은 문제.', en: 'The same problem, matched by packet identifier.' },
-    { to: 'keepalive', ko: '응답이 아예 오지 않는 경우를 언제 알아차리는가.', en: 'When you notice the case where no answer comes at all.' }
+    { to: 'keepalive', ko: '응답이 아예 오지 않는 경우를 언제 알아차리는가.', en: 'When you notice the case where no answer comes at all.' },
+    { to: 'alignment', ko: '한 번 어긋난 뒤 스스로 복구하지 못하는 같은 성질이 바이트 레이아웃에도 있습니다.', en: 'The same never-self-correcting property, down at the byte layout.' }
   ],
   genericplan: [
     { to: 'stampede', ko: '평균으로 판단하고 꼬리에서 사고가 납니다 — 젠센 부등식이 옷을 바꿔 입었습니다.', en: 'Judge by the average and break in the tail — Jensen’s inequality in different clothes.' },
@@ -129,7 +130,13 @@ export const RELATED = {
     { to: 'genericplan', ko: '평균으로 판단하는 자리 — 젠센 부등식이 옵티마이저 쪽에서 나옵니다.', en: 'Judging by the average — Jensen’s inequality showing up on the optimiser side.' },
     { to: 'mvcc', ko: '두 경로가 서로 다른 스냅숏을 읽고 있으면 차이가 하나 더 생깁니다.', en: 'If the two paths read different snapshots you get one more source of difference.' }
   ],
+  alignment: [
+    { to: 'tcpclose', ko: '21 이 선로에 무엇이 나갔나였다면, 이쪽은 도착한 바이트를 어떻게 읽나입니다.', en: 'If no. 21 was what went out on the wire, this is how to read the bytes that arrived.' },
+    { to: 'mqtt', ko: '고정 레이아웃 패킷을 다루는 같은 자리 — 규격을 실측으로 검증해야 하는 이유.', en: 'The same territory of fixed-layout packets — why a spec has to be verified by measurement.' },
+    { to: 'correlation', ko: '한 번 어긋난 뒤 스스로 복구하지 못하는 구조가 여기도 있습니다.', en: 'The same shape of never recovering once it has slipped once.' }
+  ],
   tcpclose: [
+    { to: 'alignment', ko: '도착한 바이트를 읽는 쪽 — 오프셋을 손으로 더하면 그 뒤가 전부 밀립니다.', en: 'The reading side — add offsets by hand and everything after shifts.' },
     { to: 'keepalive', ko: '반대편 — 이쪽은 정상적으로 끊었는데 유실되고, 7 번은 끊겼는데 살아있다고 믿습니다.', en: 'The mirror — here a proper close loses data; in no. 7 a dead connection looks alive.' },
     { to: 'mqtt', ko: 'TCP 순서 보장이 홉 단위인 것이 QoS 가 홉 단위인 것과 같은 구조입니다.', en: 'TCP ordering being per hop is the same structure as QoS being per hop.' },
     { to: 'rebalance', ko: '"정상 종료" 처럼 "살아 있다" 도 계층마다 다른 뜻입니다 — 하트비트는 정상인데 그룹에서 빠집니다.', en: 'Like “clean shutdown”, “alive” also means different things per layer — heartbeats fine, dropped from the group.' }

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>필드를 다 더했는데 크기가 안 맞는다 — 정렬과 패딩</title>
+<meta name="description" content="필드 크기를 더하면 16바이트인데 sizeof는 24입니다. 컴파일러가 정렬을 맞추려고 사이와 끝에 패딩을 넣기 때문이고, 한 필드가 밀리면 그 뒤가 전부 밀립니다. 배열이면 꼬리 패딩이 누적되는데 원소 하나로는 오차가 0이라 테스트가 통과합니다. Java의 FFM은 패딩을 자동으로 넣지 않습니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/alignment/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/alignment/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/alignment/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/alignment/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="필드를 다 더했는데 크기가 안 맞는다">
+<meta property="og:description" content="한 필드가 밀리면 그 뒤가 전부 밀립니다. 그리고 배열 오차는 원소 하나로는 0입니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/alignment/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="필드를 다 더했는데 크기가 안 맞는다">
+<meta name="twitter:description" content="같은 필드를 순서만 바꾸면 sizeof가 24에서 16으로 줄어듭니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/alignment-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/alignment/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>필드를 다 더했는데 크기가 안 맞는다</h1>
+  <p class="lede">헤더 파일을 보고 파서를 썼습니다. 필드 크기를 더하니 16바이트인데 실제 데이터는 24바이트예요. 오프셋을 하나 틀리게 잡으면 <strong>그 뒤 필드가 전부 밀립니다.</strong> 해상도가 엉뚱하게 나오고 프레임레이트가 말이 안 되는데, 어느 한 필드만 이상한 게 아니라 <strong>중간부터 전부</strong> 이상합니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>필드 배치</label>
+          <div class="seg" id="segLayout" role="group" aria-label="구조체 필드 배치">
+            <button data-l="decl" aria-pressed="true">선언 순서</button>
+            <button data-l="big">큰 것부터</button>
+            <button data-l="tail">꼬리 패딩</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>정렬 규칙</label>
+          <div class="seg" id="segPack" role="group" aria-label="정렬 규칙">
+            <button data-p="0" aria-pressed="true">ABI 기본</button>
+            <button data-p="1">pack(1)</button>
+            <button data-p="4">pack(4)</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sN">배열 원소</label>
+          <span class="v" id="vN">3<small>개</small></span>
+          <input type="range" id="sN" min="1" max="8" step="1" value="3" aria-label="배열로 읽을 때의 원소 수">
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">바이트 자 — 위가 실제, 아래가 크기를 그냥 더한 계산</span>
+      <div class="board">
+        <div class="rulerwrap"><div id="ruler"></div></div>
+        <table class="ftbl" id="ftbl"></table>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">같은 필드, 배치만 바꾸면</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>필드 배치</td><td><strong>선언 순서</strong>와 <strong>큰 것부터</strong>는 같은 다섯 필드를 순서만 바꾼 것입니다. sizeof 를 비교해보세요.</td></tr>
+    <tr><td>정렬 규칙</td><td><code>pack(1)</code> 은 패딩을 없애고, <code>pack(4)</code> 는 정렬을 4로 깎습니다. <strong>같은 필드로 24 · 20 · 16 세 값이 나옵니다.</strong></td></tr>
+    <tr><td>배열 원소</td><td>연달아 읽을 원소 수. <strong>1개면 오차가 0 입니다</strong> — 그게 이 버그가 테스트를 통과하는 이유예요.</td></tr>
+  </table>
+
+  <p>필드는 <code>u8 type</code> · <code>u32 width</code> · <code>u16 shape</code> · <code>u8 flag</code> · <code>u64 ts</code> 다섯 개입니다. 자에서 붉은 빗금이 <strong>필드 사이 패딩</strong>, 노란 빗금이 <strong>구조체 끝 패딩</strong>이고, 붉은 테두리가 붙은 칸은 <strong>합으로 계산했을 때 어긋나는 필드</strong>입니다.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 선언 순서 그대로 — 합은 16, sizeof 는 24</h4>
+    <div class="seq">배치 선언 순서 · ABI 기본 정렬
+필드 크기 합 <em>16</em> · sizeof <em>24</em> · 내부 패딩 <em>8</em>
+첫 어긋남 <em>width</em> — 실제 @4, 합으로는 @1</div>
+    <p class="why"><code>type</code> 이 1바이트를 쓰고 나면 다음은 오프셋 1입니다. 그런데 <code>u32 width</code> 는 4의 배수에 놓여야 하니 <strong>3바이트를 버리고 4로 갑니다.</strong> <code>ts</code> 앞에서도 5바이트를 버려요. 합으로 계산한 파서는 <code>width</code> 를 오프셋 1에서 읽고, <strong>그 뒤 네 필드가 전부 밀립니다.</strong> 자의 아래 줄을 보세요 — 두 줄이 한 번 어긋나면 다시 만나지 않습니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 큰 것부터 놓는다 — 같은 필드로 sizeof 16</h4>
+    <div class="seq">배치 선언 순서 → 큰 것부터 (필드는 그대로)
+sizeof 24 → <em>16</em> · 내부 패딩 8 → <em>0</em>
+첫 어긋남 <em>없음</em></div>
+    <p class="why">필드를 하나도 안 바꿨습니다. 순서만 큰 것부터로 놓았어요. <strong>패딩이 0 이 되고 8바이트가 사라집니다.</strong> 큰 정렬을 먼저 놓으면 뒤따르는 작은 필드들이 이미 맞은 자리에 들어가니까요. 이 배치에서는 합으로 계산해도 우연히 맞습니다 — <strong>우연히요.</strong> 필드가 하나 추가되면 다시 깨집니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. pack(1) — 패딩이 사라진다, 대가와 함께</h4>
+    <div class="seq">배치 선언 순서로 되돌리고 · 정렬 pack(1)
+sizeof 24 → <em>16</em> · 내부 패딩 8 → <em>0</em> · 구조체 정렬 8 → <em>1</em></div>
+    <p class="why">패딩을 강제로 없애니 합과 sizeof 가 같아집니다. 파서가 편해지죠. 대가는 <strong>정렬되지 않은 접근</strong>입니다 — 아키텍처에 따라 느려지거나(x86) 예외가 나거나(일부 ARM 설정) 컴파일러가 사용자 모르게 바이트 단위로 쪼개 읽습니다. <strong>포인터를 넘기면 정의되지 않은 동작이 되는 경우도 있습니다.</strong> 프로토콜 구조체에는 흔한 선택이지만 공짜는 아닙니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. pack(4) — 같은 필드로 세 번째 값</h4>
+    <div class="seq">정렬 pack(1) → pack(4)
+sizeof <em>20</em> (ABI 기본 24 · pack(1) 16)
+내부 패딩 <em>4</em> · 첫 어긋남 <em>width</em></div>
+    <p class="why">정렬을 4로 깎으니 <code>ts</code> 앞 패딩이 5에서 1로 줄어듭니다. <strong>같은 필드 목록이 정렬 규칙에 따라 24 · 20 · 16 세 크기를 갖습니다.</strong> 헤더 파일에는 이 규칙이 안 적혀 있어요 — 컴파일 옵션이나 <code>#pragma pack</code> 에 있고, 그마저 없으면 ABI 기본값입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 꼬리 패딩이 생기는 배치 — 합 13, sizeof 24</h4>
+    <div class="seq">배치 꼬리 패딩 (u32 width · u64 ts · u8 flag) · ABI 기본
+합 <em>13</em> · sizeof <em>24</em> · 내부 패딩 <em>4</em> · <strong>꼬리 패딩 7</strong></div>
+    <p class="why">마지막 필드가 오프셋 16에서 1바이트를 쓰고 끝나는데 sizeof 는 24 입니다. <strong>구조체 정렬이 8 이라 끝을 8의 배수로 맞추기 때문</strong>이에요. 이 7바이트는 아무 필드도 아니고 아무 값도 없습니다. 그런데 <strong>배열에서는 이게 원소 간격이 됩니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. 배열로 읽는다 — 첫 원소는 맞고 두 번째부터 틀린다</h4>
+    <div class="seq">배열 원소 1 → 3개 (꼬리 패딩 배치)
+n=1 오차 <em>0</em> · n=2 오차 <em>11</em> · n=3 오차 <em>22</em> · n=8 오차 <em>77</em></div>
+    <p class="why"><strong>여기가 가장 무섭습니다.</strong> 원소가 하나면 오차가 정확히 0 이에요 — 첫 원소는 오프셋 0에서 시작하고 마지막 필드까지 잘 읽힙니다. <strong>그래서 샘플 하나로 만든 테스트가 통과합니다.</strong> 두 번째 원소부터 11바이트씩 밀리고, 8개면 77바이트가 밀립니다. 운영에서 데이터가 여러 개 오는 날 터지는 거죠.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. 배치를 고치면 배열도 안전해진다</h4>
+    <div class="seq">배치 꼬리 패딩 → 큰 것부터 (원소 3개 유지)
+sizeof 24 → <em>16</em> · 꼬리 패딩 7 → <em>0</em> · 배열 오차 22 → <em>0</em></div>
+    <p class="why">큰 필드를 먼저 놓아 패딩이 0 이 되니 배열 오차도 사라집니다. <strong>다만 이건 "지금 필드 목록에서" 우연히 맞은 것</strong>입니다 — 필드가 추가되거나 순서가 바뀌면 다시 깨집니다. 오프셋을 손으로 계산하는 파서는 <strong>언젠가 반드시 틀립니다.</strong></p>
+  </div>
+
+  <h2>한 필드가 밀리면 그 뒤가 전부 밀린다</h2>
+
+  <p>이게 이 버그를 찾기 어렵게 만드는 성질입니다. 오류가 국소적이지 않아요.</p>
+
+  <div class="callout">필드 하나를 잘못 읽으면 <strong>그 필드부터 끝까지 전부 어긋납니다.</strong> 증상은 "해상도가 이상하다"가 아니라 "중간부터 전부 이상하다"이고, 그러면 <strong>어느 필드가 원인인지 증상에서 역추적할 수 없습니다.</strong></div>
+
+  <p>그래서 실제로 이 문제를 푼 방법은 <strong>추측을 포기하고 수신 바이트를 파일로 덤프한 다음, 실측 데이터에서 오프셋을 역산하는 것</strong>이었습니다. 헤더 파일을 몇 번 더 읽어서 나오는 게 아닙니다.</p>
+
+  <h2>레이아웃은 언어 표준이 아니라 ABI 가 정한다</h2>
+
+  <p>여기가 헤더 파일을 봐도 답이 안 나오는 이유입니다. 근거의 성격을 구별해 적어두겠습니다.</p>
+
+  <table class="keytable">
+    <tr><th>주장</th><th>근거의 성격</th></tr>
+    <tr><td>구조체 멤버 사이와 끝에 패딩이 들어갈 수 있다</td><td>C 표준이 <strong>허용</strong>합니다. 다만 규칙은 정하지 않습니다</td></tr>
+    <tr><td>각 타입은 자기 크기에 정렬되고, 구조체 정렬은 멤버 정렬의 최대값이며, sizeof 는 그 배수다</td><td><strong>ABI 규칙입니다.</strong> x86-64 · AArch64 에서 그렇고, 다른 ABI 나 다른 컴파일러 설정에서는 다를 수 있습니다. 실험대는 이 규칙을 모델로 씁니다</td></tr>
+    <tr><td>비트필드의 배치</td><td><strong>훨씬 더 구현 정의적입니다.</strong> 비트 순서와 저장 단위 경계 처리가 컴파일러마다 달라, 이 실험대는 비트필드를 다루지 않습니다</td></tr>
+  </table>
+
+  <div class="callout">즉 <strong>"헤더 파일만으로는 레이아웃을 확정할 수 없습니다."</strong> 같은 선언이 컴파일러 · 아키텍처 · <code>pragma</code> 조합에 따라 다른 바이트 배치를 만듭니다. 그래서 실측 데이터가 유일한 근거가 됩니다.</div>
+
+  <h2>Java 는 패딩을 자동으로 넣어주지 않는다</h2>
+
+  <p>C 구조체를 Java 로 옮겨 적을 때 함정이 하나 더 있습니다. <code>java.lang.foreign</code> 의 <code>MemoryLayout</code> 문서에 명시돼 있어요.</p>
+
+  <table class="keytable">
+    <tr><th>무엇</th><th>문서가 말하는 것</th></tr>
+    <tr><td>자동 패딩</td><td><strong>넣지 않습니다.</strong> <em>"This factory does not automatically align element layouts, by inserting additional padding layout elements"</em> — 그래서 <code>structLayout(JAVA_SHORT, JAVA_INT)</code> 은 <strong><code>IllegalArgumentException</code></strong> 으로 실패합니다</td></tr>
+    <tr><td>고치는 방법</td><td><code>structLayout(JAVA_SHORT, MemoryLayout.paddingLayout(2), JAVA_INT)</code> 처럼 <strong>패딩을 손으로 써 넣거나</strong>, <code>JAVA_INT.withByteAlignment(2)</code> 로 정렬을 낮춥니다</td></tr>
+    <tr><td>구조체 크기</td><td><strong>멤버 크기의 단순 합입니다</strong> — <em>"S1 + S2 + ... + Sn"</em>. 즉 <strong>꼬리 패딩이 자동으로 안 붙습니다</strong></td></tr>
+    <tr><td>자연 정렬</td><td><em>"The natural alignment of a value layout whose size is N is N"</em> — 크기가 곧 정렬입니다</td></tr>
+  </table>
+
+  <p>정렬 위반은 예외로 잡히니 그나마 낫습니다. <strong>정말 위험한 건 꼬리 패딩입니다</strong> — 안 써도 예외가 안 나고, 크기가 조용히 작아집니다. 그 레이아웃으로 배열을 읽으면 6번 상황이 그대로 재현됩니다. <strong>원소 하나로는 통과하고요.</strong></p>
+
+  <h2>버전마다 크기가 다르면</h2>
+
+  <p>같은 구조체가 펌웨어 버전에 따라 크기가 다른 경우가 있습니다. 필드가 추가되면 그렇게 됩니다.</p>
+
+  <table class="keytable">
+    <tr><th>접근</th><th>결과</th></tr>
+    <tr><td>버전 필드를 보고 분기한다</td><td>버전 필드가 <strong>구조체 안에</strong> 있으면 그걸 읽으려고 이미 레이아웃을 알아야 합니다. 순환입니다</td></tr>
+    <tr><td>수신 길이로 레이아웃을 판별한다</td><td><strong>동작합니다.</strong> 버전별 전체 크기가 다르면 길이가 곧 식별자입니다. 최소 길이 검증도 가장 작은 버전 기준으로 맞춥니다</td></tr>
+    <tr><td>길이가 같은 두 버전이 있다면</td><td>이 방법이 무너집니다. 그때는 프로토콜에 <strong>바깥쪽</strong> 버전 표시가 필요하고, 그건 협의 사항입니다</td></tr>
+  </table>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>먼저 할 것</td><td><strong>수신 바이트를 파일로 덤프하고 헥스로 찍으세요.</strong> 헤더 파일을 다시 읽는 것보다 빠릅니다. 알려진 값(해상도 같은 것)을 찾아 오프셋을 역산합니다</td></tr>
+    <tr><td>골든 파일 테스트</td><td>샘플 입력과 기대 결과를 고정해 두세요. <strong>단, 원소를 두 개 이상 넣으세요</strong> — 하나로는 꼬리 패딩 버그가 통과합니다</td></tr>
+    <tr><td>오프셋을 손으로 안 쓴다</td><td>필드 목록에서 오프셋을 <strong>계산하게</strong> 만들고, 그 계산기에 정렬 규칙을 넣습니다. 상수로 박아둔 오프셋은 필드가 추가되는 날 전부 틀립니다</td></tr>
+    <tr><td>전체 크기를 단언한다</td><td>파서에 <code>assert sizeof == 예상</code> 을 넣으세요. <strong>레이아웃이 틀렸다는 사실을 가장 값싸게 알려주는 한 줄</strong>입니다</td></tr>
+    <tr><td>Java FFM</td><td>패딩을 자동으로 안 넣습니다. 정렬 위반은 예외로 잡히지만 <strong>꼬리 패딩 누락은 조용합니다</strong> — 구조체 크기를 C 쪽 <code>sizeof</code> 와 대조하는 테스트를 넣으세요</td></tr>
+    <tr><td>pack 을 쓸 때</td><td>파서는 편해지지만 정렬되지 않은 접근이 생깁니다. 아키텍처에 따라 느려지거나 예외가 나고, <strong>packed 멤버의 주소를 넘기는 것은 위험합니다</strong></td></tr>
+    <tr><td>바이트 순서</td><td>이 페이지는 정렬만 다뤘습니다. <strong>엔디언은 별개 문제</strong>이고 둘이 겹치면 증상이 더 헷갈립니다 — 오프셋이 맞는데 값이 이상하면 엔디언을 보세요</td></tr>
+  </table>
+
+  <p><a href="/tcpclose/">21번</a>이 <em>선로에 무엇이 나갔나</em>였다면, 이 페이지는 <em>도착한 바이트를 어떻게 읽나</em>입니다. 둘 다 "문서를 봐도 안 나오고 실측해야 한다"로 끝나요 — 21번은 RFC 가 규정하지 않는 구현 동작이 있었고, 여기서는 <strong>레이아웃을 언어 표준이 아니라 ABI 가 정합니다.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/tcpclose/"><span class="no">21</span><span><span class="t">close() 한 줄인데 선로에는 RST 가 나간다</span><span class="why">21 이 선로에 무엇이 나갔나였다면, 이쪽은 도착한 바이트를 어떻게 읽나입니다.</span></span></a></li>
+      <li><a href="/mqtt/"><span class="no">05</span><span><span class="t">한 번만 전달한다는 약속의 값</span><span class="why">고정 레이아웃 패킷을 다루는 같은 자리 — 규격을 실측으로 검증해야 하는 이유.</span></span></a></li>
+      <li><a href="/correlation/"><span class="no">12</span><span><span class="t">응답을 순서로 맞추면 언제 어긋나는가</span><span class="why">한 번 어긋난 뒤 스스로 복구하지 못하는 구조가 여기도 있습니다.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/alignment/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uByte:'B', uElem:'개', none:'없음',
+  tPad:'필드 사이 패딩 — 정렬을 맞추려고 버린 바이트',
+  tTail:'구조체 끝 패딩 — 배열에서 원소 간격이 된다',
+  rReal:'실제 레이아웃 (ABI 규칙) — sizeof $1',
+  rNaive:'크기를 그냥 더한 계산 — $1',
+  hField:'필드', hSize:'크기', hAlign:'정렬', hPad:'앞 패딩',
+  hReal:'실제 오프셋', hNaive:'합 오프셋', hDrift:'어긋남',
+  mSum:'필드 크기 합', mSize:'sizeof', mInner:'내부 패딩', mTail:'꼬리 패딩',
+  mAlign:'구조체 정렬', mFirst:'첫 어긋남', mDrift:'배열 누적 오차',
+  cLayout:'배치', cSum:'크기 합', cSize:'sizeof', cInner:'내부 패딩', cTail:'꼬리 패딩',
+  n_decl:'선언 순서', n_big:'큰 것부터', n_tail:'꼬리 패딩이 생기는 순서',
+  vClean:'<b>합과 sizeof 가 같다 ($1 바이트).</b> 패딩이 없어 합으로 계산해도 맞는다.<br><span class="at">지금 필드 목록에서 우연히 맞은 것이다 — 필드가 하나 추가되면 다시 깨진다</span>',
+  vSizeOnly:'<b>합은 $1 인데 sizeof 는 $2 다.</b> 오프셋은 다 맞지만 크기가 다르다.<br><span class="at">배열로 읽으면 원소 간격이 어긋난다 — 원소 수를 올려 보라</span>',
+  vMis:'<b>$1 부터 어긋난다</b> — 실제 오프셋 $2, 합으로는 $3.<br>그 뒤 <b>$4개 필드가 전부</b> 밀린다 <span class="at">— 오류가 국소적이지 않다</span>',
+  vTail:'<b>꼬리 패딩 $1 바이트가 배열에서 누적된다.</b> 원소 $2개면 <b>$3 바이트</b> 밀린다.<br><span class="at">원소를 1개로 내려 보라 — 오차가 정확히 0 이 되고 테스트가 통과한다</span>',
+  hOk:'합과 sizeof 가 같다 — 지금 배치에서는 패딩이 없다',
+  hMis:'$1 부터 어긋난다 — 그 뒤가 전부 밀린다',
+  hTail:'꼬리 패딩 $1 바이트 — 배열에서 원소 간격이 된다',
+  scene:[
+    '선언 순서 그대로입니다. 필드 크기를 더하면 16 인데 sizeof 는 24 예요. type 이 1바이트를 쓰고 나면 다음은 오프셋 1인데, u32 width 는 4의 배수에 놓여야 하니 3바이트를 버리고 4로 갑니다. ts 앞에서도 5바이트를 버려요. 자의 아래 줄이 합으로 계산한 위치인데, width 에서 한 번 어긋난 뒤로 다시 만나지 않습니다 — 그 뒤 네 필드가 전부 밀립니다.',
+    '필드를 하나도 안 바꾸고 순서만 큰 것부터로 놓았습니다. sizeof 가 24 에서 16 으로 줄고 패딩이 0 이 됐어요. 큰 정렬을 먼저 놓으면 뒤따르는 작은 필드들이 이미 맞은 자리에 들어가니까요. 이 배치에서는 합으로 계산해도 맞습니다 — 우연히요. 필드가 하나 추가되면 다시 깨집니다.',
+    '선언 순서로 되돌리고 pack(1) 을 켰습니다. 패딩이 강제로 사라져 합과 sizeof 가 같아집니다. 파서는 편해지죠. 대가는 정렬되지 않은 접근이에요 — 아키텍처에 따라 느려지거나 예외가 나고, packed 멤버의 주소를 넘기는 건 위험합니다. 프로토콜 구조체에 흔한 선택이지만 공짜는 아닙니다.',
+    'pack(4) 로 바꿨습니다. sizeof 가 20 이에요 — ABI 기본은 24, pack(1) 은 16 이었죠. 같은 필드 목록이 정렬 규칙에 따라 세 가지 크기를 갖습니다. 그리고 이 규칙은 헤더 파일에 안 적혀 있어요. 컴파일 옵션이나 pragma 에 있고, 그마저 없으면 ABI 기본값입니다.',
+    '꼬리 패딩이 생기는 배치입니다. 마지막 필드가 오프셋 16 에서 1바이트를 쓰고 끝나는데 sizeof 는 24 예요. 구조체 정렬이 8 이라 끝을 8의 배수로 맞추기 때문입니다. 합은 13 인데 sizeof 는 24 — 이 7바이트는 아무 필드도 아니고 아무 값도 없습니다.',
+    '원소를 3개로 올렸습니다. 배열 오차가 22 바이트예요. 그런데 원소를 1개로 내려 보세요 — 오차가 정확히 0 입니다. 첫 원소는 오프셋 0 에서 시작하고 마지막 필드까지 잘 읽히니까요. 그래서 샘플 하나로 만든 테스트가 통과합니다. 운영에서 데이터가 여러 개 오는 날 터지는 거죠.',
+    '배치를 큰 것부터로 바꿨습니다. 패딩이 0 이 되니 배열 오차도 사라져요. 다만 이건 지금 필드 목록에서 우연히 맞은 것입니다. 필드가 추가되거나 순서가 바뀌면 다시 깨져요. 오프셋을 손으로 계산하는 파서는 언젠가 반드시 틀립니다 — 필드 목록에서 계산하게 만들어야 합니다.'
+  ],
+};
+</script>
+<script src="/shared/alignment-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "필드를 다 더했는데 크기가 안 맞는다",
+  "description": "필드 크기를 더하면 16바이트인데 sizeof는 24입니다. 컴파일러가 정렬을 맞추려고 사이와 끝에 패딩을 넣기 때문이고, 한 필드가 밀리면 그 뒤가 전부 밀립니다. 배열이면 꼬리 패딩이 누적되는데 원소 하나로는 오차가 0이라 테스트가 통과합니다. Java의 FFM은 패딩을 자동으로 넣지 않습니다.",
+  "url": "https://lab.vermilion19.com/alignment/",
+  "inLanguage": "ko",
+  "datePublished": "2026-08-13",
+  "dateModified": "2026-08-13",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "필드를 다 더했는데 크기가 안 맞는다"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+</body>
+</html>
