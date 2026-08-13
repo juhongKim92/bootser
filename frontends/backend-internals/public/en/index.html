@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Backend Internals — interactive visualizations</title>
-  <meta name="description" content="Seventeen interactive labs you drive yourself: MVCC and VACUUM, G1 versus ZGC, consistent hashing, Raft, MQTT QoS, connection pool exhaustion, backpressure, cache stampede, deadline propagation.">
+  <meta name="description" content="Eighteen interactive labs you drive yourself: MVCC and VACUUM, G1 versus ZGC, consistent hashing, Raft, MQTT QoS, connection pool exhaustion, backpressure, cache stampede, deadline propagation, distributed lock expiry.">
   <link rel="canonical" href="https://lab.vermilion19.com/en/">
   <link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/">
   <link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/">
@@ -13,7 +13,7 @@
   <meta property="og:locale" content="en_US">
   <meta property="og:locale:alternate" content="ko_KR">
   <meta property="og:title" content="Backend Internals — interactive visualizations">
-  <meta property="og:description" content="Backend internals you can put your hands on — seventeen labs across databases, the JVM, distributed systems, and real production failures.">
+  <meta property="og:description" content="Backend internals you can put your hands on — eighteen labs across databases, the JVM, distributed systems, and real production failures.">
   <meta property="og:url" content="https://lab.vermilion19.com/en/">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -249,7 +249,7 @@
       <summary>
         <span class="arw" aria-hidden="true"></span>
         <h2>Failing quietly <em>no exception, no log — just a wrong result</em></h2>
-        <span class="count">4</span>
+        <span class="count">5</span>
       </summary>
       <div class="glist">
 
@@ -285,6 +285,15 @@
         <span>
           <h2>Both checked, and both passed</h2>
           <p>Isolation levels and write skew. Raise it to Repeatable Read and not one number changes — each writes only its own row.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
+
+      <a class="card" href="/en/lockttl/">
+        <span class="no">18</span>
+        <span>
+          <h2>You took the lock and two of you got in</h2>
+          <p>Lock expiry and fencing tokens. Turn fencing on and duplicate execution stays at 100% — fencing prevents something else.</p>
         </span>
         <span class="tag live">live</span>
       </a>

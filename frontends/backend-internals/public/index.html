@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Backend Internals — 백엔드 개념 인터랙티브 시각화</title>
-  <meta name="description" content="백엔드 내부 동작을 직접 조작하며 확인하는 시각화 17편. MVCC와 VACUUM, G1과 ZGC, 컨시스턴트 해싱, Raft, MQTT QoS, 커넥션 풀 고갈, 백프레셔, 캐시 스탬피드, 데드라인 전파.">
+  <meta name="description" content="백엔드 내부 동작을 직접 조작하며 확인하는 시각화 18편. MVCC와 VACUUM, G1과 ZGC, 컨시스턴트 해싱, Raft, MQTT QoS, 커넥션 풀 고갈, 백프레셔, 캐시 스탬피드, 데드라인 전파, 분산 락 만료.">
   <link rel="canonical" href="https://lab.vermilion19.com/">
   <link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/">
   <link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/">
@@ -13,7 +13,7 @@
   <meta property="og:locale" content="ko_KR">
   <meta property="og:locale:alternate" content="en_US">
   <meta property="og:title" content="Backend Internals — 백엔드 개념 인터랙티브 시각화">
-  <meta property="og:description" content="손으로 만져보는 백엔드 내부 동작 17편 — 데이터베이스와 JVM, 분산 시스템, 그리고 실제 장애에서 나온 것들.">
+  <meta property="og:description" content="손으로 만져보는 백엔드 내부 동작 18편 — 데이터베이스와 JVM, 분산 시스템, 그리고 실제 장애에서 나온 것들.">
   <meta property="og:url" content="https://lab.vermilion19.com/">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -249,7 +249,7 @@
       <summary>
         <span class="arw" aria-hidden="true"></span>
         <h2>조용히 틀리는 것들 <em>예외도 로그도 없이 결과만 틀린다</em></h2>
-        <span class="count">4편</span>
+        <span class="count">5편</span>
       </summary>
       <div class="glist">
 
@@ -285,6 +285,15 @@
         <span>
           <h2>둘 다 확인했고 둘 다 통과했다</h2>
           <p>격리 수준과 write skew. Repeatable Read 로 올려도 숫자가 하나도 안 바뀝니다 — 각자 자기 행만 쓰니까요.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
+
+      <a class="card" href="/lockttl/">
+        <span class="no">18</span>
+        <span>
+          <h2>락을 잡았는데 둘이 들어왔다</h2>
+          <p>락 만료와 펜싱 토큰. 펜싱을 켜도 중복 실행률은 100% 그대로입니다 — 펜싱이 막는 건 다른 것입니다.</p>
         </span>
         <span class="tag live">공개</span>
       </a>

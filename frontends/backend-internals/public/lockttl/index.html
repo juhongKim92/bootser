@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>락을 잡았는데 둘이 들어왔다 — 락 만료와 펜싱 토큰</title>
+<meta name="description" content="Redis 분산 락을 제대로 잡았습니다. 그런데 작업이 TTL보다 길어서 일하는 중에 만료되고, 다음 인스턴스가 같은 일을 시작합니다. 펜싱 토큰을 켜도 중복 실행률은 100.0% 그대로입니다 — 펜싱이 막는 것은 중복 실행이 아니라 낡은 쓰기가 최종 상태가 되는 것입니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/lockttl/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/lockttl/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/lockttl/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/lockttl/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="락을 잡았는데 둘이 들어왔다">
+<meta property="og:description" content="락은 상호배제를 보장하지 않습니다. 정확성은 자원 쪽에서 나옵니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/lockttl/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="락을 잡았는데 둘이 들어왔다">
+<meta name="twitter:description" content="펜싱 토큰을 켜도 중복 실행률은 100.0% 그대로. 펜싱이 막는 건 다른 것입니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/lockttl-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/lockttl/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>락을 잡았는데 둘이 들어왔다</h1>
+  <p class="lede">Redis 분산 락을 제대로 잡았습니다. 경합도 없었고 획득도 성공했어요. 그런데 <strong>작업이 TTL보다 길어서 일하는 중에 락이 만료됩니다.</strong> 다음 인스턴스가 같은 일을 시작하고, 먼저 잡았던 워커는 자기가 락을 잃은 줄 모르고 계속 일합니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>펜싱 토큰</label>
+          <div class="seg fence" id="segFence" role="group" aria-label="펜싱 토큰">
+            <button data-fence="0" aria-pressed="true">끔</button>
+            <button data-fence="1">켬</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>자동 갱신</label>
+          <div class="seg" id="segWd" role="group" aria-label="watchdog 자동 갱신">
+            <button data-wd="0" aria-pressed="true">끔</button>
+            <button data-wd="1">켬</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sL">락 TTL</label>
+          <span class="v" id="vL">3.0<small>초</small></span>
+          <input type="range" id="sL" min="1000" max="15000" step="500" value="3000" aria-label="락의 유효 시간">
+        </div>
+        <div class="dial">
+          <label for="sW">작업 시간</label>
+          <span class="v" id="vW">5.0<small>초</small></span>
+          <input type="range" id="sW" min="1000" max="12000" step="500" value="5000" aria-label="임계구역 안의 작업이 걸리는 시간">
+        </div>
+        <div class="dial">
+          <label for="sP">정지 길이</label>
+          <span class="v" id="vP">8.0<small>초</small></span>
+          <input type="range" id="sP" min="500" max="15000" step="500" value="8000" aria-label="프로세스가 멈춰 있는 시간">
+        </div>
+        <div class="dial">
+          <label for="sQ">정지 확률</label>
+          <span class="v" id="vQ">20<small>%</small></span>
+          <input type="range" id="sQ" min="0" max="100" step="10" value="20" aria-label="작업 중 정지가 일어날 확률">
+        </div>
+        <div class="dial">
+          <label for="sR">갱신 간격</label>
+          <span class="v" id="vR">1000<small>ms</small></span>
+          <input type="range" id="sR" min="100" max="2500" step="100" value="1000" aria-label="watchdog 이 락을 갱신하는 간격">
+        </div>
+        <div class="dial">
+          <label for="sN">인스턴스</label>
+          <span class="v" id="vN">2<small>대</small></span>
+          <input type="range" id="sN" min="1" max="5" step="1" value="2" aria-label="같은 작업을 노리는 인스턴스 수">
+        </div>
+        <div class="dial">
+          <label>&nbsp;</label>
+          <button id="btnRun">일시정지</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">작업 1건 — 누가 언제 일하고 무엇이 자원에 남나</span>
+      <div class="board">
+        <div id="board"></div>
+        <div class="tlx" id="boardX"></div>
+        <div class="legend">
+          <span><i class="h"></i>락 보유</span>
+          <span><i class="e"></i>만료</span>
+          <span><i class="z"></i>락을 잃고도 계속 일함</span>
+          <span><i class="p"></i>프로세스 정지</span>
+          <span><i class="w"></i>쓰기 반영</span>
+          <span><i class="r"></i>쓰기 거부</span>
+        </div>
+        <div class="final" id="final"></div>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">같은 설정에서 방어만 바꾸면</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+        <div class="speed" id="segSpeed" role="group" aria-label="재생 속도">
+          <button data-speed="0.5">0.5&times;</button>
+          <button data-speed="1" aria-pressed="true">1&times;</button>
+          <button data-speed="2">2&times;</button>
+        </div>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>펜싱 토큰</td><td>자원이 <strong>지금까지 본 최대 토큰보다 작은 토큰의 쓰기를 거부</strong>합니다. 중복 실행률 미터를 보면서 켜보세요.</td></tr>
+    <tr><td>자동 갱신</td><td>watchdog 이 갱신 간격마다 만료를 미룹니다. <strong>정지 중에는 갱신이 못 나갑니다.</strong></td></tr>
+    <tr><td>락 TTL · 작업 시간</td><td>작업이 TTL보다 길면 일하는 중에 만료됩니다. <strong>TTL을 작업 시간 위로 올려보세요</strong> — 그리고 죽은 워커 대기 미터를 보세요.</td></tr>
+    <tr><td>정지 길이 · 확률</td><td>GC 정지 · 스왑 · 스케줄링 지연. <strong>정지가 TTL을 넘는 순간</strong>이 이 페이지의 경계입니다.</td></tr>
+    <tr><td>갱신 간격</td><td>더 자주 갱신하면 견딜 수 있는 정지가 길어집니다 — <code>TTL − 갱신 간격</code>까지. <strong>그 위로는 못 갑니다.</strong></td></tr>
+    <tr><td>인스턴스</td><td>같은 작업을 노리는 대수. 락이 만료되면 다음 인스턴스가 잡습니다.</td></tr>
+  </table>
+
+  <p>시간축에서 초록 테두리가 <strong>락을 실제로 보유한 구간</strong>이고, 붉은 빗금이 <strong>락을 잃었는데도 계속 일하는 구간</strong>입니다. 회색 막대는 프로세스가 멈춰 있는 시간이에요. 맨 아래 자원 줄의 사각형이 쓰기이고, 숫자는 그 쓰기의 토큰입니다.</p>
+
+  <p>미터의 수치는 표본이 아닙니다. 정지는 있거나 없거나 둘 중 하나라 <strong>모든 경로를 확률 가중으로 전부 세어서</strong> 나온 정확한 기대값입니다.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 정지도 장애도 없다 — 그런데 둘이 들어온다</h4>
+    <div class="seq">락 TTL 3.0초 · 작업 5.0초 · 정지 확률 0% · 인스턴스 2대
+같은 일 실행 <em>2.00회</em> · 중복 실행률 <em>100.0%</em>
+락을 잃고도 일한 시간 <em>4000ms</em></div>
+    <p class="why">아무것도 고장나지 않았습니다. 정지도 없고 네트워크도 멀쩡해요. <strong>그냥 작업이 TTL보다 길 뿐입니다.</strong> 3초에 락이 만료되고, 두 번째 인스턴스가 그 순간 정당하게 락을 잡습니다. 이제 둘이 임계구역 안에 있어요. 첫 번째 워커는 <em>자기가 락을 잃었다는 사실을 알 방법이 없습니다</em> — 만료는 락 서버가 조용히 하는 일이니까요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 펜싱 토큰을 켠다 — 중복 실행률이 한 자리도 안 움직인다</h4>
+    <div class="seq">펜싱 토큰 끔 → 켬
+같은 일 실행 <em>2.00 → 2.00회</em> · 중복 실행률 <em>100.0% → 100.0%</em>
+거부된 쓰기 0.00 → <em>0.00건</em></div>
+    <p class="why">펜싱 토큰은 <strong>둘이 들어오는 것을 막지 않습니다.</strong> 막을 수가 없어요 — 이미 일이 시작된 뒤에 자원이 하는 일이니까요. 이 설정에서는 거부되는 쓰기조차 없습니다. 토큰 1이 5초에, 토큰 2가 8초에 쓰니 순서가 맞기 때문이에요. <strong>펜싱이 필요해지는 건 순서가 뒤집힐 때입니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 정지를 넣는다 — 결과가 틀린다</h4>
+    <div class="seq">정지 확률 0% → 20% · 정지 길이 8.0초 (펜싱 끔)
+낡은 쓰기가 최종 <em>0.0% → 16.0%</em>
+토큰 2가 8초에 쓰고, 토큰 1이 <em>13초에 덮어쓴다</em></div>
+    <p class="why">첫 워커가 8초 멈췄다 깨어납니다. 그 사이 두 번째 워커가 일을 끝내고 썼어요. 그런데 첫 워커는 <strong>깨어나서 자기 일을 마치고 그대로 씁니다.</strong> 낡은 값이 새 값을 덮습니다. 예외도 로그도 없어요 — <a href="/writeskew/">15번</a>과 같은 종류의 사고입니다. 결과만 틀립니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. 이제 펜싱 토큰을 켠다 — 이번엔 일한다</h4>
+    <div class="seq">펜싱 토큰 켬
+낡은 쓰기가 최종 <em>16.0% → 0.0%</em> · 거부된 쓰기 <em>0.16건</em>
+중복 실행률 <em>100.0% 그대로</em> · 같은 일 실행 <em>2.00 그대로</em></div>
+    <p class="why">자원이 토큰 2를 이미 봤으니 토큰 1의 쓰기를 거부합니다. 결과가 맞아졌어요. <strong>그런데 중복 실행은 한 자리도 안 줄었습니다.</strong> 여전히 같은 일을 두 번 했고, 여전히 둘이 임계구역에 있었어요. 펜싱이 산 것은 <em>정확성</em>이고, 산 적이 없는 것은 <em>상호배제</em>입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 자동 갱신을 켠다 — 중복이 사라진다, 정지가 짧은 한</h4>
+    <div class="seq">자동 갱신 켬 · 갱신 간격 1000ms · 정지 길이 4.0초
+중복 실행률 100.0% → <em>20.0%</em> · 같은 일 실행 2.00 → <em>1.20회</em>
+남은 20.0%는 <em>정지가 일어난 경우 전부</em></div>
+    <p class="why">watchdog 이 1초마다 만료를 밀어주니, <strong>작업이 TTL보다 길어도 락을 유지합니다.</strong> 1번의 문제가 사라졌어요. 남은 20.0%는 정지 확률과 정확히 같습니다 — <strong>정지 중에는 갱신 스레드도 멈춰 있으니까요.</strong> 갱신은 스레드 하나가 하는 일이고, GC 정지는 그 스레드도 세웁니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. 갱신을 10배 자주 한다 — 4초 정지에는 여전히 무력하다</h4>
+    <div class="seq">갱신 간격 1000 → 100ms (10배 자주)
+정지 2.5초: 20.0% → <em>0.0%</em>  (막았다)
+정지 4.0초: <em>20.0% → 20.0%</em>  (못 막았다)</div>
+    <p class="why">자주 갱신하면 견딜 수 있는 정지가 <code>TTL − 갱신 간격</code>까지 늘어납니다. 2.5초 정지는 이제 막아요. <strong>그런데 상한은 TTL 그 자체입니다.</strong> 갱신 간격을 0으로 만들어도 <code>TTL − 0 = TTL</code>이고, 4초 정지는 3초 TTL을 넘습니다. <a href="/gc/">2번</a>에서 힙 128GB의 G1이 538ms 멈추는 것을 봤는데, 스왑이나 풀 GC는 초 단위로 갑니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. TTL을 작업+정지 위로 올린다 — 중복 0%, 대신 9초</h4>
+    <div class="seq">락 TTL 3.0 → 9.0초 (작업 5초 + 정지 4초)
+중복 실행률 <em>0.0%</em> · 같은 일 실행 <em>1.00회</em>
+죽은 워커가 잡은 락을 기다리는 시간 <em>최대 9.0초</em></div>
+    <p class="why">드디어 중복이 0이 됐습니다. 대가는 <strong>인스턴스가 죽었을 때</strong> 드러납니다 — 죽은 프로세스는 락을 놓지 못하니, 다음 인스턴스는 만료까지 <strong>9초를 그냥 기다립니다.</strong> TTL은 두 가지 값을 동시에 정합니다. 안전 여유이면서 장애 복구 지연이에요.</p>
+  </div>
+
+  <h2>펜싱 토큰은 무엇을 막고 무엇을 못 막는가</h2>
+
+  <p>실험대의 비교표가 이 페이지의 요점입니다. 같은 설정에서 방어만 바꿔보면 <strong>펜싱 토큰이 움직이는 열은 하나뿐</strong>입니다.</p>
+
+  <table class="keytable">
+    <tr><th>방어</th><th>중복 실행</th><th>낡은 쓰기가 최종</th></tr>
+    <tr><td>없음</td><td>100.0%</td><td>16.0%</td></tr>
+    <tr><td>펜싱 토큰</td><td><strong>100.0% — 그대로</strong></td><td>0.0%</td></tr>
+    <tr><td>자동 갱신</td><td>20.0%</td><td>0.0%</td></tr>
+  </table>
+
+  <div class="callout"><strong>락은 상호배제를 보장하지 못합니다.</strong> 만료가 있는 락이 주는 것은 "대개 한 명만 돈다"는 <em>최적화</em>이고, 정확성은 <strong>자원 쪽에서</strong> 나옵니다. 자원이 참여하지 않으면 방법이 없습니다.</div>
+
+  <p>그래서 실무의 질문은 "어떤 락을 쓸까"가 아니라 <strong>"내 자원이 토큰을 검사할 수 있나"</strong>입니다. 대개 못 합니다. 조건부 업데이트(<code>WHERE version = ?</code>), 조건부 쓰기(S3 <code>If-Match</code>), 유니크 제약 정도가 쓸 수 있는 도구고, 그냥 <code>UPDATE ... SET</code> 이나 외부 API 호출은 검사할 자리가 없습니다.</p>
+
+  <p>검사할 자리가 없으면 남는 길은 <strong>멱등성</strong>입니다 — 같은 일을 두 번 해도 결과가 같게 만드는 것. 중복 실행을 막으려 애쓰는 대신 <em>중복 실행이 안전하게</em> 만드는 쪽으로 옮기는 겁니다. <a href="/mqtt/">5번</a>의 QoS 1이 정확히 같은 결론에 도달했어요. 한 번만 전달한다는 약속은 비싸고, 대개 중복을 허용하고 멱등하게 만드는 편이 싸다는 것.</p>
+
+  <h2>정지가 TTL을 넘는 순간</h2>
+
+  <p>낡은 쓰기가 최종 상태가 되는 조건은 정확히 하나입니다.</p>
+
+  <div class="callout"><strong>정지 &gt; TTL.</strong> 실험대에서 정지 3000ms는 0.0%, <strong>3100ms는 16.0%</strong>입니다. 절벽이에요. 정지한 워커가 대체자보다 늦게 깨어나면, 그 워커의 낡은 쓰기가 마지막에 도착합니다.</div>
+
+  <p>자동 갱신을 켜면 경계가 <code>TTL − 갱신 간격</code>으로 옮겨갑니다. 정지가 갱신 주기의 어디서 시작되는지에 따라 실제 여유는 <code>TTL − 갱신 간격</code>과 <code>TTL</code> 사이인데, <strong>안전성은 최악에서 정해지므로</strong> 실험대는 갱신 직전에 정지가 시작된 경우를 그립니다.</p>
+
+  <p>중요한 것은 <strong>어느 쪽이든 상한이 TTL이라는 점</strong>입니다. 그리고 TTL을 정지의 최악값 위로 올리려면 그 값이 곧 장애 복구 지연이 됩니다. <strong>좋은 값이 없습니다</strong> — 있는 것은 어느 쪽 대가를 낼지에 대한 선택뿐이에요.</p>
+
+  <h2>Redlock 은 이 문제를 건드리지 않는다</h2>
+
+  <p>락 서버를 여러 대로 늘리는 것(Redlock)은 <strong>락 저장소의 가용성</strong> 문제를 풉니다. 이 페이지의 사고는 저장소에서 나지 않았어요.</p>
+
+  <table class="keytable">
+    <tr><th>어디서 났나</th><th>Redlock 이 바꾸나</th></tr>
+    <tr><td>클라이언트가 멈췄다 (GC · 스왑)</td><td>아니오. 노드를 몇 대로 늘려도 멈춘 클라이언트는 갱신을 못 보낸다</td></tr>
+    <tr><td>작업이 TTL보다 길었다</td><td>아니오. TTL은 그대로다</td></tr>
+    <tr><td>자원이 토큰을 안 본다</td><td>아니오. 자원 쪽 이야기다</td></tr>
+    <tr><td>락 서버 한 대가 죽었다</td><td><strong>예.</strong> Redlock 이 실제로 푸는 문제는 이것이다</td></tr>
+  </table>
+
+  <p>실험대의 손잡이 중 락 서버가 몇 대인지를 정하는 것이 <strong>없는 이유</strong>가 이겁니다. 넣어도 어떤 미터도 움직이지 않아요.</p>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>Redisson</td><td><code>RLock.lock()</code> 은 기본적으로 <strong>watchdog 이 켜져 있습니다</strong>(<code>lockWatchdogTimeout</code> 기본 30초, 1/3 간격 갱신). 그런데 <code>lock(10, TimeUnit.SECONDS)</code> 처럼 <strong>만료를 명시하면 watchdog 이 꺼집니다</strong> — 이걸 모르고 쓰면 5번의 상황이 1번의 상황으로 돌아갑니다</td></tr>
+    <tr><td>ShedLock</td><td><code>lockAtMostFor</code> 가 이 페이지의 TTL 입니다. 문서가 "작업이 이보다 오래 걸릴 일이 없는 값으로" 라고 말하는 이유가 1번이에요. 기본 갱신은 없으니 <strong>작업 시간의 꼬리를 재서 정해야</strong> 합니다</td></tr>
+    <tr><td>자원이 토큰을 볼 수 있나</td><td>여기가 실제 갈림길입니다. <code>UPDATE ... WHERE version = ?</code> · S3 <code>If-Match</code> · 유니크 제약은 검사할 자리가 있고, 평범한 <code>UPDATE</code> 나 외부 API 호출은 없습니다. <strong>없으면 펜싱은 선택지가 아닙니다</strong></td></tr>
+    <tr><td>토큰은 무엇으로</td><td>단조 증가하면 됩니다. Redis <code>INCR</code>, DB 시퀀스, ZooKeeper <code>czxid</code>. <a href="/retryloop/">10번</a>에서 본 것처럼 <strong>시퀀스는 롤백해도 돌아오지 않으니</strong> 오히려 이 용도에 맞습니다</td></tr>
+    <tr><td>멱등성</td><td>펜싱이 불가능하면 이쪽입니다. 작업 키로 <strong>유니크 제약</strong>을 걸어 두 번째 실행이 조용히 실패하게 만드는 게 가장 값싼 형태예요</td></tr>
+    <tr><td>측정</td><td>락 획득 실패 수만 보면 이 문제는 절대 안 보입니다. <strong>작업 시간의 p99 를 TTL과 같은 그래프에 올려두세요.</strong> 두 선이 만나는 순간이 1번의 상황입니다</td></tr>
+    <tr><td>GC 정지</td><td><a href="/gc/">2번</a>을 보세요. 힙이 큰 G1 에서 538ms 는 실측입니다. 스왑이 끼거나 컨테이너가 CPU 스로틀되면 초 단위로 갑니다 — <strong>TTL 을 정할 때 이 값이 들어가야 합니다</strong></td></tr>
+  </table>
+
+  <p><a href="/jobclaim/">9번</a>이 <em>락을 어떻게 제대로 잡는가</em>였다면, 이 페이지는 <em>제대로 잡은 락이 일하는 중에 사라지면 무슨 일이 일어나는가</em>입니다. 9번의 네 방식 중 무엇을 골랐든 이 문제는 그대로 남습니다 — 만료가 있는 락은 전부 그러니까요.</p>
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/lockttl/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  pause:'일시정지', resume:'다시 시작',
+  uMs:'ms', uSec:'초', uTimes:'회', uUnit:'대',
+  lnWorker:'워커 $1', lnResource:'자원',
+  lbHeld:'토큰 $1 · 락 보유',
+  ttZombie:'락은 만료됐는데 계속 일하고 있다 — 본인은 모른다',
+  ttFroze:'프로세스가 $1 멈춰 있다 — 갱신도 못 나간다',
+  ttTaken:'토큰 $1 의 쓰기가 반영됐다',
+  ttRejected:'토큰 $1 의 쓰기가 거부됐다 — 자원이 더 큰 토큰을 이미 봤다',
+  fnRight:'<b>최종 상태는 토큰 $1 의 쓰기다</b> ($2 에 도착) <span class="at">— 마지막 획득자의 결과다</span>',
+  fnRejected:'거부된 쓰기 <b>$1건</b>.',
+  fnWrong:'<b>최종 상태는 토큰 $1 의 쓰기다 — 그런데 토큰 $2 가 더 최신이다.</b><br>$3 에 도착한 낡은 쓰기가 새 값을 덮었다 <span class="at">— 예외도 로그도 없다</span>',
+  mRan:'같은 일 실행', mOverlap:'중복 실행률', mStale:'낡은 쓰기가 최종',
+  mRejected:'거부된 쓰기', mZombie:'락 없이 일한 시간', mDeadWait:'죽은 워커 대기',
+  cGuard:'방어', cRan:'같은 일 실행', cOverlap:'중복 실행', cStale:'낡은 쓰기가 최종', cRejected:'거부된 쓰기',
+  g_none:'없음', g_f:'펜싱 토큰', g_w:'자동 갱신', g_wf:'갱신 + 펜싱',
+  vWrong:'<b>낡은 쓰기가 최종 상태가 되는 비율 $1%.</b> 정지 $2 가 TTL $3 보다 길다.<br><span class="at">정지한 워커가 대체자보다 늦게 깨어나 그대로 덮어쓴다 — 자원이 막아주지 않으면 결과가 틀린다</span>',
+  vFenced:'<b>펜싱이 결과는 지켰다. 중복 실행은 $1% 그대로다</b> (같은 일 $2회).<br><span class="at">펜싱을 끄면 낡은 쓰기가 최종이 되는 비율이 $3% 다 — 펜싱이 움직인 열은 그 하나뿐이다</span>',
+  vOverlap:'<b>중복 실행률 $1% · 같은 일을 $2회 한다.</b><br>락을 잃은 채 일한 시간이 <b>$3ms</b> <span class="at">— 본인은 락이 있다고 믿고 있다</span>',
+  vSafe:'<b>TTL $1 이 작업+정지 $2 를 덮는다 — 중복 실행이 없다.</b><br><span class="at">대가는 장애 시다. 죽은 워커가 잡은 락을 최대 $3 기다린다</span>',
+  evAcq:'워커 $1 이 락을 잡는다 (TTL $2 · 만료 $3)',
+  evNever:'갱신되는 동안 안 함',
+  evFroze:'워커 $1 이 $2 멈춘다 — 갱신도 못 나가고, 본인은 시간이 흐른 줄 모른다',
+  evLost:'워커 $1 의 락이 만료됐다 — 본인에게는 아무 통보도 가지 않는다',
+  evWrite:'워커 $1 이 자원에 쓴다 — 반영됐다',
+  evRejected:'워커 $1 이 자원에 쓴다 — 거부됐다 (더 큰 토큰을 이미 봤다)',
+  evEndRight:'최종 상태는 토큰 $1 — 맞다',
+  evEndWrong:'최종 상태는 토큰 $1 — 낡은 값이 이겼다',
+  scene:[
+    '락 TTL 3초, 작업 5초입니다. 정지 확률은 0% — 아무것도 고장나지 않았어요. 그런데 3초에 락이 만료되고 워커 1은 계속 일합니다. 붉은 빗금이 그 구간이에요. 그 순간 워커 2가 정당하게 락을 잡습니다. 이제 둘이 임계구역 안에 있습니다. 중복 실행률 100%, 그리고 워커 1은 자기가 락을 잃었다는 걸 알 방법이 없습니다 — 만료는 락 서버가 조용히 하는 일이니까요.',
+    '펜싱 토큰을 켰습니다. 중복 실행률을 보세요 — 100.0% 에서 100.0% 입니다. 한 자리도 안 움직였어요. 펜싱은 둘이 들어오는 걸 막지 않습니다. 막을 수가 없어요, 이미 일이 시작된 뒤에 자원이 하는 일이니까요. 여기서는 거부되는 쓰기조차 없습니다 — 토큰 1이 5초에, 토큰 2가 8초에 쓰니 순서가 맞기 때문이에요.',
+    '펜싱을 끄고 정지를 넣었습니다. 워커 1이 8초 멈췄다 깨어납니다. 그 사이 워커 2가 일을 끝내고 8초에 썼어요. 그런데 워커 1은 깨어나서 자기 일을 마치고 13초에 그대로 씁니다. 자원 줄을 보세요 — 낡은 값이 새 값을 덮었습니다. 예외도 로그도 없어요. 결과만 틀립니다.',
+    '이제 펜싱 토큰을 켭니다. 자원이 토큰 2를 이미 봤으니 토큰 1의 쓰기를 거부해요. 점선 사각형이 거부된 쓰기입니다. 결과가 맞아졌습니다. 그런데 중복 실행률은 여전히 100% 이고 같은 일을 여전히 두 번 했어요. 펜싱이 산 것은 정확성이고, 산 적이 없는 것은 상호배제입니다.',
+    '자동 갱신을 켜고 정지를 4초로 줄였습니다. watchdog 이 1초마다 만료를 밀어주니 작업이 TTL보다 길어도 락을 유지해요. 1번의 문제가 사라졌습니다. 그런데 중복 실행률이 0이 아니라 20% 입니다 — 정지 확률과 정확히 같아요. 정지 중에는 갱신 스레드도 멈춰 있으니까요. 갱신은 스레드 하나가 하는 일이고, GC 정지는 그 스레드도 세웁니다.',
+    '갱신 간격을 100ms 로 줄였습니다. 견딜 수 있는 정지가 TTL 빼기 갱신 간격까지 늘어나니 2.5초 정지는 이제 막아요. 그런데 4초 정지에서는 20.0% 그대로입니다. 상한이 TTL 그 자체이기 때문이에요 — 갱신 간격을 0으로 만들어도 TTL을 넘지 못합니다. 정지가 TTL보다 길면 무조건 잃습니다.',
+    'TTL을 9초로 올렸습니다 — 작업 5초에 정지 4초를 더한 값이에요. 자동 갱신을 껐는데도 중복 실행률이 0% 입니다. 드디어 상호배제가 성립했어요. 대가는 장애 때 드러납니다. 죽은 프로세스는 락을 놓지 못하니, 다음 인스턴스는 만료까지 9초를 그냥 기다립니다. TTL은 안전 여유이면서 동시에 장애 복구 지연입니다 — 좋은 값이 없고, 어느 쪽 대가를 낼지 고르는 것뿐이에요.'
+  ],
+};
+</script>
+<script src="/shared/lockttl-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>

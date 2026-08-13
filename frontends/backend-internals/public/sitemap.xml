@@ -149,6 +149,22 @@
   </url>
 
   <url>
+    <loc>https://lab.vermilion19.com/lockttl/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/lockttl/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/lockttl/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/lockttl/"/>
+    <lastmod>2026-08-13</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/lockttl/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/lockttl/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/lockttl/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/lockttl/"/>
+    <lastmod>2026-08-13</lastmod>
+  </url>
+
+  <url>
     <loc>https://lab.vermilion19.com/mqtt/</loc>
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/mqtt/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mqtt/"/>

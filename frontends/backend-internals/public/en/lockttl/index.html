@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>You took the lock and two of you got in — lock expiry and fencing tokens</title>
+<meta name="description" content="You acquired the Redis lock correctly. Then the work ran longer than the TTL, the lock expired mid-flight, and the next instance started the same job. Turning on fencing tokens leaves the duplicate-execution rate at 100.0% — what fencing prevents is not duplicate execution but a stale write becoming the final state.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/lockttl/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/lockttl/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/lockttl/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/lockttl/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="You took the lock and two of you got in">
+<meta property="og:description" content="A lock does not guarantee mutual exclusion. Correctness comes from the resource.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/lockttl/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="You took the lock and two of you got in">
+<meta name="twitter:description" content="Turn on fencing tokens and duplicate execution stays at 100.0%. Fencing prevents something else.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/lockttl-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/lockttl/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>You took the lock and two of you got in</h1>
+  <p class="lede">You acquired the Redis lock correctly. No contention, a clean acquisition. And then <strong>the work ran longer than the TTL, so the lock expired while you were still holding it.</strong> The next instance starts the same job, and the first worker keeps going with no idea that its lock is gone.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>Fencing token</label>
+          <div class="seg fence" id="segFence" role="group" aria-label="Fencing token">
+            <button data-fence="0" aria-pressed="true">off</button>
+            <button data-fence="1">on</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>Auto-renew</label>
+          <div class="seg" id="segWd" role="group" aria-label="Watchdog auto-renewal">
+            <button data-wd="0" aria-pressed="true">off</button>
+            <button data-wd="1">on</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sL">lock TTL</label>
+          <span class="v" id="vL">3.0<small>s</small></span>
+          <input type="range" id="sL" min="1000" max="15000" step="500" value="3000" aria-label="How long the lock stays valid">
+        </div>
+        <div class="dial">
+          <label for="sW">work time</label>
+          <span class="v" id="vW">5.0<small>s</small></span>
+          <input type="range" id="sW" min="1000" max="12000" step="500" value="5000" aria-label="How long the critical section takes">
+        </div>
+        <div class="dial">
+          <label for="sP">pause length</label>
+          <span class="v" id="vP">8.0<small>s</small></span>
+          <input type="range" id="sP" min="500" max="15000" step="500" value="8000" aria-label="How long the process is frozen">
+        </div>
+        <div class="dial">
+          <label for="sQ">pause chance</label>
+          <span class="v" id="vQ">20<small>%</small></span>
+          <input type="range" id="sQ" min="0" max="100" step="10" value="20" aria-label="Chance of a pause during the work">
+        </div>
+        <div class="dial">
+          <label for="sR">renew every</label>
+          <span class="v" id="vR">1000<small>ms</small></span>
+          <input type="range" id="sR" min="100" max="2500" step="100" value="1000" aria-label="How often the watchdog renews the lock">
+        </div>
+        <div class="dial">
+          <label for="sN">instances</label>
+          <span class="v" id="vN">2<small></small></span>
+          <input type="range" id="sN" min="1" max="5" step="1" value="2" aria-label="How many instances want the same job">
+        </div>
+        <div class="dial">
+          <label>&nbsp;</label>
+          <button id="btnRun">pause</button>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">One job — who works when, and what ends up in the resource</span>
+      <div class="board">
+        <div id="board"></div>
+        <div class="tlx" id="boardX"></div>
+        <div class="legend">
+          <span><i class="h"></i>holding the lock</span>
+          <span><i class="e"></i>expiry</span>
+          <span><i class="z"></i>working without the lock</span>
+          <span><i class="p"></i>process frozen</span>
+          <span><i class="w"></i>write accepted</span>
+          <span><i class="r"></i>write rejected</span>
+        </div>
+        <div class="final" id="final"></div>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">Same configuration, only the defence changes</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">previous step</button>
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+        <div class="speed" id="segSpeed" role="group" aria-label="Playback speed">
+          <button data-speed="0.5">0.5&times;</button>
+          <button data-speed="1" aria-pressed="true">1&times;</button>
+          <button data-speed="2">2&times;</button>
+        </div>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Working the dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What changes</th></tr>
+    <tr><td>fencing token</td><td>The resource <strong>rejects any write whose token is lower than the highest it has seen</strong>. Turn it on while watching the duplicate-execution meter.</td></tr>
+    <tr><td>auto-renew</td><td>A watchdog pushes the expiry out on every renewal interval. <strong>During a pause the renewal cannot go out.</strong></td></tr>
+    <tr><td>lock TTL · work time</td><td>If the work is longer than the TTL, the lock expires mid-flight. <strong>Push the TTL above the work time</strong> — and then look at the dead-worker wait meter.</td></tr>
+    <tr><td>pause length · chance</td><td>GC pauses, swap, scheduling delay. <strong>The moment the pause exceeds the TTL</strong> is the boundary this page is about.</td></tr>
+    <tr><td>renew every</td><td>Renewing more often extends the pause you can survive — up to <code>TTL − renewal interval</code>. <strong>Never past that.</strong></td></tr>
+    <tr><td>instances</td><td>How many instances want the same job. When the lock expires the next one takes it.</td></tr>
+  </table>
+
+  <p>On the timeline a green outline is <strong>the span where the lock is genuinely held</strong>, and red hatching is <strong>the span where the worker has lost the lock and keeps working anyway</strong>. The grey bar is the process being frozen. The squares on the resource row at the bottom are writes, and the number in each is that write's token.</p>
+
+  <p>The meters are not samples. A pause either happens or it does not, so every path is <strong>enumerated and probability-weighted</strong> — these are exact expectations.</p>
+
+  <h2>Try this</h2>
+
+  <div class="recipe">
+    <h4>1. Nothing froze, nothing failed — and two of them got in</h4>
+    <div class="seq">lock TTL 3.0s · work 5.0s · pause chance 0% · 2 instances
+same job executed <em>2.00×</em> · duplicate execution <em>100.0%</em>
+time spent working without the lock <em>4000ms</em></div>
+    <p class="why">Nothing broke. No pause, the network is fine. <strong>The work is simply longer than the TTL.</strong> The lock expires at 3s and the second instance legitimately takes it at that moment. Now two of them are inside the critical section. The first worker <em>has no way to find out that it lost the lock</em> — expiry is something the lock server does quietly.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Turn on fencing tokens — duplicate execution does not move one decimal</h4>
+    <div class="seq">fencing token off → on
+same job executed <em>2.00 → 2.00×</em> · duplicate execution <em>100.0% → 100.0%</em>
+writes rejected 0.00 → <em>0.00</em></div>
+    <p class="why">A fencing token <strong>does not stop two of them getting in.</strong> It cannot — it is something the resource does after the work has already started. In this configuration not even a write gets rejected: token 1 writes at 5s and token 2 at 8s, so the order is already right. <strong>Fencing starts to matter when the order inverts.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Add a pause — the result is now wrong</h4>
+    <div class="seq">pause chance 0% → 20% · pause length 8.0s (fencing off)
+stale write becomes final <em>0.0% → 16.0%</em>
+token 2 writes at 8s, and token 1 <em>overwrites it at 13s</em></div>
+    <p class="why">The first worker freezes for 8s and wakes up. Meanwhile the second worker finished and wrote. But the first worker <strong>wakes up, completes its work, and writes anyway.</strong> The stale value overwrites the fresh one. No exception, no log — the same species of accident as <a href="/en/writeskew/">no. 15</a>. Only the result is wrong.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Now turn on fencing tokens — this time it works</h4>
+    <div class="seq">fencing token on
+stale write becomes final <em>16.0% → 0.0%</em> · writes rejected <em>0.16</em>
+duplicate execution <em>still 100.0%</em> · same job <em>still 2.00×</em></div>
+    <p class="why">The resource has already seen token 2, so it rejects token 1's write. The result is correct again. <strong>And duplicate execution did not drop one decimal.</strong> The same job still ran twice, and two of them were still inside the critical section. What fencing bought is <em>correctness</em>; what it never bought is <em>mutual exclusion</em>.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Turn on auto-renew — duplicates go away, as long as the pause is short</h4>
+    <div class="seq">auto-renew on · renew every 1000ms · pause length 4.0s
+duplicate execution 100.0% → <em>20.0%</em> · same job 2.00 → <em>1.20×</em>
+the remaining 20.0% is <em>exactly the cases where a pause happened</em></div>
+    <p class="why">The watchdog pushes the expiry out every second, so <strong>the lock survives even though the work is longer than the TTL.</strong> Recipe 1's problem is gone. What remains is 20.0% — exactly the pause chance, because <strong>during a pause the renewal thread is frozen too.</strong> Renewal is something a thread does, and a GC pause stops that thread as well.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Renew ten times as often — still helpless against a 4-second pause</h4>
+    <div class="seq">renew every 1000 → 100ms (10× as often)
+2.5s pause: 20.0% → <em>0.0%</em>  (survived)
+4.0s pause: <em>20.0% → 20.0%</em>  (did not)</div>
+    <p class="why">Renewing more often stretches the survivable pause to <code>TTL − renewal interval</code>. A 2.5s pause is covered now. <strong>But the ceiling is the TTL itself.</strong> Drive the interval to zero and you get <code>TTL − 0 = TTL</code>, and a 4-second pause is longer than a 3-second TTL. <a href="/en/gc/">No. 2</a> measured G1 stopping for 538ms on a 128GB heap; swap or a full GC goes into whole seconds.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. Push the TTL above work + pause — 0% duplicates, and nine seconds</h4>
+    <div class="seq">lock TTL 3.0 → 9.0s (work 5s + pause 4s)
+duplicate execution <em>0.0%</em> · same job executed <em>1.00×</em>
+waiting on a dead worker's lock <em>up to 9.0s</em></div>
+    <p class="why">Duplicates are finally zero. The price shows up <strong>when an instance dies</strong> — a dead process cannot release its lock, so the next instance simply <strong>waits nine seconds</strong> for the expiry. A TTL sets two numbers at once: it is your safety margin and it is your failure-recovery delay.</p>
+  </div>
+
+  <h2>What a fencing token does and does not prevent</h2>
+
+  <p>The comparison table in the lab is the point of this page. Change only the defence, on the same configuration, and <strong>a fencing token moves exactly one column</strong>.</p>
+
+  <table class="keytable">
+    <tr><th>Defence</th><th>Duplicate execution</th><th>Stale write becomes final</th></tr>
+    <tr><td>none</td><td>100.0%</td><td>16.0%</td></tr>
+    <tr><td>fencing token</td><td><strong>100.0% — unchanged</strong></td><td>0.0%</td></tr>
+    <tr><td>auto-renew</td><td>20.0%</td><td>0.0%</td></tr>
+  </table>
+
+  <div class="callout"><strong>A lock does not guarantee mutual exclusion.</strong> What a lock with an expiry gives you is the <em>optimisation</em> that usually only one runs, and correctness comes <strong>from the resource</strong>. If the resource does not participate, there is nothing you can do.</div>
+
+  <p>So the real question is not "which lock should I use" but <strong>"can my resource check a token"</strong>. Usually it cannot. A conditional update (<code>WHERE version = ?</code>), a conditional write (S3 <code>If-Match</code>) and a unique constraint are the tools you have; a plain <code>UPDATE ... SET</code> or an outbound API call has nowhere to put the check.</p>
+
+  <p>With nowhere to put the check, what is left is <strong>idempotence</strong> — making the same job produce the same result when it runs twice. Instead of straining to prevent duplicate execution, you move to making <em>duplicate execution safe</em>. <a href="/en/mqtt/">No. 5</a> reached exactly the same conclusion about QoS 1: exactly-once delivery is expensive, and allowing duplicates and being idempotent is usually cheaper.</p>
+
+  <h2>The moment a pause exceeds the TTL</h2>
+
+  <p>There is exactly one condition under which a stale write becomes the final state.</p>
+
+  <div class="callout"><strong>pause &gt; TTL.</strong> In the lab a 3000ms pause gives 0.0% and a <strong>3100ms pause gives 16.0%</strong>. It is a cliff. If the frozen worker wakes up later than its replacement finished, its stale write arrives last.</div>
+
+  <p>With auto-renew on, the boundary moves to <code>TTL − renewal interval</code>. Where in the renewal cycle the pause begins decides whether the real margin is closer to <code>TTL − interval</code> or to <code>TTL</code>, and since <strong>safety is decided by the worst case</strong>, the lab draws the pause as starting just before a renewal.</p>
+
+  <p>What matters is that <strong>either way the ceiling is the TTL</strong>. And raising the TTL above the worst-case pause makes that same number your failure-recovery delay. <strong>There is no good value</strong> — there is only a choice about which price to pay.</p>
+
+  <h2>Redlock does not touch this problem</h2>
+
+  <p>Running the lock across several servers (Redlock) solves the <strong>availability of the lock store</strong>. Nothing on this page went wrong in the store.</p>
+
+  <table class="keytable">
+    <tr><th>Where it went wrong</th><th>Does Redlock change it?</th></tr>
+    <tr><td>the client froze (GC, swap)</td><td>No. However many nodes you add, a frozen client cannot send a renewal</td></tr>
+    <tr><td>the work outlasted the TTL</td><td>No. The TTL is unchanged</td></tr>
+    <tr><td>the resource does not look at tokens</td><td>No. That is the resource's side</td></tr>
+    <tr><td>one lock server died</td><td><strong>Yes.</strong> This is the problem Redlock actually solves</td></tr>
+  </table>
+
+  <p>Which is <strong>why there is no dial</strong> in the lab for the number of lock servers. Adding one would not move a single meter.</p>
+
+  <h2>Out in the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>Redisson</td><td><code>RLock.lock()</code> has the <strong>watchdog on by default</strong> (<code>lockWatchdogTimeout</code> defaults to 30s, renewed at a third of that). But <strong>naming an expiry turns the watchdog off</strong> — <code>lock(10, TimeUnit.SECONDS)</code> puts you back in recipe 1 from recipe 5, and it is easy not to know that</td></tr>
+    <tr><td>ShedLock</td><td><code>lockAtMostFor</code> is this page's TTL. Recipe 1 is why the docs tell you to set it to a value the job can never exceed. There is no renewal by default, so <strong>you have to measure the tail of your work time</strong></td></tr>
+    <tr><td>can the resource see a token</td><td>This is the real fork. <code>UPDATE ... WHERE version = ?</code>, S3 <code>If-Match</code> and unique constraints have somewhere to put the check; a plain <code>UPDATE</code> or an outbound API call does not. <strong>Without it, fencing is not an option</strong></td></tr>
+    <tr><td>what to use as the token</td><td>Anything monotonic. Redis <code>INCR</code>, a DB sequence, ZooKeeper's <code>czxid</code>. As <a href="/en/retryloop/">no. 10</a> showed, <strong>a sequence never comes back on rollback</strong> — which suits this use exactly</td></tr>
+    <tr><td>idempotence</td><td>Where fencing is impossible, go here instead. A <strong>unique constraint</strong> on the job key, so the second execution fails quietly, is the cheapest form of it</td></tr>
+    <tr><td>measuring</td><td>Counting failed lock acquisitions will never show you this. <strong>Put the p99 of your work time on the same graph as the TTL.</strong> Where the two lines meet is recipe 1</td></tr>
+    <tr><td>GC pauses</td><td>See <a href="/en/gc/">no. 2</a>. 538ms on a large G1 heap is a measured number. Add swap or a CPU-throttled container and it goes into whole seconds — <strong>that number belongs in your TTL</strong></td></tr>
+  </table>
+
+  <p>If <a href="/en/jobclaim/">no. 9</a> was <em>how to claim a lock correctly</em>, this page is <em>what happens when a correctly claimed lock disappears mid-flight</em>. Whichever of no. 9's four approaches you picked, this problem is still there — every lock with an expiry has it.</p>
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">index</a> · <a href="/lockttl/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  pause:'pause', resume:'resume',
+  uMs:'ms', uSec:'s', uTimes:'×', uUnit:'',
+  lnWorker:'worker $1', lnResource:'resource',
+  lbHeld:'token $1 · holds lock',
+  ttZombie:'the lock has expired and the work continues — the worker does not know',
+  ttFroze:'the process is frozen for $1 — no renewal can go out',
+  ttTaken:'token $1’s write was accepted',
+  ttRejected:'token $1’s write was rejected — the resource has seen a higher token',
+  fnRight:'<b>The final state is token $1’s write</b> (arrived at $2) <span class="at">— the last holder’s result</span>',
+  fnRejected:'Writes rejected: <b>$1</b>.',
+  fnWrong:'<b>The final state is token $1’s write — but token $2 is newer.</b><br>A stale write that arrived at $3 overwrote the fresh value <span class="at">— no exception, no log</span>',
+  mRan:'same job executed', mOverlap:'duplicate execution', mStale:'stale write final',
+  mRejected:'writes rejected', mZombie:'worked without lock', mDeadWait:'dead-worker wait',
+  cGuard:'defence', cRan:'same job', cOverlap:'duplicate exec', cStale:'stale write final', cRejected:'rejected',
+  g_none:'none', g_f:'fencing token', g_w:'auto-renew', g_wf:'renew + fencing',
+  vWrong:'<b>A stale write becomes the final state $1% of the time.</b> The $2 pause is longer than the $3 TTL.<br><span class="at">The frozen worker wakes after its replacement finished and overwrites it — without the resource refusing, the result is wrong</span>',
+  vFenced:'<b>Fencing saved the result. Duplicate execution is still $1%</b> (the same job ran $2 times).<br><span class="at">Turn fencing off and a stale write becomes final $3% of the time — that one column is all fencing moved</span>',
+  vOverlap:'<b>Duplicate execution $1% · the same job runs $2 times.</b><br>Time spent working without the lock: <b>$3ms</b> <span class="at">— and the worker believes it holds it</span>',
+  vSafe:'<b>A $1 TTL covers the $2 of work plus pause — no duplicate execution.</b><br><span class="at">The price arrives with a failure: up to $3 waiting on a dead worker’s lock</span>',
+  evAcq:'worker $1 takes the lock (TTL $2 · expires $3)',
+  evNever:'not while it keeps renewing',
+  evFroze:'worker $1 freezes for $2 — no renewal goes out, and it cannot tell time has passed',
+  evLost:'worker $1’s lock has expired — nothing notifies the worker',
+  evWrite:'worker $1 writes to the resource — accepted',
+  evRejected:'worker $1 writes to the resource — rejected (a higher token was already seen)',
+  evEndRight:'the final state is token $1 — correct',
+  evEndWrong:'the final state is token $1 — the stale value won',
+  scene:[
+    'Lock TTL is 3 seconds and the work takes 5. Pause chance is 0% — nothing is broken. And yet the lock expires at 3s while worker 1 keeps going; the red hatching is that span. At that moment worker 2 legitimately takes the lock. Two of them are now inside the critical section. Duplicate execution is 100%, and worker 1 has no way to learn that it lost the lock — expiry is something the lock server does quietly.',
+    'Fencing tokens are on. Look at duplicate execution: 100.0% to 100.0%. Not one decimal. Fencing does not stop two of them getting in; it cannot, because it is something the resource does after the work has already started. Here not even a write is rejected — token 1 writes at 5s and token 2 at 8s, so the order is already right.',
+    'Fencing off, and a pause added. Worker 1 freezes for 8 seconds and wakes up. Meanwhile worker 2 finished and wrote at 8s. But worker 1 wakes, completes its work, and writes at 13s anyway. Watch the resource row — the stale value overwrote the fresh one. No exception, no log. Only the result is wrong.',
+    'Now turn fencing tokens on. The resource has already seen token 2, so token 1’s write is rejected — that is the dashed square. The result is correct again. And yet duplicate execution is still 100% and the same job still ran twice. What fencing bought is correctness; what it never bought is mutual exclusion.',
+    'Auto-renew on, pause reduced to 4 seconds. The watchdog pushes the expiry out every second, so the lock survives even though the work outlasts the TTL — recipe 1’s problem is gone. But duplicate execution is 20%, not zero, which is exactly the pause chance. During a pause the renewal thread is frozen too. Renewal is something a thread does, and a GC pause stops that thread as well.',
+    'Renewal interval down to 100ms. The survivable pause stretches to TTL minus the interval, so a 2.5-second pause is covered now. But a 4-second pause still gives 20.0%, because the ceiling is the TTL itself — drive the interval to zero and you still cannot exceed the TTL. A pause longer than the TTL always loses the lock.',
+    'TTL raised to 9 seconds — 5 of work plus a 4-second pause. Duplicate execution is 0% even with auto-renew off. Mutual exclusion finally holds. The price arrives with a failure: a dead process cannot release its lock, so the next instance simply waits nine seconds for the expiry. A TTL is your safety margin and your failure-recovery delay at once — there is no good value, only a choice about which price to pay.'
+  ],
+};
+</script>
+<script src="/shared/lockttl-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>
