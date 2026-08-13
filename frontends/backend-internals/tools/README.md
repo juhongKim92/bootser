@@ -22,8 +22,9 @@ node tools/verify-timeout.mjs      # 17편 인용 수치 대조 (단언 98건)
 node tools/verify-lockttl.mjs      # 18편 인용 수치 대조 (단언 73건)
 node tools/verify-throughput.mjs   # 19편 인용 수치 대조 (단언 50건)
 
-node tools/gen-related.mjs         # "이어서 볼 것" 블록을 36개 페이지에 박는다
-node tools/gen-related.mjs --check # 고치지 않고 최신인지만 본다
+node tools/gen-related.mjs         # "이어서 볼 것" 블록을 38개 페이지에 박는다
+node tools/gen-jsonld.mjs          # JSON-LD(Article + BreadcrumbList)를 40개 페이지에 박는다
+node tools/gen-related.mjs --check # 고치지 않고 최신인지만 본다 (두 생성기 모두 지원)
 ```
 
 전부 실패하면 종료 코드 1 이다. 페이지를 고친 뒤와 배포 전에 돌린다.
@@ -44,6 +45,9 @@ node tools/gen-related.mjs --check # 고치지 않고 최신인지만 본다
 8. **"이어서 볼 것" 링크 그래프** — 자기 링크·중복·없는 페이지·빈 이유가 없나,
    **들어오는 링크가 0인 페이지**가 없나, HTML 에 박힌 블록이 링크 맵과 일치하나,
    그리고 문단 여백을 주는 `prose` 규칙이 걸려 있나
+9. **JSON-LD** — 파싱되나, `@context` 가 schema.org 인가, 그리고 **페이지 내용과
+   어긋나지 않나** — `headline` = `<h1>`, `url` = canonical, `inLanguage` = `<html lang>`,
+   날짜 형식과 순서, 빵가루의 `position` 연속성과 뿌리 URL
 
 `verify-<slug>.mjs` — 그 편의 본문·시나리오·판정 문안이 인용한 값을 실측과 대조한다.
 허용오차 없이 정확히 일치해야 한다.
@@ -59,6 +63,15 @@ node tools/gen-related.mjs --check # 고치지 않고 최신인지만 본다
 | 모델 상수 `HOP` 25 → 30 | 98개 단언 중 16건 실패 |
 | 한 페이지에서 "이어서 볼 것" 블록 제거 | 그 페이지 1건 실패 |
 | 링크 맵에 자기 링크 추가 | 맵 1건 + ko/en 블록 불일치 2건 실패 |
+| JSON-LD 의 닫는 따옴표 · 배열 괄호 깨기 | 파싱 실패로 각 1건 |
+| `@context` 를 schema.org 아닌 값으로 | 1건 |
+| `headline` 을 `<h1>` 과 다르게 | 1건 |
+| 빵가루 `position` 을 1 → 2 로 | 1건 |
+| JSON-LD 블록 통째로 제거 | 1건 |
+
+> 변이 테스트를 짤 때 주의 — perl 정규식 안의 `@type` 은 **배열로 보간되어** 치환이
+> 조용히 안 먹는다. 처음 이걸로 "검사가 통과했다" 는 잘못된 결론을 냈다.
+> `@` 가 없는 문자열로 변이시킬 것.
 
 ## 하니스
 
@@ -98,6 +111,30 @@ no-op 이다(`hashring` · `raft` 가 쓴다). 픽셀은 검사 대상이 아니
 `gen-related.mjs` 는 문단 여백도 함께 맞춘다. 01~13 은 본문을 `<article class="prose">`
 로 감쌌지만 14 이후는 그러지 않아 `*{margin:0}` 리셋 때문에 문단 여백이 0 이었다.
 prose 규칙이 없는 페이지에만 `<main class="wrap prose">` 를 붙인다.
+
+## JSON-LD 생성기
+
+`gen-jsonld.mjs` 가 각 페이지의 `<h1>` · `description` · canonical · `<html lang>` 과
+**git 커밋 날짜**를 읽어 블록을 만든다. 손으로 관리할 데이터가 없다.
+
+2026-08-13 에 Google 문서를 확인하고 정한 것들 —
+
+- **`TechArticle` 을 쓰지 않는다.** 문서가 지원한다고 명시한 타입은 `Article` ·
+  `NewsArticle` · `BlogPosting` 뿐이다. `TechArticle` 은 schema.org 상 Article 의
+  서브타입이라 틀리지는 않지만, 문서에 있는 것을 쓴다
+- **실제로 값을 하는 건 `BreadcrumbList` 다.** 검색 결과에 URL 대신
+  `Backend Internals › 제목` 이 뜬다. 이미지가 필요 없다
+- **`image` 를 넣지 않았다.** 사이트에 이미지가 하나도 없어서(`og:image` 도 없다)
+  Article rich result 의 큰 썸네일은 어차피 못 받는다. 이미지를 만들면 그때 추가한다
+- **`author` 에 실명을 넣지 않았다.** 사이트 어디에도 실명이 없으니 조직명으로 뒀다.
+  노출 여부는 사이트 주인이 정할 일이다
+- **`FAQPage` · `HowTo` 는 안 넣는다.** 갤러리에서 빠졌다 — FAQ 는 정부·의료 사이트로
+  한정, HowTo 는 폐지. 넣어도 표시되지 않는다
+- 구조화 데이터는 **순위에 직접 영향이 없다.** 표시·이해 장치다
+
+날짜는 `datePublished` = 그 페이지의 첫 커밋, `dateModified` = 페이지와 전용
+`-lab.{js,css}` 중 마지막 커밋이다(`gen-sitemap.mjs` 의 lastmod 와 같은 규칙).
+커밋 안 된 수정본이 있으면 오늘로 본다.
 
 ## 새 페이지에 붙이기
 

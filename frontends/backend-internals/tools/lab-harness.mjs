@@ -129,7 +129,11 @@ export function boot(page) {
     createContext(win);
 
     const errors = [], srcs = [];
+    /* 실행할 것은 자바스크립트뿐이다. application/ld+json 같은 데이터 블록은 건너뛴다 */
+    const isJs = t => !t || /^(text\/javascript|application\/javascript|module)$/i.test(t.trim());
     for (const [i, tag] of [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].entries()) {
+        const type = (tag[1].match(/\btype="([^"]*)"/) || [])[1];
+        if (!isJs(type)) continue;
         const src = (tag[1].match(/\bsrc="([^"]+)"/) || [])[1];
         if (src) {
             if (!src.startsWith('/')) continue;                  // 외부 CDN 은 건너뛴다

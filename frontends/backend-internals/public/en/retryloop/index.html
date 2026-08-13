@@ -359,5 +359,54 @@ window.LAB_I18N = {
 </script>
 <script src="/shared/retryloop-lab.js"></script>
 <script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "A rollback does not give the sequence back",
+  "description": "Thirty million rows in the table, two billion consumed from the sequence. Validate after the COPY and every rolled-back row costs a sequence value permanently, while a retry loop with no exit repeats it every minute. Drive the validation order and the three retry requirements yourself.",
+  "url": "https://lab.vermilion19.com/en/retryloop/",
+  "inLanguage": "en",
+  "datePublished": "2026-08-12",
+  "dateModified": "2026-08-13",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "A rollback does not give the sequence back"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
 </body>
 </html>

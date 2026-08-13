@@ -156,6 +156,69 @@ for (const page of ['', 'en']) {
     console.log(`"이어서 볼 것" — 링크 ${Object.values(RELATED).reduce((a, v) => a + v.length, 0)}개 · 막다른 길 0개`);
 }
 
+/* 9. JSON-LD — 파싱되나, 그리고 페이지 내용과 어긋나지 않나 */
+{
+    const BASE = 'https://lab.vermilion19.com';
+    let arts = 0, crumbs = 0, colls = 0;
+    for (const page of ALL) {
+        const label = '/' + (page ? page + '/' : '');
+        const html = readFileSync(join(PUB, page, 'index.html'), 'utf8');
+        const m = html.match(/<!-- jsonld:start[\s\S]*?<!-- jsonld:end -->/);
+        if (!m) { bad(label, 'JSON-LD 블록이 없다 — node tools/gen-jsonld.mjs'); continue; }
+
+        const blocks = [...m[0].matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(x => x[1]);
+        if (!blocks.length) { bad(label, 'ld+json 스크립트가 비었다'); continue; }
+
+        const pick = re => (html.match(re) || [])[1];
+        const lang = pick(/<html lang="([^"]+)"/);
+        const canonical = pick(/<link rel="canonical" href="([^"]+)"/);
+        const h1 = (pick(/<h1[^>]*>([\s\S]*?)<\/h1>/) || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+        const isIndex = page === '' || page === 'en';
+        const crumbRoot = BASE + (page.startsWith('en') ? '/en/' : '/');
+
+        for (const raw of blocks) {
+            let o;
+            try { o = JSON.parse(raw); }
+            catch (e) { bad(label, `ld+json 파싱 실패 — ${e.message}`); continue; }
+            if (o['@context'] !== 'https://schema.org') bad(label, `@context 가 schema.org 가 아니다: ${o['@context']}`);
+            if (raw.includes('</script')) bad(label, 'JSON 안에 </script 가 이스케이프되지 않았다');
+
+            if (o['@type'] === 'Article') {
+                arts++;
+                if (o.headline !== h1) bad(label, `headline 이 <h1> 과 다르다 — "${o.headline}" vs "${h1}"`);
+                if (o.url !== canonical) bad(label, `url 이 canonical 과 다르다 — ${o.url} vs ${canonical}`);
+                if (o.inLanguage !== lang) bad(label, `inLanguage 가 <html lang> 과 다르다 — ${o.inLanguage} vs ${lang}`);
+                for (const k of ['datePublished', 'dateModified']) {
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(o[k] || '')) bad(label, `${k} 가 YYYY-MM-DD 가 아니다: ${o[k]}`);
+                }
+                if (o.datePublished > o.dateModified) bad(label, `datePublished 가 dateModified 보다 늦다`);
+                if (!o.description) bad(label, 'Article 에 description 이 없다');
+            } else if (o['@type'] === 'BreadcrumbList') {
+                crumbs++;
+                const list = o.itemListElement || [];
+                if (list.length < 2) bad(label, `빵가루가 ${list.length}단이다 — 최소 2단`);
+                list.forEach((it, i) => {
+                    if (it.position !== i + 1) bad(label, `빵가루 position 이 어긋난다 — ${it.position} (기대 ${i + 1})`);
+                    if (!it.name) bad(label, `빵가루 ${i + 1}단에 name 이 없다`);
+                    /* item 생략은 마지막 항목만 허용된다 (Google 이 그 페이지 URL 을 쓴다) */
+                    if (!it.item && i !== list.length - 1) bad(label, `빵가루 ${i + 1}단에 item 이 없다 — 마지막이 아니다`);
+                });
+                if (list[0] && list[0].item !== crumbRoot) bad(label, `빵가루 뿌리가 ${list[0].item} 다 — 기대 ${crumbRoot}`);
+                if (list.at(-1) && list.at(-1).name !== h1) bad(label, '빵가루 마지막 단이 <h1> 과 다르다');
+            } else if (o['@type'] === 'CollectionPage') {
+                colls++;
+                if (!isIndex) bad(label, 'CollectionPage 가 목록 페이지가 아닌 곳에 있다');
+                if (o.url !== canonical) bad(label, `CollectionPage url 이 canonical 과 다르다`);
+            } else {
+                bad(label, `모르는 @type: ${o['@type']}`);
+            }
+        }
+        if (isIndex && !blocks.length) bad(label, '인덱스에 CollectionPage 가 없다');
+        if (!isIndex && blocks.length !== 2) bad(label, `ld+json 블록이 ${blocks.length}개다 — Article + BreadcrumbList 2개여야 한다`);
+    }
+    console.log(`JSON-LD — Article ${arts}개 · BreadcrumbList ${crumbs}개 · CollectionPage ${colls}개`);
+}
+
 console.log('');
 for (const w of warn) console.log('주의  ' + w);
 for (const f of fail) console.error('실패  ' + f);

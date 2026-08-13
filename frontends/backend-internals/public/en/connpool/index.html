@@ -341,5 +341,54 @@ window.LAB_I18N = {
 </script>
 <script src="/shared/connpool-lab.js"></script>
 <script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "A 17-millisecond query drains the pool",
+  "description": "The leak warning points at a 17ms query. That query is not the culprit. See how OSIV and transaction boundaries stretch connection hold time, and how Little's Law decides how many connections you actually need.",
+  "url": "https://lab.vermilion19.com/en/connpool/",
+  "inLanguage": "en",
+  "datePublished": "2026-08-12",
+  "dateModified": "2026-08-13",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "A 17-millisecond query drains the pool"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
 </body>
 </html>

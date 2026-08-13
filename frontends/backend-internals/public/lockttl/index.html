@@ -324,5 +324,54 @@ window.LAB_I18N = {
 </script>
 <script src="/shared/lockttl-lab.js"></script>
 <script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "락을 잡았는데 둘이 들어왔다",
+  "description": "Redis 분산 락을 제대로 잡았습니다. 그런데 작업이 TTL보다 길어서 일하는 중에 만료되고, 다음 인스턴스가 같은 일을 시작합니다. 펜싱 토큰을 켜도 중복 실행률은 100.0% 그대로입니다 — 펜싱이 막는 것은 중복 실행이 아니라 낡은 쓰기가 최종 상태가 되는 것입니다.",
+  "url": "https://lab.vermilion19.com/lockttl/",
+  "inLanguage": "ko",
+  "datePublished": "2026-08-13",
+  "dateModified": "2026-08-13",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "락을 잡았는데 둘이 들어왔다"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
 </body>
 </html>

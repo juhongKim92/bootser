@@ -236,6 +236,8 @@
 - [ ] **"이어서 볼 것"** — `tools/related.mjs` 에 새 slug 의 나가는 링크를 넣고,
       **기존 페이지 몇 곳에서 새 페이지로 들어오는 링크도** 넣는다(안 넣으면 막다른 길이 된다).
       `NO` 에 번호도 추가. 그다음 `node tools/gen-related.mjs`
+- [ ] **JSON-LD** — `node tools/gen-jsonld.mjs`. 링크 맵(`related.mjs`)의 slug 목록을
+      그대로 쓰므로 위 항목을 먼저 하면 새 페이지가 자동으로 포함된다
 - [ ] **검증을 돌린다** — `node tools/check-pages.mjs` (전 페이지 구동 · i18n 키 누락 ·
       태그 짝 · ko/en 키 집합 · 인덱스 카드 수 · 링크 그래프)와, 수치를 인용했다면
       `verify-<slug>.mjs`. `inject-beacon.mjs` **앞에서** 돌린다. 자세한 것은 `tools/README.md`
@@ -254,7 +256,34 @@
 ## 검토해볼 것
 
 - [x] `public/404.html` 추가 — ko/en 한 장으로, noindex, sitemap 미포함
-- [ ] JSON-LD (`TechArticle`) 추가 여부 — 검색 결과 표시에 도움될 수 있음
+- [x] JSON-LD 추가 (2026-08-13) — `tools/gen-jsonld.mjs`, 40개 페이지
+
+  > **`TechArticle` 로 안 했다.** 착수 전 Google 문서를 확인했더니 지원 타입은
+  > `Article` · `NewsArticle` · `BlogPosting` 뿐이고 **`TechArticle` 은 그 목록에 없다.**
+  > schema.org 상 Article 의 서브타입이라 틀리진 않지만 문서에 있는 것을 썼다.
+  >
+  > **실제로 값을 하는 건 `BreadcrumbList` 다** — 검색 결과에 URL 대신
+  > `Backend Internals › 제목` 이 뜬다. Article 쪽은 기대를 낮게 잡아야 한다:
+  > rich result 의 주된 이득이 큰 썸네일인데 **이 사이트에는 이미지가 하나도 없다**
+  > (`og:image` 도 없다). 그래서 `image` 를 넣지 않았고, 이미지를 만들면 그때 추가한다.
+  > 구조화 데이터는 순위에 직접 영향이 없다 — 표시·이해 장치다.
+  >
+  > `FAQPage` · `HowTo` 는 넣지 않았다. 갤러리에서 빠졌다(FAQ 는 정부·의료 사이트로
+  > 한정, HowTo 는 폐지).
+  >
+  > `author` 에 **실명을 넣지 않고** 조직명으로 뒀다 — 사이트 어디에도 실명이 없으므로
+  > 노출 여부는 판단이 필요하다. 넣을 거면 `gen-jsonld.mjs` 의 `org` 한 곳만 고치면 된다.
+  >
+  > 날짜는 손으로 안 적는다. `datePublished` = 첫 커밋, `dateModified` = 페이지와
+  > 전용 `-lab.{js,css}` 중 마지막 커밋 (sitemap lastmod 와 같은 규칙).
+  >
+  > `check-pages.mjs` 에 검사를 넣었다 — 파싱 · `@context` · **페이지 내용과의 일치**
+  > (`headline`=`<h1>`, `url`=canonical, `inLanguage`=`<html lang>`) · 날짜 형식과 순서 ·
+  > 빵가루 `position` 연속성과 뿌리 URL. 변이 6종으로 잡히는 것을 확인했다.
+  >
+  > **덤으로 하니스 결함 하나를 고쳤다** — `boot()` 이 인라인 `<script>` 를 전부
+  > 실행해서 `application/ld+json` 을 자바스크립트로 파싱하려 했다. `type` 을 보고
+  > 자바스크립트만 실행하도록 바꿨다.
 - [ ] 폰트를 CDN 대신 self-host 할지 (초기 렌더 지연)
 
 ## 연락처 노출
