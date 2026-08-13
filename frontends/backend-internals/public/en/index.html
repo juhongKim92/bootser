@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Backend Internals — interactive visualizations</title>
-  <meta name="description" content="Eighteen interactive labs you drive yourself: MVCC and VACUUM, G1 versus ZGC, consistent hashing, Raft, MQTT QoS, connection pool exhaustion, backpressure, cache stampede, deadline propagation, distributed lock expiry.">
+  <meta name="description" content="Nineteen interactive labs you drive yourself: MVCC and VACUUM, G1 versus ZGC, consistent hashing, Raft, MQTT QoS, connection pool exhaustion, backpressure, cache stampede, deadline propagation, distributed lock expiry, BDP.">
   <link rel="canonical" href="https://lab.vermilion19.com/en/">
   <link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/">
   <link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/">
@@ -13,7 +13,7 @@
   <meta property="og:locale" content="en_US">
   <meta property="og:locale:alternate" content="ko_KR">
   <meta property="og:title" content="Backend Internals — interactive visualizations">
-  <meta property="og:description" content="Backend internals you can put your hands on — eighteen labs across databases, the JVM, distributed systems, and real production failures.">
+  <meta property="og:description" content="Backend internals you can put your hands on — nineteen labs across databases, the JVM, distributed systems, and real production failures.">
   <meta property="og:url" content="https://lab.vermilion19.com/en/">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -202,7 +202,7 @@
       <summary>
         <span class="arw" aria-hidden="true"></span>
         <h2>How capacity collapses <em>the queries are fast and the system stalls anyway</em></h2>
-        <span class="count">4</span>
+        <span class="count">5</span>
       </summary>
       <div class="glist">
 
@@ -238,6 +238,15 @@
         <span>
           <h2>Everyone got a second and nobody gets to use one</h2>
           <p>Deadline propagation. With all three layers at one second, the inner timeouts never get a chance — the outer layer always gives up first.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
+
+      <a class="card" href="/en/throughput/">
+        <span class="no">19</span>
+        <span>
+          <h2>The bandwidth is there and the throughput is not</h2>
+          <p>BDP and the square-root law. Ten times the link buys 1.0× the throughput — bandwidth is not in the formula.</p>
         </span>
         <span class="tag live">live</span>
       </a>

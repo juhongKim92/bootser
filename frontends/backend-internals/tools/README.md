@@ -17,9 +17,10 @@
 ```bash
 cd frontends/backend-internals
 
-node tools/check-pages.mjs         # 전 페이지 공통 검사 (38개 페이지)
+node tools/check-pages.mjs         # 전 페이지 공통 검사 (40개 페이지)
 node tools/verify-timeout.mjs      # 17편 인용 수치 대조 (단언 98건)
 node tools/verify-lockttl.mjs      # 18편 인용 수치 대조 (단언 73건)
+node tools/verify-throughput.mjs   # 19편 인용 수치 대조 (단언 50건)
 
 node tools/gen-related.mjs         # "이어서 볼 것" 블록을 36개 페이지에 박는다
 node tools/gen-related.mjs --check # 고치지 않고 최신인지만 본다

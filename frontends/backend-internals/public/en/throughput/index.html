@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The bandwidth is there and the throughput is not — BDP and the square-root law</title>
+<meta name="description" content="A 1Gbps link delivering 5.24 Mbps. Raise it to 10Gbps and not one decimal moves. Throughput is concurrency divided by RTT, and bandwidth only matters below that. And once loss passes 0.002%, HTTP/1.1 over six connections beats HTTP/2.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/throughput/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/throughput/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/throughput/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/throughput/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="The bandwidth is there and the throughput is not">
+<meta property="og:description" content="Ten times the bandwidth buys you 1.0× the throughput. Bandwidth is not in the formula.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/throughput/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The bandwidth is there and the throughput is not">
+<meta name="twitter:description" content="Throughput = concurrency ÷ RTT. Ten times the bandwidth is 1.0×; a tenth of the RTT is 10×.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/throughput-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/throughput/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>The bandwidth is there and the throughput is not</h1>
+  <p class="lede">A 1Gbps link. One file transfer gets 5.24 Mbps out of it. So you upgrade the link to 10Gbps. <strong>Not one decimal moves.</strong> Bandwidth does not appear in the throughput formula at all — what appears is <code>concurrency ÷ RTT</code>.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sB">bandwidth</label>
+          <span class="v" id="vB">1<small>Gbps</small></span>
+          <input type="range" id="sB" min="0" max="9" step="1" value="7" aria-label="Link bandwidth">
+        </div>
+        <div class="dial">
+          <label for="sR">RTT</label>
+          <span class="v" id="vR">100<small>ms</small></span>
+          <input type="range" id="sR" min="5" max="300" step="5" value="100" aria-label="Round-trip time">
+        </div>
+        <div class="dial">
+          <label for="sW">window</label>
+          <span class="v" id="vW">64<small>KB</small></span>
+          <input type="range" id="sW" min="0" max="8" step="1" value="2" aria-label="Send window per connection">
+        </div>
+        <div class="dial">
+          <label for="sN">connections</label>
+          <span class="v" id="vN">1<small></small></span>
+          <input type="range" id="sN" min="1" max="12" step="1" value="1" aria-label="Parallel connections">
+        </div>
+        <div class="dial">
+          <label for="sL">loss</label>
+          <span class="v" id="vL">0<small>%</small></span>
+          <input type="range" id="sL" min="0" max="9" step="1" value="0" aria-label="Packet loss rate">
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">Three ceilings — the shortest one is your throughput</span>
+      <div class="board">
+        <div class="caps" id="caps"></div>
+        <div class="sweep">
+          <span class="cap">Throughput while sweeping bandwidth alone (other dials unchanged)</span>
+          <div class="plot" id="plot"></div>
+          <div class="plotx" id="plotX"></div>
+        </div>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">Same path, only the protocol changes</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">previous step</button>
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Working the dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What changes</th></tr>
+    <tr><td>bandwidth</td><td>The most the link can carry. <strong>Watch the throughput not move</strong> — outside the region where bandwidth is the ceiling, nothing happens at all.</td></tr>
+    <tr><td>RTT</td><td>Round-trip time. Throughput is <strong>inversely proportional</strong> to it: halve the RTT and you double the throughput.</td></tr>
+    <tr><td>window · connections</td><td>Their product is <strong>how much you can have in flight</strong>. Raising either one moves throughput by the same amount.</td></tr>
+    <tr><td>loss</td><td>Switches on the third ceiling. It is <strong>proportional to the connection count</strong>, which is where the protocol table flips.</td></tr>
+  </table>
+
+  <p>The three bars are the three ceilings. The blue one is the current bottleneck, and the green (or red) bar at the bottom is the actual throughput. <strong>However long the bandwidth bar is, throughput follows the shortest bar.</strong></p>
+
+  <p>The curve sweeps <strong>bandwidth only</strong>, from 1 Mbps to 20 Gbps. On the left it climbs on the diagonal (bandwidth is the ceiling) and at some point it goes completely flat (something else is). That knee is the whole page.</p>
+
+  <p>There is no randomness. It is the <code>min</code> of three expressions, so the same dial settings always produce the same numbers.</p>
+
+  <h2>Try this</h2>
+
+  <div class="recipe">
+    <h4>1. 5.24 Mbps out of a 1Gbps link</h4>
+    <div class="seq">bandwidth 1Gbps · RTT 100ms · window 64KB · 1 connection · no loss
+throughput <em>5.24 Mbps</em> · link utilisation <em>0.524%</em>
+bottleneck <em>window ÷ RTT</em></div>
+    <p class="why">You put 64KB in flight and wait 100ms. That is all of it — <code>65,536 B ÷ 0.1 s = 5.24 Mbps</code>. You are using <strong>0.5%</strong> of the link. The other 99.5% is idle and there is no way to fill it: once the window is full, <strong>there is nothing you are allowed to send</strong> until an ACK comes back.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Ten times the link — 1.0× the throughput</h4>
+    <div class="seq">bandwidth 1Gbps → 10Gbps
+throughput <em>5.24 → 5.24 Mbps</em> (1.0×)
+link utilisation 0.524% → <em>0.052%</em></div>
+    <p class="why">You bought ten times as much and throughput did not move one decimal. <strong>Bandwidth is not in the formula.</strong> Look at the curve — you are already out on the flat part. The only thing that changed is utilisation, and it got worse. <strong>This is the answer to “we upgraded the link, why is it not faster”.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. A tenth of the RTT — ten times the throughput</h4>
+    <div class="seq">RTT 100 → 10ms
+throughput <em>5.24 → 52.43 Mbps</em> (10×)</div>
+    <p class="why">Exactly ten times, because throughput is <strong>inversely proportional</strong> to RTT. This is why moving the server closer to the user (a CDN, another region) beats buying link capacity. <strong>Bandwidth you can buy; RTT is set by the speed of light</strong> — so the only lever is distance.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Leave the RTT, use six connections — six times the throughput</h4>
+    <div class="seq">RTT back to 100ms · connections 1 → 6
+throughput <em>5.24 → 31.46 Mbps</em> (6×)</div>
+    <p class="why">If you cannot cut the RTT, <strong>raise the concurrency.</strong> Window × connections is “how much is in flight”, and six times in flight is six times out. This is why browsers open six connections per origin. Raising the window sixfold gives exactly the same result — <strong>only the product appears in the formula.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. A 1MB window — 83.89 Mbps on a single connection</h4>
+    <div class="seq">connections 6 → 1 · window 64KB → 1MB
+throughput <em>83.89 Mbps</em></div>
+    <p class="why">One connection is fine as long as the window is big. This is what <strong>window scaling</strong> is for — the window field in the TCP header is 16 bits, so 64KB is its maximum, and the scale option pushes that ceiling out. With the option off you are stuck in recipe 1 forever. <strong>And this is still 8.4% of a 1Gbps link.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Add 0.1% loss — from 83.89 down to 4.52</h4>
+    <div class="seq">loss 0 → 0.1%
+throughput <em>83.89 → 4.52 Mbps</em> (a factor of 18.5)
+bottleneck window÷RTT → <em>loss</em></div>
+    <p class="why">The third ceiling switched on: <code>MSS·√(3/2) ÷ (RTT·√p)</code> — inversely proportional to the <strong>square root</strong> of the loss rate. Growing the window to 1MB became <strong>completely pointless.</strong> The window bar still reads 83.89 Mbps, the loss bar reads 4.52, and throughput follows the shortest bar. One packet in a thousand costs you a factor of 18.5.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. Keep the loss, use six connections — six times back</h4>
+    <div class="seq">connections 1 → 6 (loss still 0.1%)
+throughput <em>4.52 → 27.14 Mbps</em> (6×)</div>
+    <p class="why">The loss ceiling is <strong>proportional to the connection count</strong>, because each connection carries its own congestion window and a loss only halves that one. Which is why, on the same path, <strong>HTTP/1.1 over six connections is six times faster than HTTP/2 over one.</strong> Look at the protocol table.</p>
+  </div>
+
+  <h2>Throughput = concurrency ÷ RTT</h2>
+
+  <p>The second of the three ceilings has already appeared twice on this site. Same formula, different unit.</p>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>Unit of concurrency</th><th>Formula</th></tr>
+    <tr><td>this page</td><td>bytes in flight (window × connections)</td><td><code>throughput = bytes ÷ RTT</code></td></tr>
+    <tr><td><a href="/en/connpool/">no. 8</a></td><td>connection pool size</td><td><code>throughput = pool size ÷ hold time</code></td></tr>
+    <tr><td><a href="/en/mqtt/">no. 5</a></td><td>Receive Maximum</td><td><code>throughput = unacked messages ÷ RTT</code></td></tr>
+  </table>
+
+  <div class="callout">All of it is <strong>Little's law</strong> — <code>concurrency = throughput × latency</code>. To fill 1Gbps at the default settings you need <code>125 MB/s × 0.1s = 12.5 MB</code> in flight, and you have 64KB. <strong>A factor of 191.</strong></div>
+
+  <p>So “should I add bandwidth or connections” is the wrong question. The right one is <strong>“how many bytes do I have in flight, and how many would fill the link”</strong>. The <em>in flight</em> and <em>to fill</em> meters in the lab are those two numbers.</p>
+
+  <h2>At 0.002% loss, HTTP/1.1 overtakes HTTP/2</h2>
+
+  <p>The third ceiling is proportional to the connection count. Which makes <strong>HTTP/2, having collapsed to one connection, six times more fragile under loss.</strong></p>
+
+  <table class="keytable">
+    <tr><th>Loss</th><th>HTTP/1.1 (6 conns · 64KB)</th><th>HTTP/2 (1 conn · 16MB)</th></tr>
+    <tr><td>0%</td><td>31.46 Mbps</td><td><strong>1.00 Gbps</strong></td></tr>
+    <tr><td>0.002%</td><td>31.46 Mbps</td><td>31.99 Mbps — near enough equal</td></tr>
+    <tr><td>0.01%</td><td><strong>31.46 Mbps</strong></td><td>14.31 Mbps</td></tr>
+    <tr><td>0.1%</td><td><strong>27.14 Mbps</strong></td><td>4.52 Mbps</td></tr>
+    <tr><td>1%</td><td><strong>8.58 Mbps</strong></td><td>1.43 Mbps</td></tr>
+  </table>
+
+  <div class="callout">The crossover is at <strong>0.00207%</strong> loss (about 21 ppm). Real internet paths usually run 0.01–1% — <strong>well above the crossover.</strong> It is equally true that HTTP/2 dominates on a lossless path, and that any loss at all flips it.</div>
+
+  <p>None of which makes HTTP/2 a bad choice. This table only looks at <strong>bulk transfer throughput</strong>. Where HTTP/2 actually wins is <em>many small requests</em> — no per-connection handshake, compressed headers, and no request queue at the HTTP layer. That value does not show up in this formula.</p>
+
+  <h2>HTTP/3 does not fix this law</h2>
+
+  <p>A common misconception worth naming. QUIC still does <strong>congestion control per connection</strong>. Many streams, one window. Which is why the lab's throughput for it is <strong>exactly the same as HTTP/2</strong>.</p>
+
+  <table class="keytable">
+    <tr><th>What was wrong</th><th>Does HTTP/3 fix it?</th></tr>
+    <tr><td>transport-level HOL blocking — a loss on one stream holds up data that has <strong>already arrived</strong> for another</td><td><strong>Yes.</strong> This is what QUIC actually fixes</td></tr>
+    <tr><td>throughput inversely proportional to the square root of loss</td><td>No. The window is still per connection</td></tr>
+    <tr><td>the window ÷ RTT ceiling</td><td>No. Same formula</td></tr>
+    <tr><td>round trips to establish the connection</td><td><strong>Yes.</strong> Down to 0-RTT / 1-RTT</td></tr>
+  </table>
+
+  <p>HOL blocking shows up in <em>when individual streams complete</em>, not in <em>throughput</em>. The total is the same and the first paint is earlier. So the lab's meters cannot show it, and it appears only as the HOL column in the comparison table.</p>
+
+  <h2>Out in the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>window scaling</td><td>The window field in the TCP header is 16 bits, so <strong>64KB is the hard limit</strong>. If the scale option (<code>net.ipv4.tcp_window_scaling</code>) is off, or middleboxes strip it, you are locked in recipe 1. If you measure something near 5.24 Mbps, check this first</td></tr>
+    <tr><td>buffer limits</td><td>The maximum in <code>tcp_rmem</code> / <code>tcp_wmem</code> is the real ceiling on the window. Below the BDP the kernel cannot grow the window past it — and the defaults are not chosen with long paths in mind</td></tr>
+    <tr><td>BBR</td><td><strong>Escapes this page's third ceiling.</strong> BBR does not treat loss as a congestion signal; it estimates bandwidth and RTT instead, and does far better than CUBIC on lossy long paths. The square-root law is a property of loss-based control</td></tr>
+    <tr><td>measuring</td><td>A bandwidth graph will never show you this. <strong>Watch bytes in flight together with RTT.</strong> In <code>ss -i</code> those are <code>cwnd</code>, <code>rtt</code> and <code>bytes_in_flight</code></td></tr>
+    <tr><td>bulk transfer</td><td>Multipart parallel upload to S3 or any object store is recipe 4. Splitting into parts shrinks the retry unit, yes — but <strong>mostly it raises concurrency</strong></td></tr>
+    <tr><td>replication lag</td><td>When cross-region replication cannot keep up, look at the <strong>concurrency of the replication stream</strong> before the bandwidth. One stream is recipe 1</td></tr>
+    <tr><td>short transfers</td><td>A small file finishes before the window has grown (slow start). In that regime neither bandwidth nor window sets the time — <strong>the number of round trips does.</strong> This lab models steady state only</td></tr>
+  </table>
+
+  <p>If <a href="/en/connpool/">no. 8</a> was <em>how many connections should I hold</em>, this page is <em>why that number comes out the way it does</em>. The same formula met twice in different units — and <strong>only the third ceiling, loss, is new here.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/connpool/"><span class="no">08</span><span><span class="t">A 17-millisecond query drains the pool</span><span class="why">The same formula met at the connection pool — concurrency = throughput × latency.</span></span></a></li>
+      <li><a href="/en/mqtt/"><span class="no">05</span><span><span class="t">What "exactly once" actually costs</span><span class="why">Receive Maximum is that formula in yet another unit.</span></span></a></li>
+      <li><a href="/en/timeout/"><span class="no">17</span><span><span class="t">Everyone got a second and nobody gets to use one</span><span class="why">The same RTT sets your throughput and eats your timeout budget.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">index</a> · <a href="/throughput/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uConn:'',
+  cBw:'bandwidth', cWin:'window ÷ RTT', cLoss:'loss ceiling', cOut:'actual throughput',
+  n_bw:'bandwidth', n_win:'window÷RTT', n_loss:'loss',
+  mTput:'throughput', mUtil:'link utilisation', mLimit:'bottleneck',
+  mInflight:'in flight', mNeed:'to fill link', mRtts:'vs bandwidth',
+  cProto:'protocol', cTput:'throughput', cConn:'conns', cHol:'transport HOL',
+  p11:'HTTP/1.1 (64KB window)', p2:'HTTP/2 (16MB window)', p3:'HTTP/3 · QUIC',
+  holYes:'yes', holNo:'no',
+  hBw:'bandwidth is the bottleneck — the link is fully used',
+  hWin:'window÷RTT is the bottleneck — $1 of bandwidth goes unused',
+  hLoss:'loss is the bottleneck — growing the window will not help',
+  vBw:'<b>Bandwidth is the bottleneck.</b> Throughput <b>$1</b> · link utilisation <b>$2</b><br><span class="at">Here, buying more link genuinely helps — only here</span>',
+  vWin:'<b>The bottleneck is window÷RTT, not bandwidth.</b> Throughput <b>$1</b> · utilisation <b>$2</b><br>In flight <b>$3</b> · to fill the link you need <b>$4</b> <span class="at">— more bandwidth will not move this number</span>',
+  vLoss:'<b>Loss is the bottleneck.</b> Throughput <b>$1</b> — a $2 loss rate alone pushed the window ceiling of <b>$3</b> down.<br><span class="at">This ceiling is proportional to the connection count — currently $4</span>',
+  scene:[
+    'A 1Gbps link, 100ms RTT, a 64KB window, one connection. Throughput is 5.24 Mbps — half a percent of the link. All you are doing is putting 64KB in flight and waiting 100ms. Look at the three bars: the bandwidth bar is full and the window÷RTT bar is short, and throughput follows the short one.',
+    'The link is now 10Gbps. Throughput is still 5.24 Mbps — not one decimal moved, because bandwidth is not in the formula. Look at the curve: you are already on the flat part, so moving right changes no height. The only thing that changed is utilisation, from 0.52% down to 0.05%.',
+    'RTT cut to 10ms. Throughput is 52.43 Mbps — exactly ten times, because throughput is inversely proportional to RTT. This is why moving the server closer to the user beats buying link capacity. Bandwidth you buy; RTT is set by the speed of light, so distance is the only lever.',
+    'RTT back to 100ms, and six connections. 31.46 Mbps — six times. If you cannot cut the RTT, raise the concurrency. Window × connections is what is in flight, and six times in flight is six times out. This is why browsers open six connections per origin.',
+    'Back to one connection, with the window grown to 1MB. 83.89 Mbps. One connection is fine as long as the window is big — only the product is in the formula. This is what window scaling does: the TCP header window field is 16 bits, so 64KB is its maximum, and the scale option pushes the ceiling out.',
+    'Loss set to 0.1%. From 83.89 down to 4.52 Mbps — a factor of 18.5. The third bar switched on, and it is inversely proportional to the square root of the loss rate. The window bar still reads 83.89 while the loss bar reads 4.52, and throughput follows the shortest bar. Growing that window became completely pointless.',
+    'Keep the loss, go to six connections. 27.14 Mbps — exactly six times, because the loss ceiling is proportional to the connection count. Each connection carries its own congestion window, and a loss only halves that one. Which is why, on the same path, HTTP/1.1 over six connections is six times faster than HTTP/2 over one. Look at the table.'
+  ],
+};
+</script>
+<script src="/shared/throughput-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>

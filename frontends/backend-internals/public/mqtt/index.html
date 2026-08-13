@@ -285,6 +285,7 @@ ON CONFLICT (msg_id) DO NOTHING;</code></pre>
       <li><a href="/retrystorm/"><span class="no">14</span><span><span class="t">부하는 걷혔는데 돌아오지 않는다</span><span class="why">QoS 1 의 재전송이 부하 자체가 되면 어떻게 되는가.</span></span></a></li>
       <li><a href="/lockttl/"><span class="no">18</span><span><span class="t">락을 잡았는데 둘이 들어왔다</span><span class="why">중복을 막는 대신 멱등하게 만드는 결론에 다른 쪽에서 도달합니다.</span></span></a></li>
       <li><a href="/keepalive/"><span class="no">07</span><span><span class="t">서버는 두 시간 동안 살아있다고 믿는다</span><span class="why">같은 브로커의 Keep-alive 와 Last Will.</span></span></a></li>
+      <li><a href="/throughput/"><span class="no">19</span><span><span class="t">대역폭은 남는데 처리량이 안 나온다</span><span class="why">Receive Maximum 이 처리량을 정하는 이유 — 동시성을 RTT 로 나눈 값입니다.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->

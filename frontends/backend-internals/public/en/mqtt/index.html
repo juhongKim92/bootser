@@ -285,6 +285,7 @@ ON CONFLICT (msg_id) DO NOTHING;</code></pre>
       <li><a href="/en/retrystorm/"><span class="no">14</span><span><span class="t">The load is gone and it still will not recover</span><span class="why">What happens when QoS 1’s retransmissions become the load itself.</span></span></a></li>
       <li><a href="/en/lockttl/"><span class="no">18</span><span><span class="t">You took the lock and two of you got in</span><span class="why">The same conclusion reached from the other side — stop preventing duplicates, make them idempotent.</span></span></a></li>
       <li><a href="/en/keepalive/"><span class="no">07</span><span><span class="t">Your server believes it for two hours</span><span class="why">Keep-alive and Last Will on the same broker.</span></span></a></li>
+      <li><a href="/en/throughput/"><span class="no">19</span><span><span class="t">The bandwidth is there and the throughput is not</span><span class="why">Why Receive Maximum sets the throughput — it is concurrency divided by RTT.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->

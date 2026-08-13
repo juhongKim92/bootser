@@ -16,7 +16,7 @@ export const NO = {
   mvcc: '01', gc: '02', hashring: '03', raft: '04', mqtt: '05', websocket: '06',
   keepalive: '07', connpool: '08', jobclaim: '09', retryloop: '10', backpressure: '11',
   correlation: '12', genericplan: '13', retrystorm: '14', writeskew: '15', stampede: '16',
-  timeout: '17', lockttl: '18'
+  timeout: '17', lockttl: '18', throughput: '19'
 };
 
 /* slug → [{ to, ko, en }] */
@@ -43,7 +43,8 @@ export const RELATED = {
   mqtt: [
     { to: 'retrystorm', ko: 'QoS 1 의 재전송이 부하 자체가 되면 어떻게 되는가.', en: 'What happens when QoS 1’s retransmissions become the load itself.' },
     { to: 'lockttl', ko: '중복을 막는 대신 멱등하게 만드는 결론에 다른 쪽에서 도달합니다.', en: 'The same conclusion reached from the other side — stop preventing duplicates, make them idempotent.' },
-    { to: 'keepalive', ko: '같은 브로커의 Keep-alive 와 Last Will.', en: 'Keep-alive and Last Will on the same broker.' }
+    { to: 'keepalive', ko: '같은 브로커의 Keep-alive 와 Last Will.', en: 'Keep-alive and Last Will on the same broker.' },
+    { to: 'throughput', ko: 'Receive Maximum 이 처리량을 정하는 이유 — 동시성을 RTT 로 나눈 값입니다.', en: 'Why Receive Maximum sets the throughput — it is concurrency divided by RTT.' }
   ],
   websocket: [
     { to: 'keepalive', ko: '연결이 죽은 것을 언제 알아차리는가.', en: 'When do you notice a connection has died?' },
@@ -59,6 +60,7 @@ export const RELATED = {
     { to: 'backpressure', ko: '풀이 마르면 큐가 자랍니다. 그 큐를 어떻게 다룰 것인가.', en: 'When the pool dries up the queue grows — what do you do with that queue?' },
     { to: 'retrystorm', ko: '그 큐가 부하를 걷어내도 안 비는 지점.', en: 'The point where that queue will not drain even after the load is gone.' },
     { to: 'timeout', ko: '타임아웃을 늘리면 점유가 늘어 용량이 줍니다 — 같은 리틀의 법칙입니다.', en: 'Raise the timeout and occupancy rises, so capacity falls — the same Little’s law.' },
+    { to: 'throughput', ko: '같은 식이 네트워크에서는 바이트 단위로 나타납니다. 풀 크기 대신 띄운 바이트입니다.', en: 'The same formula in bytes on the network — bytes in flight instead of pool size.' },
     { to: 'mvcc', ko: '트랜잭션을 오래 열어두는 또 다른 대가.', en: 'The other price of holding a transaction open.' }
   ],
   jobclaim: [
@@ -110,5 +112,10 @@ export const RELATED = {
     { to: 'jobclaim', ko: '그 락을 애초에 어떻게 제대로 잡는가.', en: 'How you claim that lock correctly in the first place.' },
     { to: 'gc', ko: '프로세스가 실제로 얼마나 오래 멈추는가 — TTL 에 들어가야 하는 값입니다.', en: 'How long a process actually stops — the number that belongs in your TTL.' },
     { to: 'mqtt', ko: '중복을 허용하고 멱등하게 만드는 쪽의 값과 대가.', en: 'The price and the payoff of allowing duplicates and being idempotent instead.' }
+  ],
+  throughput: [
+    { to: 'connpool', ko: '같은 식을 커넥션 풀에서 만납니다 — 동시성 = 처리량 × 지연.', en: 'The same formula met at the connection pool — concurrency = throughput × latency.' },
+    { to: 'mqtt', ko: 'Receive Maximum 이 그 식의 또 다른 단위입니다.', en: 'Receive Maximum is that formula in yet another unit.' },
+    { to: 'timeout', ko: '같은 RTT 가 처리량도 정하고 타임아웃 예산도 먹습니다.', en: 'The same RTT sets your throughput and eats your timeout budget.' }
   ]
 };

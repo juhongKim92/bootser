@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>대역폭은 남는데 처리량이 안 나온다 — BDP 와 제곱근 법칙</title>
+<meta name="description" content="1Gbps 회선에서 5.24 Mbps 밖에 안 나옵니다. 대역폭을 10Gbps로 올려도 한 자리도 안 움직여요. 처리량은 동시성을 RTT로 나눈 값이고, 대역폭은 그 아래일 때만 병목입니다. 손실이 0.002%만 넘으면 커넥션 6개짜리 HTTP/1.1이 HTTP/2보다 빠릅니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/throughput/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/throughput/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/throughput/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/throughput/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="대역폭은 남는데 처리량이 안 나온다">
+<meta property="og:description" content="대역폭을 10배 올려도 처리량은 1.0배입니다. 식에 대역폭이 없으니까요.">
+<meta property="og:url" content="https://lab.vermilion19.com/throughput/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="대역폭은 남는데 처리량이 안 나온다">
+<meta name="twitter:description" content="처리량 = 동시성 ÷ RTT. 대역폭 10배는 1.0배, RTT 1/10은 10배입니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/throughput-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/throughput/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>대역폭은 남는데 처리량이 안 나온다</h1>
+  <p class="lede">1Gbps 회선입니다. 파일 하나를 받는데 5.24 Mbps 밖에 안 나와요. 회선을 10Gbps로 올려봤습니다. <strong>한 자리도 안 움직입니다.</strong> 대역폭은 처리량 식에 아예 등장하지 않기 때문이에요 — 등장하는 건 <code>동시성 ÷ RTT</code>입니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sB">대역폭</label>
+          <span class="v" id="vB">1<small>Gbps</small></span>
+          <input type="range" id="sB" min="0" max="9" step="1" value="7" aria-label="링크 대역폭">
+        </div>
+        <div class="dial">
+          <label for="sR">RTT</label>
+          <span class="v" id="vR">100<small>ms</small></span>
+          <input type="range" id="sR" min="5" max="300" step="5" value="100" aria-label="왕복 시간">
+        </div>
+        <div class="dial">
+          <label for="sW">창 크기</label>
+          <span class="v" id="vW">64<small>KB</small></span>
+          <input type="range" id="sW" min="0" max="8" step="1" value="2" aria-label="커넥션당 전송 창">
+        </div>
+        <div class="dial">
+          <label for="sN">커넥션</label>
+          <span class="v" id="vN">1<small>개</small></span>
+          <input type="range" id="sN" min="1" max="12" step="1" value="1" aria-label="병렬 커넥션 수">
+        </div>
+        <div class="dial">
+          <label for="sL">손실률</label>
+          <span class="v" id="vL">0<small>%</small></span>
+          <input type="range" id="sL" min="0" max="9" step="1" value="0" aria-label="패킷 손실률">
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">세 개의 한도 — 가장 짧은 것이 처리량이다</span>
+      <div class="board">
+        <div class="caps" id="caps"></div>
+        <div class="sweep">
+          <span class="cap">대역폭만 쓸어가며 본 처리량 (나머지 손잡이는 그대로)</span>
+          <div class="plot" id="plot"></div>
+          <div class="plotx" id="plotX"></div>
+        </div>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">같은 경로에서 프로토콜만 바꾸면</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>대역폭</td><td>링크가 낼 수 있는 최대. <strong>처리량이 안 움직이는 것을 보세요</strong> — 대역폭이 병목이 아닌 구간에서는 아무 일도 일어나지 않습니다.</td></tr>
+    <tr><td>RTT</td><td>왕복 시간. <strong>처리량에 반비례합니다.</strong> 절반으로 줄이면 두 배가 됩니다.</td></tr>
+    <tr><td>창 크기 · 커넥션</td><td>둘의 곱이 <strong>한 번에 띄울 수 있는 양</strong>입니다. 어느 쪽을 올려도 같은 만큼 오릅니다.</td></tr>
+    <tr><td>손실률</td><td>세 번째 한도를 켭니다. <strong>커넥션 수에 정비례</strong>하는 한도라, 여기서 프로토콜 비교표가 뒤집힙니다.</td></tr>
+  </table>
+
+  <p>막대 세 개가 세 개의 한도입니다. 파란 것이 지금 병목이고, 맨 아래 초록(또는 붉은) 막대가 실제 처리량이에요. <strong>대역폭 막대가 아무리 길어도 처리량은 가장 짧은 막대를 따라갑니다.</strong></p>
+
+  <p>곡선은 <strong>대역폭만</strong> 1 Mbps에서 20 Gbps까지 쓸어본 것입니다. 왼쪽에서는 대각선으로 오르다가(대역폭이 병목), 어느 지점부터 완전히 평평해집니다(다른 것이 병목). 그 꺾이는 점이 이 페이지의 전부입니다.</p>
+
+  <p>난수는 없습니다. 세 식의 <code>min</code> 이라 같은 손잡이 조합이면 언제나 같은 숫자가 나옵니다.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 1Gbps 회선에서 5.24 Mbps</h4>
+    <div class="seq">대역폭 1Gbps · RTT 100ms · 창 64KB · 커넥션 1 · 손실 0
+처리량 <em>5.24 Mbps</em> · 링크 활용률 <em>0.524%</em>
+병목 <em>창÷RTT</em></div>
+    <p class="why">64KB를 띄워놓고 100ms를 기다립니다. 그게 전부예요 — <code>65,536 B ÷ 0.1 s = 5.24 Mbps</code>. 회선의 <strong>0.5%</strong>만 쓰고 있습니다. 나머지 99.5%는 비어 있는데 채울 방법이 없어요. 창이 다 차면 ACK가 돌아올 때까지 <strong>보낼 수 있는 게 없기 때문</strong>입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 회선을 10배로 올린다 — 처리량 1.0배</h4>
+    <div class="seq">대역폭 1Gbps → 10Gbps
+처리량 <em>5.24 → 5.24 Mbps</em> (1.0배)
+링크 활용률 0.524% → <em>0.052%</em></div>
+    <p class="why">10배를 더 샀는데 처리량이 소수점 한 자리도 안 움직입니다. <strong>대역폭은 식에 없으니까요.</strong> 곡선을 보세요 — 이미 평평한 구간에 있습니다. 바뀐 것은 활용률뿐이고, 그건 나빠지는 방향입니다. <strong>"회선을 늘렸는데 왜 안 빨라지죠"의 답이 여기 있습니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. RTT를 10분의 1로 — 처리량 10배</h4>
+    <div class="seq">RTT 100 → 10ms
+처리량 <em>5.24 → 52.43 Mbps</em> (10배)</div>
+    <p class="why">정확히 10배입니다. 처리량이 RTT에 <strong>반비례</strong>하니까요. 서버를 사용자 가까이 옮기는 것(CDN·리전)이 회선을 늘리는 것보다 나은 이유가 이겁니다. <strong>대역폭은 돈으로 살 수 있지만 RTT는 빛의 속도가 정합니다</strong> — 그래서 거리를 줄이는 수밖에 없어요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. RTT는 그대로, 커넥션을 6개로 — 처리량 6배</h4>
+    <div class="seq">RTT 10 → 100ms 되돌리고 · 커넥션 1 → 6개
+처리량 <em>5.24 → 31.46 Mbps</em> (6배)</div>
+    <p class="why">RTT를 못 줄이면 <strong>동시성을 늘리면 됩니다.</strong> 창 × 커넥션이 "한 번에 띄운 양"이고, 6배 띄우면 6배 나옵니다. 브라우저가 도메인당 커넥션을 6개씩 여는 이유예요. 창 크기를 6배로 올려도 결과는 정확히 같습니다 — <strong>식에는 둘의 곱만 들어갑니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 창을 1MB로 — 커넥션 하나로 83.89 Mbps</h4>
+    <div class="seq">커넥션 6 → 1개 · 창 64KB → 1MB
+처리량 <em>83.89 Mbps</em></div>
+    <p class="why">커넥션 하나로도 창만 크면 됩니다. 이게 <strong>윈도우 스케일링</strong>이 하는 일이에요 — TCP 헤더의 창 필드는 16비트라 64KB가 최대인데, 스케일 옵션으로 그 한도를 밀어냅니다. 옵션이 꺼져 있으면 1번 상황에서 영원히 못 나옵니다. <strong>여전히 1Gbps의 8.4%입니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. 손실 0.1%를 넣는다 — 83.89에서 4.52로</h4>
+    <div class="seq">손실률 0 → 0.1%
+처리량 <em>83.89 → 4.52 Mbps</em> (18.5분의 1)
+병목 창÷RTT → <em>손실</em></div>
+    <p class="why">세 번째 한도가 켜졌습니다. <code>MSS·√(3/2) ÷ (RTT·√p)</code> — 손실률의 <strong>제곱근</strong>에 반비례합니다. 창을 1MB로 키워둔 게 <strong>전부 무의미해졌어요.</strong> 창 막대는 여전히 83.89 Mbps인데 손실 막대가 4.52이고, 처리량은 가장 짧은 막대를 따라갑니다. 손실이 0.1%면 패킷 1000개 중 1개인데, 처리량은 18.5분의 1이 됩니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. 손실은 그대로, 커넥션을 6개로 — 6배 회복</h4>
+    <div class="seq">커넥션 1 → 6개 (손실 0.1% 유지)
+처리량 <em>4.52 → 27.14 Mbps</em> (6배)</div>
+    <p class="why">손실 한도는 <strong>커넥션 수에 정비례</strong>합니다. 커넥션마다 자기 혼잡 창을 갖고, 손실이 나면 그 하나만 반으로 줄기 때문이에요. 그래서 같은 경로에서 <strong>커넥션 6개짜리 HTTP/1.1이 커넥션 1개짜리 HTTP/2보다 6배 빠릅니다.</strong> 프로토콜 비교표를 보세요.</p>
+  </div>
+
+  <h2>처리량 = 동시성 ÷ RTT</h2>
+
+  <p>세 한도 중 두 번째가 이 사이트에 이미 두 번 나왔습니다. 같은 식이고 단위만 다릅니다.</p>
+
+  <table class="keytable">
+    <tr><th>어디서</th><th>동시성의 단위</th><th>식</th></tr>
+    <tr><td>이 페이지</td><td>띄워둔 바이트 (창 × 커넥션)</td><td><code>처리량 = 바이트 ÷ RTT</code></td></tr>
+    <tr><td><a href="/connpool/">8번</a></td><td>커넥션 풀 크기</td><td><code>처리량 = 풀 크기 ÷ 점유 시간</code></td></tr>
+    <tr><td><a href="/mqtt/">5번</a></td><td>Receive Maximum</td><td><code>처리량 = 미확인 메시지 수 ÷ RTT</code></td></tr>
+  </table>
+
+  <div class="callout">전부 <strong>리틀의 법칙</strong>입니다 — <code>동시성 = 처리량 × 지연</code>. 기본 설정에서 1Gbps를 채우려면 <code>125 MB/s × 0.1s = 12.5 MB</code>를 띄워야 하는데, 64KB를 띄우고 있습니다. <strong>191분의 1입니다.</strong></div>
+
+  <p>그래서 "대역폭을 늘릴까 커넥션을 늘릴까"는 잘못된 질문입니다. 맞는 질문은 <strong>"지금 몇 바이트를 띄우고 있고, 채우려면 몇 바이트가 필요한가"</strong>예요. 실험대의 <em>띄운 양</em>과 <em>채우려면</em> 미터가 그 두 값입니다.</p>
+
+  <h2>손실 0.002%에서 HTTP/1.1이 HTTP/2를 앞지른다</h2>
+
+  <p>세 번째 한도는 커넥션 수에 정비례합니다. 그래서 <strong>커넥션을 하나로 줄인 HTTP/2는 손실에 6배 약합니다.</strong></p>
+
+  <table class="keytable">
+    <tr><th>손실률</th><th>HTTP/1.1 (6커넥션 · 64KB)</th><th>HTTP/2 (1커넥션 · 16MB)</th></tr>
+    <tr><td>0%</td><td>31.46 Mbps</td><td><strong>1.00 Gbps</strong></td></tr>
+    <tr><td>0.002%</td><td>31.46 Mbps</td><td>31.99 Mbps — 거의 같다</td></tr>
+    <tr><td>0.01%</td><td><strong>31.46 Mbps</strong></td><td>14.31 Mbps</td></tr>
+    <tr><td>0.1%</td><td><strong>27.14 Mbps</strong></td><td>4.52 Mbps</td></tr>
+    <tr><td>1%</td><td><strong>8.58 Mbps</strong></td><td>1.43 Mbps</td></tr>
+  </table>
+
+  <div class="callout">교차점은 손실률 <strong>0.00207%</strong>(약 21 ppm)입니다. 실제 인터넷 경로의 손실률은 대개 0.01~1%예요 — <strong>교차점 훨씬 위입니다.</strong> 무손실 경로에서 HTTP/2가 압도하는 것도 사실이고, 손실이 조금이라도 있으면 뒤집히는 것도 사실입니다.</div>
+
+  <p>그렇다고 HTTP/2가 나쁜 선택이라는 뜻은 아닙니다. 이 표는 <strong>대용량 전송의 처리량</strong>만 봅니다. HTTP/2가 실제로 이기는 자리는 <em>작은 요청이 많을 때</em>예요 — 커넥션 핸드셰이크가 없고, 헤더가 압축되고, HTTP 계층의 요청 대기줄이 사라집니다. 그 값은 이 식에 안 나타납니다.</p>
+
+  <h2>HTTP/3는 이 법칙을 고치지 않는다</h2>
+
+  <p>흔한 오해를 하나 짚어두겠습니다. QUIC은 <strong>혼잡 제어를 여전히 커넥션 단위로</strong> 합니다. 스트림이 여러 개여도 창은 하나예요. 그래서 실험대의 처리량이 HTTP/2와 <strong>정확히 같습니다.</strong></p>
+
+  <table class="keytable">
+    <tr><th>무엇이 문제였나</th><th>HTTP/3가 고치나</th></tr>
+    <tr><td>전송 계층 HOL 블로킹 — 한 스트림의 손실이 <strong>이미 도착한</strong> 다른 스트림의 데이터까지 붙잡는다</td><td><strong>예.</strong> QUIC이 실제로 고치는 것은 이것이다</td></tr>
+    <tr><td>손실률 제곱근에 반비례하는 처리량</td><td>아니오. 창이 커넥션 단위인 건 그대로다</td></tr>
+    <tr><td>창 ÷ RTT 한도</td><td>아니오. 같은 식이다</td></tr>
+    <tr><td>연결 수립 왕복</td><td><strong>예.</strong> 0-RTT / 1-RTT 로 줄인다</td></tr>
+  </table>
+
+  <p>HOL 블로킹은 <em>처리량</em>보다 <em>개별 스트림의 완료 시각</em>에 나타납니다. 총량은 같은데 첫 화면이 빨리 뜨는 식이에요. 그래서 실험대의 미터로는 안 보이고, 비교표의 HOL 열로만 표시했습니다.</p>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>윈도우 스케일링</td><td>TCP 헤더의 창 필드는 16비트라 <strong>64KB가 한계</strong>입니다. 스케일 옵션(<code>net.ipv4.tcp_window_scaling</code>)이 꺼져 있거나 중간 장비가 옵션을 지우면 1번 상황에 갇힙니다. 5.24 Mbps 라는 수치가 나오면 이걸 먼저 보세요</td></tr>
+    <tr><td>버퍼 상한</td><td><code>tcp_rmem</code> · <code>tcp_wmem</code> 의 최대값이 창의 실질 상한입니다. BDP보다 작으면 커널이 창을 그 위로 못 키웁니다 — 기본값은 장거리 경로를 염두에 두지 않습니다</td></tr>
+    <tr><td>BBR</td><td><strong>이 페이지의 세 번째 한도에서 벗어납니다.</strong> BBR은 손실을 혼잡 신호로 쓰지 않고 대역폭과 RTT를 추정하므로, 손실 있는 장거리 경로에서 CUBIC보다 훨씬 잘 나옵니다. 제곱근 법칙은 손실 기반 제어의 성질입니다</td></tr>
+    <tr><td>측정</td><td>대역폭 그래프만 보면 이 문제는 안 보입니다. <strong>띄운 바이트(in-flight)와 RTT를 같이 보세요.</strong> <code>ss -i</code> 의 <code>cwnd</code> · <code>rtt</code> · <code>bytes_in_flight</code> 가 그 값입니다</td></tr>
+    <tr><td>대용량 전송</td><td>S3 · 오브젝트 스토리지의 멀티파트 병렬 업로드가 4번 그대로입니다. 파트를 나누는 건 <strong>재시도 단위를 줄이려는 것도 있지만 동시성을 올리려는 것</strong>이 큽니다</td></tr>
+    <tr><td>DB 복제 지연</td><td>장거리 리전 간 복제가 안 따라오면 대역폭보다 <strong>복제 스트림의 동시성</strong>을 먼저 보세요. 스트림이 하나면 이 페이지의 1번입니다</td></tr>
+    <tr><td>짧은 전송</td><td>파일이 작으면 창이 커지기 전에 끝납니다(슬로 스타트). 그 구간에서는 <strong>대역폭도 창도 아니고 왕복 횟수</strong>가 시간을 정합니다 — 이 실험대는 정상 상태만 다룹니다</td></tr>
+  </table>
+
+  <p><a href="/connpool/">8번</a>이 <em>커넥션을 몇 개 잡아야 하는가</em>였다면, 이 페이지는 <em>왜 그 개수가 그렇게 나오는가</em>입니다. 같은 식을 다른 단위로 두 번 만난 셈이고, <strong>세 번째 한도(손실)만 이 페이지에 새로 있습니다.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/connpool/"><span class="no">08</span><span><span class="t">17밀리초 쿼리가 커넥션 풀을 말린다</span><span class="why">같은 식을 커넥션 풀에서 만납니다 — 동시성 = 처리량 × 지연.</span></span></a></li>
+      <li><a href="/mqtt/"><span class="no">05</span><span><span class="t">한 번만 전달한다는 약속의 값</span><span class="why">Receive Maximum 이 그 식의 또 다른 단위입니다.</span></span></a></li>
+      <li><a href="/timeout/"><span class="no">17</span><span><span class="t">각자 1초씩 줬는데 왜 아무도 1초를 못 쓰나</span><span class="why">같은 RTT 가 처리량도 정하고 타임아웃 예산도 먹습니다.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/throughput/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uConn:'개',
+  cBw:'대역폭', cWin:'창 ÷ RTT', cLoss:'손실 한도', cOut:'실제 처리량',
+  n_bw:'대역폭', n_win:'창÷RTT', n_loss:'손실',
+  mTput:'처리량', mUtil:'링크 활용률', mLimit:'병목',
+  mInflight:'띄운 양', mNeed:'채우려면', mRtts:'대역폭 대비',
+  cProto:'프로토콜', cTput:'처리량', cConn:'커넥션', cHol:'전송 계층 HOL',
+  p11:'HTTP/1.1 (창 64KB)', p2:'HTTP/2 (창 16MB)', p3:'HTTP/3 · QUIC',
+  holYes:'있음', holNo:'없음',
+  hBw:'대역폭이 병목이다 — 링크를 다 쓰고 있다',
+  hWin:'창÷RTT 가 병목이다 — 대역폭 $1 는 남는다',
+  hLoss:'손실이 병목이다 — 창을 키워도 안 오른다',
+  vBw:'<b>대역폭이 병목이다.</b> 처리량 <b>$1</b> · 링크 활용률 <b>$2</b><br><span class="at">여기서는 회선을 늘리면 실제로 빨라진다 — 이 구간에서만 그렇다</span>',
+  vWin:'<b>대역폭이 아니라 창÷RTT 가 병목이다.</b> 처리량 <b>$1</b> · 활용률 <b>$2</b><br>띄운 양 <b>$3</b> · 링크를 채우려면 <b>$4</b> <span class="at">— 회선을 늘려도 이 숫자는 안 움직인다</span>',
+  vLoss:'<b>손실이 병목이다.</b> 처리량 <b>$1</b> — 손실률 $2 하나가 창 한도 <b>$3</b> 를 눌렀다.<br><span class="at">이 한도는 커넥션 수에 정비례한다 — 지금 $4개다</span>',
+  scene:[
+    '1Gbps 회선에 RTT 100ms, 창 64KB, 커넥션 하나입니다. 처리량이 5.24 Mbps 예요 — 회선의 0.5% 입니다. 64KB를 띄워놓고 100ms를 기다리는 게 전부니까요. 막대 세 개를 보세요. 대역폭 막대는 끝까지 차 있는데 창÷RTT 막대가 짧고, 처리량은 짧은 쪽을 따라갑니다.',
+    '회선을 10Gbps로 올렸습니다. 처리량이 5.24 Mbps 그대로입니다. 소수점 한 자리도 안 움직였어요. 대역폭이 식에 없기 때문입니다. 곡선을 보세요 — 이미 평평한 구간에 있어서 오른쪽으로 가도 높이가 안 변합니다. 바뀐 건 활용률뿐이고, 0.52%에서 0.05%로 나빠졌습니다.',
+    'RTT를 10ms로 줄였습니다. 처리량이 52.43 Mbps — 정확히 10배입니다. 처리량이 RTT에 반비례하니까요. 서버를 사용자 가까이 옮기는 것이 회선을 늘리는 것보다 나은 이유입니다. 대역폭은 돈으로 사는데 RTT는 빛의 속도가 정하니, 거리를 줄이는 수밖에 없어요.',
+    'RTT를 100ms로 되돌리고 커넥션을 6개로 늘렸습니다. 31.46 Mbps — 6배입니다. RTT를 못 줄이면 동시성을 늘리면 돼요. 창 × 커넥션이 한 번에 띄운 양이고, 6배 띄우면 6배 나옵니다. 브라우저가 도메인당 커넥션을 여섯 개씩 여는 이유입니다.',
+    '커넥션을 하나로 되돌리고 창을 1MB로 키웠습니다. 83.89 Mbps 예요. 커넥션 하나로도 창만 크면 됩니다 — 식에는 둘의 곱만 들어가니까요. 이게 윈도우 스케일링이 하는 일입니다. TCP 헤더의 창 필드는 16비트라 64KB가 최대인데, 스케일 옵션이 그 한도를 밀어냅니다.',
+    '손실률 0.1%를 넣었습니다. 83.89에서 4.52 Mbps로 떨어졌어요 — 18.5분의 1입니다. 세 번째 막대가 켜졌습니다. 손실 한도는 손실률의 제곱근에 반비례해요. 창 막대는 여전히 83.89인데 손실 막대가 4.52이고, 처리량은 가장 짧은 막대를 따라갑니다. 창을 키워둔 게 전부 무의미해졌습니다.',
+    '손실은 그대로 두고 커넥션을 6개로 늘렸습니다. 27.14 Mbps — 정확히 6배입니다. 손실 한도가 커넥션 수에 정비례하기 때문이에요. 커넥션마다 자기 혼잡 창을 갖고, 손실이 나면 그 하나만 반으로 줄어듭니다. 그래서 같은 경로에서 커넥션 6개짜리 HTTP/1.1이 커넥션 1개짜리 HTTP/2보다 6배 빠릅니다. 비교표를 보세요.'
+  ],
+};
+</script>
+<script src="/shared/throughput-lab.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>
