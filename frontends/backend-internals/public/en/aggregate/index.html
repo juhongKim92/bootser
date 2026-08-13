@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The same number, different on two screens — when aggregation paths multiply</title>
+<meta name="description" content="The detail screen says 48.32 and the statistics screen says 60.42. Same average speed, and both are right — one is the overall weighted mean, the other is the mean of daily means. Having two definitions is the bug. Match the decimal places and numeric versus double precision still break ties differently.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/aggregate/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/aggregate/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/aggregate/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/aggregate/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="The same number, different on two screens">
+<meta property="og:description" content="Both are right. The bug is not a value — it is having two definitions.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/aggregate/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The same number, different on two screens">
+<meta name="twitter:description" content="A weighted mean ignores day boundaries; a mean of daily means moves when you change them.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/aggregate-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/aggregate/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>The same number, different on two screens</h1>
+  <p class="lede">The detail screen says 48.32. The statistics screen says 60.42. Same metric, same period, same database. You put the two queries side by side to find the bug and <strong>they are both correct.</strong> One is the overall weighted mean and the other is the mean of daily means. <strong>What is wrong is not a value — it is that there are two definitions.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sS">sample skew</label>
+          <span class="v" id="vS">0<small>%</small></span>
+          <input type="range" id="sS" min="0" max="90" step="10" value="0" aria-label="How skewed the per-day row counts are">
+        </div>
+        <div class="dial">
+          <label for="sP">stored precision</label>
+          <span class="v" id="vP">exact</span>
+          <input type="range" id="sP" min="0" max="2" step="1" value="0" aria-label="Decimal places kept when storing the daily mean">
+        </div>
+        <div class="dial">
+          <label>rounding</label>
+          <div class="seg" id="segRound" role="group" aria-label="Rounding used when storing">
+            <button data-rm="trunc" aria-pressed="true">trunc</button>
+            <button data-rm="numeric">round · numeric</button>
+            <button data-rm="double">round · double</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>day grouping</label>
+          <div class="seg" id="segTz" role="group" aria-label="Which timezone the days are grouped by">
+            <button data-tz="utc" aria-pressed="true">UTC</button>
+            <button data-tz="local">local (+9)</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sE">rows near boundary</label>
+          <span class="v" id="vE">0</span>
+          <input type="range" id="sE" min="0" max="40" step="5" value="0" aria-label="Rows sitting near the midnight boundary">
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">Same data, two paths</span>
+      <div class="board">
+        <div class="two" id="two"></div>
+
+        <div class="days" id="days"></div>
+        <div class="daysx" id="daysX"></div>
+
+        <div class="steps" id="steps"></div>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">Change only the rounding — same decimal place, three answers</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">previous step</button>
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Working the dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What changes</th></tr>
+    <tr><td>sample skew</td><td>Skews the per-day row counts (the total stays at 300). <strong>Only the weighted mean moves; the mean of daily means does not.</strong></td></tr>
+    <tr><td>stored precision</td><td>How many decimals the daily mean is stored with. <strong>Cut it and there is no way back to agreeing with the source.</strong></td></tr>
+    <tr><td>rounding</td><td><code>trunc</code> · <code>numeric</code> · <code>double</code>. <strong>Same decimal place, three different stored values.</strong></td></tr>
+    <tr><td>day grouping · boundary rows</td><td>Which day the rows near midnight land in. <strong>The weighted mean does not budge; only the mean of daily means moves.</strong></td></tr>
+  </table>
+
+  <p>The data is three days. Every row within a day has the same value (<code>40.25</code>, <code>60.75</code>, <code>80.25</code>) and each day starts with 100 rows. Bar <strong>width is the row count</strong> and <strong>height is that day's mean</strong>.</p>
+
+  <p><strong>The values 0.25 and 0.75 were chosen deliberately.</strong> They are exactly representable in binary floating point, so rounding to one decimal produces a <em>genuine tie</em> and the tie-breaking rule actually applies. A value like <code>0.35</code> does not exist exactly in binary at all, so there is no tie to break — which is worse, and covered below.</p>
+
+  <h2>Try this</h2>
+
+  <div class="recipe">
+    <h4>1. Even counts and exact storage — the two paths agree</h4>
+    <div class="seq">skew 0% · exact storage · 100 rows per day
+path A <em>60.4167</em> · path B <em>60.4167</em> · difference <em>0</em>
+decimals in agreement <em>6</em></div>
+    <p class="why">The baseline. With equal row counts a weighted mean and an unweighted one coincide, because all the weights are the same. <strong>This is the only place the two screens show the same number</strong> — and row counts are rarely equal day to day in practice.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Skew the samples — a gap of 12.1</h4>
+    <div class="seq">skew 0% → 60% (row counts 100/100/100 → 220/40/40)
+path A 60.4167 → <em>48.3167</em>
+path B <em>unchanged at 60.4167</em> · difference <em>12.1000</em></div>
+    <p class="why">The rows piled up on day one, whose value is the lowest (40.25), so the overall weighted mean falls. <strong>And the mean of daily means does not move a digit</strong> — each day's mean is unchanged and you are adding three of them and dividing by three. <strong>Ignoring row counts is that path's definition.</strong> Push the skew to 90% and the gap reaches 18.15.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Store one decimal — 0.05 remains</h4>
+    <div class="seq">skew back to 0% · stored precision exact → 1 decimal (trunc)
+stored values <em>40.2 · 60.7 · 80.2</em>
+path B 60.4167 → <em>60.3667</em> · difference <em>0.0500</em></div>
+    <p class="why">The skew is gone and they still differ. <strong>Precision discarded at write time does not come back.</strong> The source still knows <code>40.25</code> and the stored value only knows <code>40.2</code>. The only way to make them agree is <strong>to cut the source down to the same decimal place too</strong> — agreeing by throwing accuracy away.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Swap trunc for round — 0.05 the other way</h4>
+    <div class="seq">rounding trunc → round · numeric
+stored 40.2·60.7·80.2 → <em>40.3 · 60.8 · 80.3</em>
+path B 60.3667 → <em>60.4667</em></div>
+    <p class="why"><code>trunc(v, s)</code>, in the words of the PostgreSQL documentation, <em>"Truncates v to s decimal places"</em> — <strong>it discards.</strong> <code>round</code> rounds. Same one decimal, completely different stored values. If one screen uses <code>trunc</code> and the other uses <code>round</code>, <strong>matching the decimal places will never make them agree.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Same round, only the type changes — different again</h4>
+    <div class="seq">rounding round · numeric → round · double
+stored 40.3·60.8·80.3 → <em>40.2 · 60.8 · 80.2</em>
+path B 60.4667 → <em>60.4000</em></div>
+    <p class="why">Same value, same function, same decimal place — and it differs <strong>because of the type</strong>. The PostgreSQL docs spell it out: for <code>numeric</code>, <em>"ties are broken by rounding away from zero"</em>; for <code>double precision</code>, <em>"platform dependent, but round to nearest even is the most common rule"</em>. <code>40.25</code> becomes 40.3 under <code>numeric</code> and 40.2 under <code>double</code> (2 being even). <strong>And the double side is platform dependent</strong> — the same code can answer differently on another server.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Move the day boundary — only one side moves</h4>
+    <div class="seq">exact storage · grouping UTC → local (+9) · boundary rows 40
+row counts 100/100/100 → <em>60/140/100</em> · day 2 mean 60.75 → <em>54.89</em>
+path A <em>unchanged at 60.4167</em> · path B 60.4167 → <em>58.4643</em></div>
+    <p class="why">This is the heart of the page. Forty rows near the boundary moved from day one to day two. They carry their values, so <strong>day two's mean is now a blend.</strong> And <strong>path A does not budge</strong> — averaging the same set of rows in one pass does not care where the day boundaries are. <strong>Change the timezone and only one screen's number changes.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. Stack all three — 8.65</h4>
+    <div class="seq">skew 60% + 1-decimal double storage + local grouping + 40 boundary rows
+path A <em>48.3167</em> · path B <em>56.9667</em> · difference <em>8.6500</em>
+decimals in agreement <em>0</em></div>
+    <p class="why">The three causes push in different directions, so fixing any one of them leaves the values apart. <strong>This is why the investigation ends at "I matched the decimals and it still does not line up".</strong> There was never one cause.</p>
+  </div>
+
+  <h2>Both are right — there are two definitions</h2>
+
+  <p>The longest part of debugging this is looking for which side is the bug. The answer is <strong>neither</strong>.</p>
+
+  <table class="keytable">
+    <tr><th>Path</th><th>What it computes</th><th>Row counts</th><th>Day boundaries</th></tr>
+    <tr><td>A · re-aggregate the source</td><td>overall weighted mean</td><td><strong>affected</strong></td><td>irrelevant</td></tr>
+    <tr><td>B · reuse stored values</td><td>mean of daily means</td><td>irrelevant</td><td><strong>affected</strong></td></tr>
+  </table>
+
+  <div class="callout">The two numbers are <strong>answers to different questions</strong>. "What was the average speed over this period?" and "What was the average of the daily average speeds?" are not the same question. Which one is correct is <strong>a product decision</strong>, and if you leave it to the code, each screen decides for itself.</div>
+
+  <p><a href="/en/genericplan/">No. 13</a> and <a href="/en/stampede/">no. 16</a> covered Jensen's inequality — judge by the average and break in the tail. Here the problem is <strong>averaging an average</strong>: the place where the weights get lost.</p>
+
+  <h2>Making them agree means giving up accuracy</h2>
+
+  <p>The common fix is "let us match the decimal places". It does work in the lab. The way it works is the problem.</p>
+
+  <table class="keytable">
+    <tr><th>Fix</th><th>Outcome</th></tr>
+    <tr><td>Cut both sides to one decimal</td><td>They agree. But you got there <strong>by discarding precision the source already had.</strong> The two screens match and both are now less accurate</td></tr>
+    <tr><td>Unify the rounding function</td><td>Necessary and insufficient. Even with <code>trunc</code> and <code>round</code> reconciled, <strong>differing types still split on ties</strong></td></tr>
+    <tr><td>Unify the type as well</td><td>Even here, <strong>the weighting problem and the day-boundary problem remain</strong> — recipes 2 and 6 have nothing to do with rounding</td></tr>
+    <tr><td>Collapse to one path</td><td><strong>This is the only real fix.</strong> Compute in one place and have everything else read that result. It is not about matching values; it is about having one definition</td></tr>
+  </table>
+
+  <h2>In floating point a tie is not a tie</h2>
+
+  <p>The lab's values are <code>0.25</code> and <code>0.75</code> on purpose. They are binary fractions, exactly representable, so rounding to one decimal creates a <strong>genuine tie</strong> and the rule really does decide the outcome.</p>
+
+  <div class="callout">A value like <code>60.35</code> <strong>does not exist exactly</strong> in binary floating point. What is stored is slightly above or slightly below it. So it is not "exactly halfway", no tie rule is invoked, and <strong>which way it rounds depends on the direction of that approximation.</strong> Unifying the rule does not make it predictable.</div>
+
+  <p>The PostgreSQL documentation warns about this directly — <em>"Comparing two floating-point values for equality might not always work as expected"</em> — and recommends <code>numeric</code> when you need exact storage. <code>real</code> carries at least 6 decimal digits and <code>double precision</code> at least 15.</p>
+
+  <h2>Out in the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>ask this first</td><td>"What is the <strong>definition</strong> of this number?" — before comparing queries. Until it is settled whether the metric is a weighted mean or a mean of daily means, <strong>neither query can be fixed</strong></td></tr>
+    <tr><td>count the paths</td><td>Grep for how many code paths compute the same metric. <strong>More than one and they will diverge eventually.</strong> Collapse to one and have the rest read its result</td></tr>
+    <tr><td>stored precision</td><td>Cut decimals when persisting an aggregate and <strong>there is no way back to agreeing with the source.</strong> If you are going to cut, the source-side display has to cut the same way — and that is a decision to be less accurate</td></tr>
+    <tr><td>rounding</td><td><code>trunc</code> discards (<code>trunc(42.4382, 2) → 42.43</code>). <code>round</code> rounds, but <strong><code>numeric</code> breaks ties away from zero while <code>double precision</code> usually rounds half to even and is platform dependent</strong>. The same value can round differently on different servers</td></tr>
+    <tr><td>types</td><td>Use <code>numeric</code> when you need exact storage. An aggregate stored in <code>real</code> (6 digits) has already lost precision at larger magnitudes</td></tr>
+    <tr><td>timezones</td><td><strong>Pin the storage, transport and display convention in one document.</strong> Pick UTC storage with conversion at display time, or the other way, and make sure <strong>two APIs never group the same metric by different bases</strong>. Metrics with a lot of data near the boundary — overnight trips, late-night orders — diverge the most</td></tr>
+    <tr><td>regression tests</td><td>Once the paths are unified, add <strong>a test that compares the two API responses</strong>. Catching a re-divergence in code review is not realistic</td></tr>
+  </table>
+
+  <p>If <a href="/en/writeskew/">no. 15</a> was results going wrong <em>because of concurrency</em>, this page is results being two things <em>because the definition split</em>. Both are silent — no exception, no log, just different numbers. Except here <strong>what is missing is not code to fix but a definition to decide.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/writeskew/"><span class="no">15</span><span><span class="t">Both checked, and both passed</span><span class="why">The same species of silent wrong number — that one comes from concurrency.</span></span></a></li>
+      <li><a href="/en/genericplan/"><span class="no">13</span><span><span class="t">Slow from the sixth execution</span><span class="why">Judging by the average — Jensen’s inequality showing up on the optimiser side.</span></span></a></li>
+      <li><a href="/en/mvcc/"><span class="no">01</span><span><span class="t">Why your table never shrinks after DELETE</span><span class="why">If the two paths read different snapshots you get one more source of difference.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">index</a> · <a href="/aggregate/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uDigit:'', uRow:'',
+  pathA:'path A · re-aggregate source', pathASub:'overall weighted mean — counts the rows',
+  pathB:'path B · reuse stored values', pathBSub:'mean of daily means — ignores row counts',
+  gapK:'difference', gapNone:'identical',
+  dayN:'day $1 · $2 rows',
+  sA1:'path A', sB1:'path B · store', sB1ex:'store each day’s mean at $1 ($2)', sB2:'path B · mean',
+  precRaw:'exact', precDigits:' dp',
+  rm_trunc:'trunc (discard)', rm_numeric:'round · numeric', rm_double:'round · double',
+  mGap:'difference', mRel:'relative', mAgree:'decimals agreeing', mMoved:'rows moved', mSkew:'rows per day',
+  cMode:'rounding', cStored:'stored values', cB:'path B', cGap:'difference',
+  vSame:'<b>Both paths give the same value.</b> Row counts are even and no precision was discarded.<br><span class="at">That combination rarely survives in practice — try moving a single dial</span>',
+  vWeight:'<b>Row counts are skewed to $1.</b> Only the weighted mean moved; the mean of daily means did not — difference <b>$2</b>.<br><span class="at">Ignoring row counts is that path’s definition. It is not a bug</span>',
+  vRound:'<b>Storing as $1 left a difference of <b>$2</b>.</b> Only $3 decimals agree.<br><span class="at">Precision discarded at write time does not come back — matching means cutting the source too</span>',
+  vTz:'<b>$1 boundary rows moved to the next day.</b> Path A is unchanged and only path B moved — difference <b>$2</b>.<br><span class="at">Averaging the same set of rows in one pass does not care about day boundaries</span>',
+  hSame:'the two paths agree — even counts and full precision',
+  hDiff:'the values differ — only $1 decimals agree',
+  scene:[
+    'The baseline. One hundred rows per day, evenly, and storage is exact. Both paths read 60.4167. With equal row counts a weighted mean and an unweighted one coincide, because all the weights are the same. This is the only place the two screens show the same number.',
+    'Sample skew pushed to 60%, so the row counts are 220/40/40. Day one has the lowest value, so the overall weighted mean drops to 48.3167. And the mean of daily means is still 60.4167 — each day’s mean is unchanged and you add three of them and divide by three. The gap is 12.1. Ignoring row counts is that path’s definition.',
+    'Skew removed, and only the stored precision cut to one decimal. The stored values become 40.2·60.7·80.2 and path B drops to 60.3667. There is no skew and still a 0.05 gap: precision discarded at write time does not come back. The source knows 40.25 and the stored value only knows 40.2.',
+    'trunc swapped for round · numeric. The stored values become 40.3·60.8·80.3 and path B rises to 60.4667. trunc discards and round rounds. Same one decimal, completely different stored values — if one screen truncates and the other rounds, matching decimal places will never make them agree.',
+    'Same round, only the type changed to double. Stored values are 40.2·60.8·80.2 and path B is 60.4000. numeric breaks ties away from zero and double rounds half to even, so 40.25 is 40.3 under numeric and 40.2 under double. And the double side is platform dependent, so it can differ between servers.',
+    'Storage back to exact, grouping switched to local, and 40 boundary rows moved. Row counts become 60/140/100 and day two’s mean blends from 60.75 down to 54.89. And path A is still 60.4167 — averaging the same set of rows in one pass does not care where the day boundaries are. Change the timezone and only one screen’s number changes.',
+    'All three stacked: 60% skew, one-decimal double storage, local grouping. 48.3167 against 56.9667, a gap of 8.65. The three causes push in different directions, so fixing any one of them leaves the values apart. This is why it ends at "I matched the decimals and it still does not line up".'
+  ],
+};
+</script>
+<script src="/shared/aggregate-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "The same number, different on two screens",
+  "description": "The detail screen says 48.32 and the statistics screen says 60.42. Same average speed, and both are right — one is the overall weighted mean, the other is the mean of daily means. Having two definitions is the bug. Match the decimal places and numeric versus double precision still break ties differently.",
+  "url": "https://lab.vermilion19.com/en/aggregate/",
+  "inLanguage": "en",
+  "datePublished": "2026-08-13",
+  "dateModified": "2026-08-13",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "The same number, different on two screens"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+</body>
+</html>

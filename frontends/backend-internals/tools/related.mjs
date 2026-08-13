@@ -16,7 +16,8 @@ export const NO = {
   mvcc: '01', gc: '02', hashring: '03', raft: '04', mqtt: '05', websocket: '06',
   keepalive: '07', connpool: '08', jobclaim: '09', retryloop: '10', backpressure: '11',
   correlation: '12', genericplan: '13', retrystorm: '14', writeskew: '15', stampede: '16',
-  timeout: '17', lockttl: '18', throughput: '19', rebalance: '20', tcpclose: '21'
+  timeout: '17', lockttl: '18', throughput: '19', rebalance: '20', tcpclose: '21',
+  aggregate: '22'
 };
 
 /* slug → [{ to, ko, en }] */
@@ -88,7 +89,8 @@ export const RELATED = {
   genericplan: [
     { to: 'stampede', ko: '평균으로 판단하고 꼬리에서 사고가 납니다 — 젠센 부등식이 옷을 바꿔 입었습니다.', en: 'Judge by the average and break in the tail — Jensen’s inequality in different clothes.' },
     { to: 'mvcc', ko: '그 통계를 갱신하는 것이 VACUUM 과 ANALYZE 입니다.', en: 'Those statistics are what VACUUM and ANALYZE refresh.' },
-    { to: 'connpool', ko: '느려진 쿼리가 풀을 말리는 데 얼마나 걸리지 않는가.', en: 'How little it takes for a slowed query to drain the pool.' }
+    { to: 'connpool', ko: '느려진 쿼리가 풀을 말리는 데 얼마나 걸리지 않는가.', en: 'How little it takes for a slowed query to drain the pool.' },
+    { to: 'aggregate', ko: '평균으로 판단하는 문제의 사촌 — 평균을 한 번 더 평균하면 가중치를 잃습니다.', en: 'A cousin of judging by the average — average it twice and the weights are gone.' }
   ],
   retrystorm: [
     { to: 'backpressure', ko: '거부를 신호로 쓰면 애초에 이 상태에 들어가지 않습니다.', en: 'Use rejection as a signal and you never enter this state.' },
@@ -99,7 +101,8 @@ export const RELATED = {
   writeskew: [
     { to: 'jobclaim', ko: '그래서 락을 어디에 걸어야 하는가.', en: 'So where does the lock have to go?' },
     { to: 'lockttl', ko: '예외도 로그도 없이 결과만 틀리는 같은 종류가 분산 락에서 나옵니다.', en: 'The same species — no exception, no log, just a wrong result — out of a distributed lock.' },
-    { to: 'mvcc', ko: '각자가 보고 있던 스냅숏이 무엇이었는가.', en: 'What the snapshot each of them was reading actually was.' }
+    { to: 'mvcc', ko: '각자가 보고 있던 스냅숏이 무엇이었는가.', en: 'What the snapshot each of them was reading actually was.' },
+    { to: 'aggregate', ko: '이쪽은 동시성 때문에 틀리고, 22 는 정의가 갈려서 값이 둘입니다.', en: 'Here concurrency makes it wrong; in no. 22 the definition splits and there are two values.' }
   ],
   stampede: [
     { to: 'lockttl', ko: '뮤텍스를 분산 락으로 옮기면 락의 TTL 이 새 문제가 됩니다.', en: 'Move the mutex to a distributed lock and the lock’s TTL becomes the new problem.' },
@@ -120,6 +123,11 @@ export const RELATED = {
     { to: 'connpool', ko: '같은 식을 커넥션 풀에서 만납니다 — 동시성 = 처리량 × 지연.', en: 'The same formula met at the connection pool — concurrency = throughput × latency.' },
     { to: 'mqtt', ko: 'Receive Maximum 이 그 식의 또 다른 단위입니다.', en: 'Receive Maximum is that formula in yet another unit.' },
     { to: 'timeout', ko: '같은 RTT 가 처리량도 정하고 타임아웃 예산도 먹습니다.', en: 'The same RTT sets your throughput and eats your timeout budget.' }
+  ],
+  aggregate: [
+    { to: 'writeskew', ko: '예외도 로그도 없이 숫자만 틀리는 같은 종류 — 저쪽은 동시성입니다.', en: 'The same species of silent wrong number — that one comes from concurrency.' },
+    { to: 'genericplan', ko: '평균으로 판단하는 자리 — 젠센 부등식이 옵티마이저 쪽에서 나옵니다.', en: 'Judging by the average — Jensen’s inequality showing up on the optimiser side.' },
+    { to: 'mvcc', ko: '두 경로가 서로 다른 스냅숏을 읽고 있으면 차이가 하나 더 생깁니다.', en: 'If the two paths read different snapshots you get one more source of difference.' }
   ],
   tcpclose: [
     { to: 'keepalive', ko: '반대편 — 이쪽은 정상적으로 끊었는데 유실되고, 7 번은 끊겼는데 살아있다고 믿습니다.', en: 'The mirror — here a proper close loses data; in no. 7 a dead connection looks alive.' },

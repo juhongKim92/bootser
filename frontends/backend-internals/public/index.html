@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Backend Internals — 백엔드 개념 인터랙티브 시각화</title>
-  <meta name="description" content="백엔드 내부 동작을 직접 조작하며 확인하는 시각화 21편. MVCC와 VACUUM, G1과 ZGC, 컨시스턴트 해싱, Raft, MQTT QoS, 커넥션 풀 고갈, 백프레셔, 캐시 스탬피드, 데드라인 전파, 분산 락 만료, BDP, Kafka 리밸런싱, TCP 종료 의미.">
+  <meta name="description" content="백엔드 내부 동작을 직접 조작하며 확인하는 시각화 22편. MVCC와 VACUUM, G1과 ZGC, 컨시스턴트 해싱, Raft, MQTT QoS, 커넥션 풀 고갈, 백프레셔, 캐시 스탬피드, 데드라인 전파, 분산 락 만료, BDP, Kafka 리밸런싱, TCP 종료 의미, 집계 경로 난립.">
   <link rel="canonical" href="https://lab.vermilion19.com/">
   <link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/">
   <link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/">
@@ -13,7 +13,7 @@
   <meta property="og:locale" content="ko_KR">
   <meta property="og:locale:alternate" content="en_US">
   <meta property="og:title" content="Backend Internals — 백엔드 개념 인터랙티브 시각화">
-  <meta property="og:description" content="손으로 만져보는 백엔드 내부 동작 21편 — 데이터베이스와 JVM, 분산 시스템, 그리고 실제 장애에서 나온 것들.">
+  <meta property="og:description" content="손으로 만져보는 백엔드 내부 동작 22편 — 데이터베이스와 JVM, 분산 시스템, 그리고 실제 장애에서 나온 것들.">
   <meta property="og:url" content="https://lab.vermilion19.com/">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -276,7 +276,7 @@
       <summary>
         <span class="arw" aria-hidden="true"></span>
         <h2>조용히 틀리는 것들 <em>예외도 로그도 없이 결과만 틀린다</em></h2>
-        <span class="count">5편</span>
+        <span class="count">6편</span>
       </summary>
       <div class="glist">
 
@@ -325,6 +325,15 @@
         <span class="tag live">공개</span>
       </a>
 
+      <a class="card" href="/aggregate/">
+        <span class="no">22</span>
+        <span>
+          <h2>같은 숫자가 두 화면에서 다르다</h2>
+          <p>집계 경로 난립. 둘 다 맞습니다 — 하나는 전체 가중 평균이고 하나는 일별 평균의 평균이니까요.</p>
+        </span>
+        <span class="tag live">공개</span>
+      </a>
+
       </div>
     </details>
 
@@ -341,7 +350,7 @@
   "@context": "https://schema.org",
   "@type": "CollectionPage",
   "name": "Backend Internals",
-  "description": "백엔드 내부 동작을 직접 조작하며 확인하는 시각화 21편. MVCC와 VACUUM, G1과 ZGC, 컨시스턴트 해싱, Raft, MQTT QoS, 커넥션 풀 고갈, 백프레셔, 캐시 스탬피드, 데드라인 전파, 분산 락 만료, BDP, Kafka 리밸런싱, TCP 종료 의미.",
+  "description": "백엔드 내부 동작을 직접 조작하며 확인하는 시각화 22편. MVCC와 VACUUM, G1과 ZGC, 컨시스턴트 해싱, Raft, MQTT QoS, 커넥션 풀 고갈, 백프레셔, 캐시 스탬피드, 데드라인 전파, 분산 락 만료, BDP, Kafka 리밸런싱, TCP 종료 의미, 집계 경로 난립.",
   "url": "https://lab.vermilion19.com/",
   "inLanguage": "ko",
   "dateModified": "2026-08-13",

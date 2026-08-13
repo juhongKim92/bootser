@@ -1,0 +1,109 @@
+/* ============================================================
+   22. 같은 숫자가 두 화면에서 다르다 — 집계 경로 난립
+   ============================================================ */
+
+.lab{margin:32px 0 8px;border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);overflow:hidden}
+.lab section{border-bottom:1px solid var(--rule);padding:16px 18px}
+.lab section:last-child{border-bottom:none}
+.cap{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;display:block}
+
+/* --- 손잡이 --- */
+.dials{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end}
+.dial label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
+.dial input[type=range]{width:112px;max-width:40vw;accent-color:var(--horizon);vertical-align:middle}
+.dial .v{font-family:var(--mono);font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums;min-width:62px;display:inline-block}
+.dial .v small{font-size:11px;color:var(--ink-3)}
+.seg{display:flex;gap:0;border:1px solid var(--rule);border-radius:2px;overflow:hidden;flex-wrap:wrap}
+.seg button{border:none;border-right:1px solid var(--rule);border-radius:0;padding:6px 10px;font-size:10.5px;white-space:nowrap}
+.seg button:last-child{border-right:none}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.hint{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:8px;min-height:14px}
+.hint.warn{color:var(--blocked)}
+
+/* --- 두 숫자 --- */
+.board{border:1px solid var(--rule);border-radius:3px;background:var(--paper);padding:14px 15px 12px}
+.two{display:flex;gap:14px;flex-wrap:wrap;align-items:stretch}
+.num{flex:1;min-width:180px;border:1px solid var(--rule);border-radius:3px;padding:11px 13px;background:var(--paper-2)}
+.num .k{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:5px}
+.num .big{font-family:var(--mono);font-size:27px;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.1}
+.num .sub{display:block;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:5px;line-height:1.6}
+.num.a{border-left:2px solid var(--horizon)}
+.num.b{border-left:2px solid var(--free)}
+.gap{flex:none;min-width:110px;display:flex;flex-direction:column;justify-content:center;align-items:center;
+  border:1px dashed var(--rule);border-radius:3px;padding:8px 10px}
+.gap .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.gap .big{font-family:var(--mono);font-size:21px;font-variant-numeric:tabular-nums;color:var(--live);margin-top:3px}
+.gap.diff .big{color:var(--blocked)}
+.gap .sub{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:3px}
+
+/* --- 날짜별 표본 (폭 = 표본 수, 높이 = 평균) --- */
+.days{display:flex;align-items:flex-end;gap:3px;height:96px;margin-top:17px;border-bottom:1px solid var(--rule)}
+.day{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;position:relative}
+.day .bar{width:100%;background:color-mix(in srgb,var(--horizon) 35%,transparent);border:1px solid var(--horizon);
+  border-bottom:none;border-radius:2px 2px 0 0}
+.day .lab2{position:absolute;top:-14px;font-family:var(--mono);font-size:9px;color:var(--ink-3);white-space:nowrap}
+.day.moved .bar{background:repeating-linear-gradient(135deg,transparent 0 3px,var(--free) 3px 4.5px);border-color:var(--free)}
+.daysx{display:flex;gap:3px;margin-top:5px}
+.daysx span{font-family:var(--mono);font-size:9px;color:var(--ink-3);text-align:center;overflow:hidden;white-space:nowrap}
+
+/* --- 계산 단계 --- */
+.steps{margin-top:16px;border-top:1px solid var(--rule)}
+.step{display:grid;grid-template-columns:104px 1fr 96px;gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--rule)}
+.step .nm{font-family:var(--mono);font-size:10px;color:var(--ink-3);text-align:right}
+.step .ex{font-family:var(--mono);font-size:10.5px;color:var(--ink-2);overflow-x:auto}
+.step .rs{font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums;text-align:right;color:var(--ink)}
+.step.a .nm{color:var(--horizon)}
+.step.b .nm{color:var(--free)}
+
+/* --- 미터 --- */
+.meters{display:flex;gap:22px;flex-wrap:wrap;margin-top:15px}
+.meters .m{min-width:86px}
+.meters .k{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.meters .n{font-family:var(--mono);font-size:18px;color:var(--ink);font-variant-numeric:tabular-nums}
+.meters .n small{font-size:11px;color:var(--ink-3);margin-left:2px}
+.meters .m.bad .n{color:var(--blocked)}
+.meters .m.good .n{color:var(--live)}
+
+/* --- 판정 --- */
+.verdict{border-left:2px solid var(--rule);background:var(--paper);padding:10px 0 10px 13px;margin-top:14px;
+  font-family:var(--mono);font-size:10.5px;line-height:1.8;color:var(--ink-2)}
+.verdict.stuck{border-left-color:var(--blocked)}
+.verdict.stuck b{color:var(--blocked)}
+.verdict.ok{border-left-color:var(--live)}
+.verdict.ok b{color:var(--live)}
+.verdict b{font-weight:500;color:var(--ink)}
+.verdict .at{color:var(--ink-3)}
+
+/* --- 비교표 --- */
+.cmp{width:100%;border-collapse:collapse;font-size:13px}
+.cmp th,.cmp td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.cmp th{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.cmp td:first-child{font-size:12.5px;width:1%;white-space:nowrap;padding-right:16px}
+.cmp td.num2{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
+.cmp tr.on td{background:var(--paper-3)}
+.cmp td.bad{color:var(--blocked)}
+.cmp td.good{color:var(--live)}
+
+/* --- 조작대 --- */
+.transport{background:var(--paper-3);display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.transport .keys{display:flex;gap:6px;flex-wrap:wrap}
+.narration{flex:1;min-width:240px;font-family:var(--serif);font-size:14.5px;line-height:1.65;color:var(--ink)}
+.narration .n{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-3);display:block;margin-bottom:3px}
+
+/* --- 안내 --- */
+.recipe{border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);padding:14px 16px;margin:14px 0;max-width:68ch}
+.recipe h4{font-family:var(--sans);font-size:14px;font-weight:700;margin:0 0 4px}
+.recipe .seq{font-family:var(--mono);font-size:11px;line-height:1.9;background:var(--paper);border:1px solid var(--rule);
+  border-radius:2px;padding:9px 11px;margin:9px 0;white-space:pre-wrap;color:var(--ink-2)}
+.recipe .seq em{font-style:normal;color:var(--horizon)}
+.recipe .why{font-size:13.5px;color:var(--ink-2);margin:0}
+.keytable{width:100%;border-collapse:collapse;margin:12px 0;max-width:68ch;font-size:13.5px}
+.keytable th,.keytable td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.keytable th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.keytable td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap;width:1%;padding-right:18px;color:var(--ink)}
+
+@media (max-width:600px){
+  .step{grid-template-columns:70px 1fr 76px;gap:7px}
+  .step .nm{font-size:9px}
+  .num .big{font-size:22px}
+}

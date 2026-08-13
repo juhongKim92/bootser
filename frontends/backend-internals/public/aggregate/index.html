@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>같은 숫자가 두 화면에서 다르다 — 집계 경로 난립</title>
+<meta name="description" content="주행상세는 48.32, 일별 통계는 60.42. 같은 평균 속도인데 값이 다릅니다. 둘 다 맞아요 — 하나는 전체 가중 평균이고 하나는 일별 평균의 평균입니다. 정의가 둘인 게 버그입니다. 반올림을 같은 자리수로 맞춰도 numeric과 double은 tie를 다르게 깨서 여전히 다릅니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/aggregate/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/aggregate/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/aggregate/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/aggregate/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="같은 숫자가 두 화면에서 다르다">
+<meta property="og:description" content="둘 다 맞습니다. 버그가 아니라 정의가 둘입니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/aggregate/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="같은 숫자가 두 화면에서 다르다">
+<meta name="twitter:description" content="전체 가중 평균은 날짜 경계와 무관하고, 일별 평균의 평균은 경계가 바뀌면 움직입니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/aggregate-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/aggregate/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>같은 숫자가 두 화면에서 다르다</h1>
+  <p class="lede">상세 화면은 48.32, 통계 화면은 60.42 입니다. 같은 지표, 같은 기간, 같은 데이터베이스예요. 버그를 찾으러 두 쿼리를 나란히 놓고 보면 <strong>둘 다 맞습니다.</strong> 하나는 전체 가중 평균이고 하나는 일별 평균의 평균이니까요. <strong>틀린 건 값이 아니라 정의가 둘이라는 사실입니다.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sS">표본 편중</label>
+          <span class="v" id="vS">0<small>%</small></span>
+          <input type="range" id="sS" min="0" max="90" step="10" value="0" aria-label="날짜별 표본 수가 얼마나 치우쳤나">
+        </div>
+        <div class="dial">
+          <label for="sP">저장 정밀도</label>
+          <span class="v" id="vP">원값</span>
+          <input type="range" id="sP" min="0" max="2" step="1" value="0" aria-label="일별 평균을 저장할 때의 소수점 자리수">
+        </div>
+        <div class="dial">
+          <label>반올림 방식</label>
+          <div class="seg" id="segRound" role="group" aria-label="저장할 때 쓰는 반올림 방식">
+            <button data-rm="trunc" aria-pressed="true">trunc</button>
+            <button data-rm="numeric">round · numeric</button>
+            <button data-rm="double">round · double</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>날짜 그룹핑 기준</label>
+          <div class="seg" id="segTz" role="group" aria-label="어느 타임존 기준으로 날짜를 나누나">
+            <button data-tz="utc" aria-pressed="true">UTC</button>
+            <button data-tz="local">로컬 (+9)</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sE">경계 근처 행</label>
+          <span class="v" id="vE">0<small>행</small></span>
+          <input type="range" id="sE" min="0" max="40" step="5" value="0" aria-label="자정 경계 근처에 있는 행의 수">
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">같은 데이터, 두 경로</span>
+      <div class="board">
+        <div class="two" id="two"></div>
+
+        <div class="days" id="days"></div>
+        <div class="daysx" id="daysX"></div>
+
+        <div class="steps" id="steps"></div>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">반올림 방식만 바꾸면 — 같은 자리수인데도</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>표본 편중</td><td>날짜별 행 수를 치우칩니다(총합은 300 고정). <strong>가중 평균만 움직이고 일별 평균의 평균은 안 움직입니다.</strong></td></tr>
+    <tr><td>저장 정밀도</td><td>일별 평균을 소수점 몇 자리로 저장하나. <strong>깎으면 원천 재집계와 다시 일치할 방법이 없습니다.</strong></td></tr>
+    <tr><td>반올림 방식</td><td><code>trunc</code> · <code>numeric</code> · <code>double</code>. <strong>같은 자리수인데 저장값이 세 벌 나옵니다.</strong></td></tr>
+    <tr><td>날짜 그룹핑 · 경계 행</td><td>자정 근처 행이 어느 날로 가나. <strong>가중 평균은 꿈쩍도 안 하고 일별 평균의 평균만 움직입니다.</strong></td></tr>
+  </table>
+
+  <p>데이터는 3일치입니다. 각 날의 행은 모두 같은 값(<code>40.25</code> · <code>60.75</code> · <code>80.25</code>)이고 처음엔 하루 100행씩입니다. 막대의 <strong>폭이 행 수</strong>, <strong>높이가 그 날 평균</strong>입니다.</p>
+
+  <p><strong>값을 0.25 · 0.75 로 고른 건 의도적입니다.</strong> 이진 부동소수점에 정확히 표현되는 값이라 소수점 1자리에서 <em>진짜 tie</em>가 생깁니다. <code>0.35</code> 같은 값은 애초에 이진수로 정확히 없어서 "tie" 자체가 성립하지 않아요 — 그건 더 나쁜 상황이고 아래에서 다룹니다.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 균등하고 원값이면 두 경로가 같다</h4>
+    <div class="seq">편중 0% · 저장 원값 · 하루 100행씩
+경로 A <em>60.4167</em> · 경로 B <em>60.4167</em> · 차이 <em>0</em>
+일치하는 소수점 <em>6자리</em></div>
+    <p class="why">기준선입니다. 날짜별 행 수가 같으면 가중 평균과 비가중 평균이 일치합니다 — 가중치가 전부 같으니까요. <strong>여기서만 두 화면의 숫자가 같습니다.</strong> 그리고 실무에서 행 수가 날마다 같은 경우는 거의 없습니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 표본을 치우친다 — 12.1 차이</h4>
+    <div class="seq">편중 0% → 60% (행 수 100/100/100 → 220/40/40)
+경로 A 60.4167 → <em>48.3167</em>
+경로 B <em>60.4167 그대로</em> · 차이 <em>12.1000</em></div>
+    <p class="why">첫날에 행이 몰렸습니다. 첫날 값이 가장 낮으니(40.25) 전체 가중 평균이 내려갑니다. <strong>그런데 일별 평균의 평균은 한 자리도 안 움직입니다</strong> — 각 날의 평균은 그대로고, 그걸 세 개 더해 3으로 나누니까요. <strong>행 수를 무시하는 게 그 경로의 정의입니다.</strong> 편중을 90%로 올리면 차이가 18.15까지 벌어집니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 소수점 1자리로 저장한다 — 0.05 가 남는다</h4>
+    <div class="seq">편중 0% 로 되돌리고 · 저장 정밀도 원값 → 1자리 (trunc)
+저장값 <em>40.2 · 60.7 · 80.2</em>
+경로 B 60.4167 → <em>60.3667</em> · 차이 <em>0.0500</em></div>
+    <p class="why">편중을 없앴는데도 다릅니다. <strong>저장할 때 버린 정밀도는 돌아오지 않습니다.</strong> 원천은 여전히 <code>40.25</code>를 알고 있고 저장값은 <code>40.2</code>만 알아요. 이걸 일치시키는 유일한 방법은 <strong>원천 쪽도 같은 자리수로 깎는 것</strong>입니다 — 정확도를 버려서 일치시키는 셈이죠.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. trunc 를 round 로 바꾼다 — 반대 방향으로 0.05</h4>
+    <div class="seq">반올림 방식 trunc → round · numeric
+저장값 40.2·60.7·80.2 → <em>40.3 · 60.8 · 80.3</em>
+경로 B 60.3667 → <em>60.4667</em></div>
+    <p class="why"><code>trunc(v, s)</code> 는 PostgreSQL 문서 표현으로 <em>"Truncates v to s decimal places"</em> — <strong>버립니다.</strong> <code>round</code> 는 반올림하죠. 같은 1자리인데 저장값이 전부 다릅니다. 두 화면이 하나는 <code>trunc</code>, 하나는 <code>round</code> 를 쓰고 있으면 <strong>자리수를 맞춰도 영원히 안 맞습니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 같은 round 인데 타입만 바꾼다 — 또 다르다</h4>
+    <div class="seq">반올림 방식 round · numeric → round · double
+저장값 40.3·60.8·80.3 → <em>40.2 · 60.8 · 80.2</em>
+경로 B 60.4667 → <em>60.4000</em></div>
+    <p class="why">같은 값, 같은 함수, 같은 자리수인데 <strong>타입 때문에</strong> 다릅니다. PostgreSQL 문서가 그대로 적어뒀어요 — <code>numeric</code> 은 <em>"ties are broken by rounding away from zero"</em>, <code>double precision</code> 은 <em>"platform dependent, but round to nearest even is the most common rule"</em>. <code>40.25</code>가 <code>numeric</code> 에서는 40.3, <code>double</code> 에서는 40.2(2가 짝수)가 됩니다. <strong>그리고 double 쪽은 플랫폼 의존입니다</strong> — 같은 코드가 다른 서버에서 다른 답을 낼 수 있습니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. 날짜 경계를 옮긴다 — 한쪽만 움직인다</h4>
+    <div class="seq">저장 원값 · 그룹핑 UTC → 로컬(+9) · 경계 행 40
+행 수 100/100/100 → <em>60/140/100</em> · 2일차 평균 60.75 → <em>54.89</em>
+경로 A <em>60.4167 그대로</em> · 경로 B 60.4167 → <em>58.4643</em></div>
+    <p class="why">여기가 이 페이지의 핵심입니다. 경계 근처 40행이 첫날에서 둘째 날로 넘어갔어요. 값을 들고 넘어가니 <strong>둘째 날 평균이 섞여서 바뀝니다.</strong> 그런데 <strong>경로 A 는 꿈쩍도 안 합니다</strong> — 같은 행 집합을 한 번에 평균하니 날짜 경계가 어디든 상관없습니다. <strong>타임존을 바꾸면 한 화면만 값이 달라집니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. 셋을 다 겹친다 — 8.65</h4>
+    <div class="seq">편중 60% + 저장 1자리(double) + 로컬 그룹핑 + 경계 행 40
+경로 A <em>48.3167</em> · 경로 B <em>56.9667</em> · 차이 <em>8.6500</em>
+일치하는 소수점 <em>0자리</em></div>
+    <p class="why">세 원인이 각각 다른 방향으로 밀어서 어느 하나를 고쳐도 여전히 다릅니다. <strong>"소수점을 맞춰봤는데 안 되네" 로 끝나는 이유입니다.</strong> 원인이 하나가 아니니까요.</p>
+  </div>
+
+  <h2>둘 다 맞다 — 정의가 둘이다</h2>
+
+  <p>이 사고를 디버깅할 때 가장 오래 걸리는 부분은 "어느 쪽이 버그인가"를 찾는 일입니다. 답은 <strong>둘 다 아니다</strong> 입니다.</p>
+
+  <table class="keytable">
+    <tr><th>경로</th><th>무엇을 계산하나</th><th>행 수에</th><th>날짜 경계에</th></tr>
+    <tr><td>A · 원천 재집계</td><td>전체 가중 평균</td><td><strong>영향받는다</strong></td><td>무관하다</td></tr>
+    <tr><td>B · 저장값 재사용</td><td>일별 평균의 평균</td><td>무관하다</td><td><strong>영향받는다</strong></td></tr>
+  </table>
+
+  <div class="callout">두 값은 <strong>서로 다른 질문의 답</strong>입니다. "이 기간의 평균 속도는?" 과 "하루 평균 속도의 평균은?" 은 다른 질문이에요. 어느 쪽이 맞는지는 <strong>제품이 정할 일</strong>이고, 코드가 정하게 두면 화면마다 다른 답이 나옵니다.</div>
+
+  <p><a href="/genericplan/">13번</a>과 <a href="/stampede/">16번</a>에서 평균으로 판단하면 꼬리에서 사고가 난다는 젠센 부등식을 봤습니다. 여기서는 <strong>평균을 한 번 더 평균하는</strong> 문제입니다 — 가중치를 잃어버리는 자리죠.</p>
+
+  <h2>맞추려고 하면 정확도를 버려야 한다</h2>
+
+  <p>흔한 처방이 "소수점 자리수를 맞추자"입니다. 실험대에서 해보면 되긴 하는데, 되는 방식이 문제입니다.</p>
+
+  <table class="keytable">
+    <tr><th>처방</th><th>결과</th></tr>
+    <tr><td>양쪽 다 소수점 1자리로 자른다</td><td>일치합니다. 다만 <strong>원천이 알고 있던 정밀도를 버려서</strong> 일치시킨 겁니다. 두 화면이 같아진 대신 둘 다 덜 정확해졌습니다</td></tr>
+    <tr><td>반올림 함수를 통일한다</td><td>필요하지만 부족합니다. <code>trunc</code> 와 <code>round</code> 를 맞춰도 <strong>타입이 다르면 tie 에서 갈립니다</strong></td></tr>
+    <tr><td>타입까지 통일한다</td><td>여기까지 해도 <strong>가중치 문제와 날짜 경계 문제는 그대로</strong> 남습니다 — 3번과 6번은 반올림과 무관합니다</td></tr>
+    <tr><td>경로를 하나로 만든다</td><td><strong>이것만이 근본 처방입니다.</strong> 한 곳에서 계산하고 나머지는 그 결과를 읽습니다. 값을 맞추는 게 아니라 정의를 하나로 만드는 일입니다</td></tr>
+  </table>
+
+  <h2>부동소수점에서는 tie 가 tie 가 아니다</h2>
+
+  <p>실험대의 값을 <code>0.25</code> · <code>0.75</code> 로 고른 건 의도적입니다. 이진 분수라 정확히 표현되고, 그래서 소수점 1자리에서 <strong>진짜 tie</strong>가 생겨 반올림 규칙이 실제로 갈립니다.</p>
+
+  <div class="callout"><code>60.35</code> 같은 값은 이진 부동소수점에 <strong>정확히 존재하지 않습니다.</strong> 저장된 값은 60.35 보다 아주 조금 크거나 작아요. 그러면 "정확히 절반"이 아니니 tie 규칙이 개입할 일도 없고, <strong>어느 쪽으로 반올림되는지가 그 근사값의 방향에 달립니다.</strong> 규칙을 통일해도 예측이 안 되는 상황입니다.</div>
+
+  <p>PostgreSQL 문서가 이 점을 직접 경고합니다 — <em>"Comparing two floating-point values for equality might not always work as expected."</em> 그리고 정확한 저장이 필요하면 <code>numeric</code> 을 쓰라고 권합니다. <code>real</code> 은 최소 6자리, <code>double precision</code> 은 최소 15자리 십진 정밀도입니다.</p>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>먼저 물을 것</td><td>"이 숫자의 <strong>정의</strong>가 뭔가" 입니다. 쿼리를 비교하기 전에요. 가중 평균인지 일별 평균의 평균인지 정해지지 않았으면 <strong>어느 쿼리도 고칠 수 없습니다</strong></td></tr>
+    <tr><td>집계 경로를 센다</td><td>같은 지표를 계산하는 코드 경로가 몇 개인지 <code>Grep</code> 으로 세보세요. <strong>둘 이상이면 언젠가 갈립니다.</strong> 하나로 모으고 나머지는 그 결과를 읽게 합니다</td></tr>
+    <tr><td>저장 정밀도</td><td>집계값을 저장할 때 자리수를 깎으면 <strong>원천과 다시 일치할 방법이 없습니다.</strong> 깎을 거면 원천 쪽 표시도 같은 규칙으로 깎아야 하고, 그건 정확도를 버리는 결정입니다</td></tr>
+    <tr><td>반올림</td><td><code>trunc</code> 는 버림입니다(<code>trunc(42.4382, 2) → 42.43</code>). <code>round</code> 는 반올림인데 <strong><code>numeric</code> 은 away-from-zero, <code>double precision</code> 은 대개 round-half-to-even 이고 플랫폼 의존</strong>입니다. 같은 값이 서버마다 다르게 반올림될 수 있습니다</td></tr>
+    <tr><td>타입</td><td>정확한 저장이 필요하면 <code>numeric</code> 입니다. <code>real</code>(6자리)로 저장한 집계값은 자리수가 큰 값에서 이미 정밀도를 잃습니다</td></tr>
+    <tr><td>타임존</td><td>저장·전달·표시 기준을 <strong>문서 한 곳에 못박으세요.</strong> UTC 저장 + 표시 시점 변환 중 하나로 통일하고, <strong>같은 지표를 두 API 가 다른 기준으로 그룹핑하지 않게</strong> 합니다. 경계 근처 데이터가 많은 지표(야간 운행·심야 주문)에서 특히 크게 벌어집니다</td></tr>
+    <tr><td>회귀 테스트</td><td>두 경로를 통일한 뒤에는 <strong>두 API 응답이 같은지 비교하는 테스트</strong>를 넣으세요. 다시 갈리는 걸 코드 리뷰로 잡기는 어렵습니다</td></tr>
+  </table>
+
+  <p><a href="/writeskew/">15번</a>이 <em>동시성 때문에</em> 결과가 틀리는 이야기였다면, 이 페이지는 <em>정의가 갈려서</em> 결과가 둘인 이야기입니다. 둘 다 예외도 로그도 없이 숫자만 다릅니다 — 다만 이쪽은 <strong>고칠 코드가 아니라 정할 정의가 빠져 있습니다.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/writeskew/"><span class="no">15</span><span><span class="t">둘 다 확인했고 둘 다 통과했다</span><span class="why">예외도 로그도 없이 숫자만 틀리는 같은 종류 — 저쪽은 동시성입니다.</span></span></a></li>
+      <li><a href="/genericplan/"><span class="no">13</span><span><span class="t">여섯 번째 실행부터 느려진다</span><span class="why">평균으로 판단하는 자리 — 젠센 부등식이 옵티마이저 쪽에서 나옵니다.</span></span></a></li>
+      <li><a href="/mvcc/"><span class="no">01</span><span><span class="t">DELETE 했는데 테이블이 줄지 않는 이유</span><span class="why">두 경로가 서로 다른 스냅숏을 읽고 있으면 차이가 하나 더 생깁니다.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/aggregate/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uDigit:'자리', uRow:'행',
+  pathA:'경로 A · 원천 재집계', pathASub:'전체 가중 평균 — 행 수를 센다',
+  pathB:'경로 B · 저장값 재사용', pathBSub:'일별 평균의 평균 — 행 수를 무시한다',
+  gapK:'차이', gapNone:'같다',
+  dayN:'$1일 · $2행',
+  sA1:'경로 A', sB1:'경로 B · 저장', sB1ex:'각 날 평균을 $1 로 저장 ($2)', sB2:'경로 B · 평균',
+  precRaw:'원값', precDigits:'자리',
+  rm_trunc:'trunc (버림)', rm_numeric:'round · numeric', rm_double:'round · double',
+  mGap:'차이', mRel:'상대 차이', mAgree:'일치하는 소수점', mMoved:'넘어간 행', mSkew:'날짜별 행 수',
+  cMode:'반올림 방식', cStored:'저장값', cB:'경로 B', cGap:'차이',
+  vSame:'<b>두 경로가 같은 값을 낸다.</b> 행 수가 균등하고 저장 정밀도도 안 깎였다.<br><span class="at">실무에서 이 조건이 유지되는 경우는 드물다 — 손잡이를 하나만 움직여 보라</span>',
+  vWeight:'<b>행 수가 $1 로 치우쳤다.</b> 가중 평균만 움직이고 일별 평균의 평균은 그대로다 — 차이 <b>$2</b>.<br><span class="at">행 수를 무시하는 것이 그 경로의 정의다. 버그가 아니다</span>',
+  vRound:'<b>$1 로 저장해서 차이가 <b>$2</b> 남았다.</b> 소수점 $3자리까지만 같다.<br><span class="at">저장할 때 버린 정밀도는 돌아오지 않는다 — 맞추려면 원천도 깎아야 한다</span>',
+  vTz:'<b>경계 행 $1개가 다음 날로 넘어갔다.</b> 경로 A 는 그대로인데 경로 B 만 움직여 차이 <b>$2</b>.<br><span class="at">같은 행 집합을 한 번에 평균하면 날짜 경계는 상관없다</span>',
+  hSame:'두 경로가 같다 — 균등하고 정밀도도 온전하다',
+  hDiff:'두 값이 다르다 — 소수점 $1자리까지만 같다',
+  scene:[
+    '기준선입니다. 하루 100행씩 균등하고 저장도 원값 그대로예요. 두 경로가 60.4167 로 같습니다. 날짜별 행 수가 같으면 가중 평균과 비가중 평균이 일치하니까요 — 가중치가 전부 같아서요. 여기서만 두 화면의 숫자가 같습니다.',
+    '표본을 60% 치우쳤습니다. 행 수가 220/40/40 이 됐어요. 첫날 값이 가장 낮으니 전체 가중 평균이 48.3167 로 내려갑니다. 그런데 일별 평균의 평균은 60.4167 그대로예요 — 각 날의 평균은 안 바뀌었고 그걸 세 개 더해 3 으로 나누니까요. 차이가 12.1 입니다. 행 수를 무시하는 게 그 경로의 정의입니다.',
+    '편중을 없애고 저장 정밀도만 1자리로 깎았습니다. 저장값이 40.2·60.7·80.2 가 되고 경로 B 가 60.3667 로 내려갑니다. 편중이 없는데도 0.05 차이가 남아요. 저장할 때 버린 정밀도는 돌아오지 않습니다 — 원천은 40.25 를 알고 저장값은 40.2 만 압니다.',
+    'trunc 를 round·numeric 으로 바꿨습니다. 저장값이 40.3·60.8·80.3 이 되고 경로 B 가 60.4667 로 올라갑니다. trunc 는 버리고 round 는 반올림하니까요. 같은 1자리인데 저장값이 전부 다릅니다 — 두 화면이 하나는 trunc, 하나는 round 를 쓰면 자리수를 맞춰도 영원히 안 맞습니다.',
+    '같은 round 인데 타입만 double 로 바꿨습니다. 저장값이 40.2·60.8·80.2 가 되고 경로 B 가 60.4000 입니다. numeric 은 tie 를 away-from-zero 로 깨고 double 은 round-half-to-even 으로 깨거든요. 40.25 가 numeric 에서는 40.3, double 에서는 40.2 입니다. 그리고 double 쪽은 플랫폼 의존이라 서버마다 다를 수 있습니다.',
+    '저장을 원값으로 되돌리고, 날짜 그룹핑을 로컬 기준으로 바꿔 경계 행 40개를 넘겼습니다. 행 수가 60/140/100 이 되고 2일차 평균이 60.75 에서 54.89 로 섞여서 바뀝니다. 그런데 경로 A 는 60.4167 그대로예요 — 같은 행 집합을 한 번에 평균하니 날짜 경계가 어디든 상관없습니다. 타임존을 바꾸면 한 화면만 값이 달라집니다.',
+    '셋을 다 겹쳤습니다. 편중 60% + 1자리 double 저장 + 로컬 그룹핑이요. 48.3167 대 56.9667, 차이 8.65 입니다. 세 원인이 각각 다른 방향으로 밀기 때문에 어느 하나를 고쳐도 여전히 다릅니다. "소수점을 맞춰봤는데 안 되네" 로 끝나는 이유예요.'
+  ],
+};
+</script>
+<script src="/shared/aggregate-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "같은 숫자가 두 화면에서 다르다",
+  "description": "주행상세는 48.32, 일별 통계는 60.42. 같은 평균 속도인데 값이 다릅니다. 둘 다 맞아요 — 하나는 전체 가중 평균이고 하나는 일별 평균의 평균입니다. 정의가 둘인 게 버그입니다. 반올림을 같은 자리수로 맞춰도 numeric과 double은 tie를 다르게 깨서 여전히 다릅니다.",
+  "url": "https://lab.vermilion19.com/aggregate/",
+  "inLanguage": "ko",
+  "datePublished": "2026-08-13",
+  "dateModified": "2026-08-13",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "같은 숫자가 두 화면에서 다르다"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+</body>
+</html>
