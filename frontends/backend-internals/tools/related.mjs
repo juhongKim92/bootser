@@ -16,7 +16,7 @@ export const NO = {
   mvcc: '01', gc: '02', hashring: '03', raft: '04', mqtt: '05', websocket: '06',
   keepalive: '07', connpool: '08', jobclaim: '09', retryloop: '10', backpressure: '11',
   correlation: '12', genericplan: '13', retrystorm: '14', writeskew: '15', stampede: '16',
-  timeout: '17', lockttl: '18', throughput: '19', rebalance: '20'
+  timeout: '17', lockttl: '18', throughput: '19', rebalance: '20', tcpclose: '21'
 };
 
 /* slug → [{ to, ko, en }] */
@@ -44,7 +44,8 @@ export const RELATED = {
     { to: 'retrystorm', ko: 'QoS 1 의 재전송이 부하 자체가 되면 어떻게 되는가.', en: 'What happens when QoS 1’s retransmissions become the load itself.' },
     { to: 'lockttl', ko: '중복을 막는 대신 멱등하게 만드는 결론에 다른 쪽에서 도달합니다.', en: 'The same conclusion reached from the other side — stop preventing duplicates, make them idempotent.' },
     { to: 'keepalive', ko: '같은 브로커의 Keep-alive 와 Last Will.', en: 'Keep-alive and Last Will on the same broker.' },
-    { to: 'throughput', ko: 'Receive Maximum 이 처리량을 정하는 이유 — 동시성을 RTT 로 나눈 값입니다.', en: 'Why Receive Maximum sets the throughput — it is concurrency divided by RTT.' }
+    { to: 'throughput', ko: 'Receive Maximum 이 처리량을 정하는 이유 — 동시성을 RTT 로 나눈 값입니다.', en: 'Why Receive Maximum sets the throughput — it is concurrency divided by RTT.' },
+    { to: 'tcpclose', ko: 'QoS 가 홉 단위였던 것처럼 TCP 순서 보장도 홉 단위입니다 — 프록시를 넘지 못합니다.', en: 'Just as QoS was per hop, so is TCP ordering — it does not cross a proxy.' }
   ],
   websocket: [
     { to: 'keepalive', ko: '연결이 죽은 것을 언제 알아차리는가.', en: 'When do you notice a connection has died?' },
@@ -54,7 +55,8 @@ export const RELATED = {
   keepalive: [
     { to: 'gc', ko: '하트비트를 막는 정지가 실제로 얼마나 긴가.', en: 'How long the pause that blocks the heartbeat actually is.' },
     { to: 'raft', ko: '실패 감지를 짧게 잡으면 오탐이 늘어납니다. 같은 저울의 반대쪽입니다.', en: 'Shorten failure detection and false positives rise — the other end of the same dial.' },
-    { to: 'lockttl', ko: '하트비트가 못 나가는 것과 락 갱신이 못 나가는 것은 같은 사고입니다.', en: 'A heartbeat that cannot go out and a lock renewal that cannot go out are the same accident.' }
+    { to: 'lockttl', ko: '하트비트가 못 나가는 것과 락 갱신이 못 나가는 것은 같은 사고입니다.', en: 'A heartbeat that cannot go out and a lock renewal that cannot go out are the same accident.' },
+    { to: 'tcpclose', ko: '반대편 — 끊긴 걸 모르는 게 아니라, 정상적으로 끊었는데 데이터가 사라집니다.', en: 'The other side — not failing to notice a break, but closing properly and losing data anyway.' }
   ],
   connpool: [
     { to: 'backpressure', ko: '풀이 마르면 큐가 자랍니다. 그 큐를 어떻게 다룰 것인가.', en: 'When the pool dries up the queue grows — what do you do with that queue?' },
@@ -118,6 +120,11 @@ export const RELATED = {
     { to: 'connpool', ko: '같은 식을 커넥션 풀에서 만납니다 — 동시성 = 처리량 × 지연.', en: 'The same formula met at the connection pool — concurrency = throughput × latency.' },
     { to: 'mqtt', ko: 'Receive Maximum 이 그 식의 또 다른 단위입니다.', en: 'Receive Maximum is that formula in yet another unit.' },
     { to: 'timeout', ko: '같은 RTT 가 처리량도 정하고 타임아웃 예산도 먹습니다.', en: 'The same RTT sets your throughput and eats your timeout budget.' }
+  ],
+  tcpclose: [
+    { to: 'keepalive', ko: '반대편 — 이쪽은 정상적으로 끊었는데 유실되고, 7 번은 끊겼는데 살아있다고 믿습니다.', en: 'The mirror — here a proper close loses data; in no. 7 a dead connection looks alive.' },
+    { to: 'mqtt', ko: 'TCP 순서 보장이 홉 단위인 것이 QoS 가 홉 단위인 것과 같은 구조입니다.', en: 'TCP ordering being per hop is the same structure as QoS being per hop.' },
+    { to: 'rebalance', ko: '"정상 종료" 처럼 "살아 있다" 도 계층마다 다른 뜻입니다 — 하트비트는 정상인데 그룹에서 빠집니다.', en: 'Like “clean shutdown”, “alive” also means different things per layer — heartbeats fine, dropped from the group.' }
   ],
   rebalance: [
     { to: 'connpool', ko: '바쁨과 진행을 구별하지 못해서 생기는 같은 사고 — CPU 사용률은 진행률이 아닙니다.', en: 'The same accident from confusing busy with progressing — CPU utilisation is not a progress bar.' },

@@ -286,6 +286,7 @@ ON CONFLICT (msg_id) DO NOTHING;</code></pre>
       <li><a href="/lockttl/"><span class="no">18</span><span><span class="t">락을 잡았는데 둘이 들어왔다</span><span class="why">중복을 막는 대신 멱등하게 만드는 결론에 다른 쪽에서 도달합니다.</span></span></a></li>
       <li><a href="/keepalive/"><span class="no">07</span><span><span class="t">서버는 두 시간 동안 살아있다고 믿는다</span><span class="why">같은 브로커의 Keep-alive 와 Last Will.</span></span></a></li>
       <li><a href="/throughput/"><span class="no">19</span><span><span class="t">대역폭은 남는데 처리량이 안 나온다</span><span class="why">Receive Maximum 이 처리량을 정하는 이유 — 동시성을 RTT 로 나눈 값입니다.</span></span></a></li>
+      <li><a href="/tcpclose/"><span class="no">21</span><span><span class="t">close() 한 줄인데 선로에는 RST 가 나간다</span><span class="why">QoS 가 홉 단위였던 것처럼 TCP 순서 보장도 홉 단위입니다 — 프록시를 넘지 못합니다.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Backend Internals — interactive visualizations</title>
-  <meta name="description" content="Twenty interactive labs you drive yourself: MVCC and VACUUM, G1 versus ZGC, consistent hashing, Raft, MQTT QoS, connection pool exhaustion, backpressure, cache stampede, deadline propagation, distributed lock expiry, BDP, Kafka rebalancing.">
+  <meta name="description" content="Twenty-one interactive labs you drive yourself: MVCC and VACUUM, G1 versus ZGC, consistent hashing, Raft, MQTT QoS, connection pool exhaustion, backpressure, cache stampede, deadline propagation, distributed lock expiry, BDP, Kafka rebalancing, TCP close semantics.">
   <link rel="canonical" href="https://lab.vermilion19.com/en/">
   <link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/">
   <link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/">
@@ -13,7 +13,7 @@
   <meta property="og:locale" content="en_US">
   <meta property="og:locale:alternate" content="ko_KR">
   <meta property="og:title" content="Backend Internals — interactive visualizations">
-  <meta property="og:description" content="Backend internals you can put your hands on — twenty labs across databases, the JVM, distributed systems, and real production failures.">
+  <meta property="og:description" content="Backend internals you can put your hands on — twenty-one labs across databases, the JVM, distributed systems, and real production failures.">
   <meta property="og:url" content="https://lab.vermilion19.com/en/">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -164,7 +164,7 @@
       <summary>
         <span class="arw" aria-hidden="true"></span>
         <h2>Real-time messaging <em>where connections drop and messages go astray</em></h2>
-        <span class="count">3</span>
+        <span class="count">4</span>
       </summary>
       <div class="glist">
 
@@ -191,6 +191,15 @@
         <span>
           <h2>Your server believes it for two hours</h2>
           <p>Keep-alive, dead connections and LWT. When a dead connection finally gets noticed, and when a Last Will fires — or quietly does not.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
+
+      <a class="card" href="/en/tcpclose/">
+        <span class="no">21</span>
+        <span>
+          <h2>One close() call, and a RST goes out on the wire</h2>
+          <p>A FIN cannot overtake data. "Clean shutdown" means three different things to the application, to TLS, and to TCP.</p>
         </span>
         <span class="tag live">live</span>
       </a>
@@ -332,7 +341,7 @@
   "@context": "https://schema.org",
   "@type": "CollectionPage",
   "name": "Backend Internals",
-  "description": "Twenty interactive labs you drive yourself: MVCC and VACUUM, G1 versus ZGC, consistent hashing, Raft, MQTT QoS, connection pool exhaustion, backpressure, cache stampede, deadline propagation, distributed lock expiry, BDP, Kafka rebalancing.",
+  "description": "Twenty-one interactive labs you drive yourself: MVCC and VACUUM, G1 versus ZGC, consistent hashing, Raft, MQTT QoS, connection pool exhaustion, backpressure, cache stampede, deadline propagation, distributed lock expiry, BDP, Kafka rebalancing, TCP close semantics.",
   "url": "https://lab.vermilion19.com/en/",
   "inLanguage": "en",
   "dateModified": "2026-08-13",

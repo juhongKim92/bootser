@@ -22,6 +22,7 @@ node tools/verify-timeout.mjs      # 17편 인용 수치 대조
 node tools/verify-lockttl.mjs      # 18편
 node tools/verify-throughput.mjs   # 19편
 node tools/verify-rebalance.mjs    # 20편
+node tools/verify-tcpclose.mjs     # 21편
 
 node tools/gen-related.mjs         # "이어서 볼 것" 블록을 박는다
 node tools/gen-jsonld.mjs          # JSON-LD(Article + BreadcrumbList)를 박는다

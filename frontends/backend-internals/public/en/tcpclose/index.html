@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One close() call, and a RST goes out on the wire — three layers, three definitions of "clean"</title>
+<meta name="description" content="The client finished sending, called close(), and the server's copy of the body is truncated. It is tempting to say the FIN overtook the data, but that is impossible. Closing with unread data in the receive buffer makes the kernel send a RST instead of a FIN (RFC 9293 §3.6.1), and a RST makes the peer discard its receive buffer. The client code is one close() call in every case.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/tcpclose/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/tcpclose/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/tcpclose/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/tcpclose/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="One close() call, and a RST goes out on the wire">
+<meta property="og:description" content="A FIN cannot overtake data. What actually happened is something else.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/tcpclose/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="One close() call, and a RST goes out on the wire">
+<meta name="twitter:description" content='"Clean shutdown" means three different things to the application, to TLS, and to TCP.'>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/tcpclose-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/tcpclose/" hreflang="ko" lang="ko">한국어</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>One close() call, and a RST goes out on the wire</h1>
+  <p class="lede">The device finished sending and closed the socket. The tail of the body never reached the server. <strong>It is tempting to say the FIN overtook the data, but that is impossible.</strong> What actually happened is something else — and the client code is one <code>close()</code> call in every case.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>how the client closes</label>
+          <div class="seg" id="segMode" role="group" aria-label="How the client closes the socket">
+            <button data-mode="readClose" aria-pressed="true">read then close</button>
+            <button data-mode="blindClose">close unread</button>
+            <button data-mode="linger0">SO_LINGER 0</button>
+            <button data-mode="shutWr">shutdown(WR)</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sB">body size</label>
+          <span class="v" id="vB">16 KB</span>
+          <input type="range" id="sB" min="0" max="5" step="1" value="2" aria-label="Size of the body the client sends">
+        </div>
+        <div class="dial">
+          <label for="sR">server response</label>
+          <span class="v" id="vR">1 KB</span>
+          <input type="range" id="sR" min="0" max="3" step="1" value="1" aria-label="Size of the response the server sends">
+        </div>
+        <div class="dial">
+          <label>TLS terminates at</label>
+          <div class="seg" id="segTls" role="group" aria-label="Where TLS is terminated">
+            <button data-tls="none" aria-pressed="true">nowhere</button>
+            <button data-tls="lb">load balancer</button>
+            <button data-tls="backend">backend</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>close_notify</label>
+          <div class="seg" id="segNotify" role="group" aria-label="Whether close_notify is sent">
+            <button data-on="1" aria-pressed="true">sent</button>
+            <button data-on="0">not sent</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>half-close relay</label>
+          <div class="seg" id="segHalf" role="group" aria-label="Whether the proxy relays a half-close">
+            <button data-on="0" aria-pressed="true">off (default)</button>
+            <button data-on="1">on</button>
+          </div>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">What went out on the wire</span>
+      <div class="board">
+        <div class="wire" id="wire"></div>
+
+        <div class="stream">
+          <span class="cap">The byte stream — the close signal is always at the tail</span>
+          <div class="bytes" id="bytes"></div>
+          <div class="streamx" id="streamX"></div>
+        </div>
+
+        <div class="hops" id="hops"></div>
+
+        <div class="verdicts" id="verdicts"></div>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">Four ways to close — other dials unchanged</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">previous step</button>
+        <button id="btnStep">next step</button>
+        <button id="btnReset">reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Working the dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What changes</th></tr>
+    <tr><td>how the client closes</td><td>In all four cases <strong>the application code is one <code>close()</code> call</strong>. Only what goes out on the wire differs.</td></tr>
+    <tr><td>server response</td><td>Drag it to 0. <strong>The same client code suddenly becomes safe</strong> — there is no response left unread.</td></tr>
+    <tr><td>TLS terminates at</td><td><strong>Terminate at the load balancer and the connection splits in two.</strong> One more place for data to be dropped.</td></tr>
+    <tr><td>close_notify</td><td>Without it every byte still arrives, but <strong>the receiver cannot tell "finished" from "truncated".</strong></td></tr>
+    <tr><td>half-close relay</td><td>Whether the proxy passes a one-directional close through. <strong>nginx defaults to off.</strong></td></tr>
+  </table>
+
+  <p>Receive buffers are <strong>64KB</strong> on both sides. A TLS record holds at most <strong>16,384 bytes</strong> of plaintext (RFC 8446 §5.1).</p>
+
+  <p><strong>The lab shows an upper bound on loss, not an amount.</strong> What a RST destroys is "bytes sitting in the peer's kernel buffer that the application has not read yet", and that depends on how fast it reads — we cannot know it. So the lab computes only the bound, <code>min(body, receive buffer)</code>. Showing an invented number would defeat the point.</p>
+
+  <h2>Try this</h2>
+
+  <div class="recipe">
+    <h4>1. Read the response, then close — FIN, zero loss</h4>
+    <div class="seq">read then close · body 16KB · response 1KB · no TLS
+signal on the wire <em>FIN</em> · loss bound <em>0</em>
+clean-shutdown verdicts <em>3 / 3</em></div>
+    <p class="why">The baseline. <strong>When a FIN goes out, loss is structurally zero.</strong> A FIN occupies a position in the sequence number space, at the very end of the byte stream, and a receiving TCP cannot hand anything past a gap to the application. <strong>"A clean EOF with a hole in it" does not exist.</strong> That is what the close signal sitting at the tail of the stream diagram means.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Close without reading — same code, now a RST</h4>
+    <div class="seq">only the close mode changes (response still 1KB)
+signal on the wire FIN → <em>RST</em>
+loss bound 0 → <em>16 KB</em> · verdicts 3/3 → <em>2 / 3</em></div>
+    <p class="why">Call <code>close()</code> with 1KB unread in the receive buffer and the kernel sends a RST instead of a FIN. RFC 9293 §3.6.1 says so — <em>"if such a host issues a CLOSE call while received data is still pending … its TCP implementation <strong>SHOULD</strong> send a RST to show that data was lost"</em>. And the peer that receives the RST discards its receive buffer. <strong>The application verdict is still "clean" — you did call <code>close()</code>.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Set the server response to 0 — the same code becomes safe</h4>
+    <div class="seq">response 1KB → 0 (close mode stays "close unread")
+signal on the wire RST → <em>FIN</em> · loss bound <em>0</em></div>
+    <p class="why">Not one character of the client changed, and it is safe now. <strong>With no response to leave unread there is no pending data.</strong> This is why the bug is so hard to reproduce: it appears the day the server starts sending a <code>100 Continue</code> or an error body, or the day one header is added to the response. <strong>Nothing changed on the client.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Set SO_LINGER to 0 — a RST even with no response</h4>
+    <div class="seq">close mode SO_LINGER 0 (response still 0)
+signal on the wire FIN → <em>RST</em></div>
+    <p class="why">Unconditional, regardless of pending data. People turn on <code>setSoLinger(true, 0)</code> or <code>ChannelOption.SO_LINGER</code> to reclaim connections faster, but <strong>it is not a "get rid of TIME_WAIT" option, it is a "throw the data away" option.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Terminate TLS at the backend and skip close_notify</h4>
+    <div class="seq">TLS at the backend · close_notify not sent
+clean-shutdown verdicts <em>2 / 3</em> (TLS says no)
+unit of truncation: bytes → <em>16 KB (a record)</em></div>
+    <p class="why">RFC 8446 §6.1: <em>"Each party <strong>MUST</strong> send a close_notify alert before closing its write side."</em> Without it the receiver <strong>cannot distinguish "the sender finished" from "an attacker cut the connection"</strong> — a truncation attack. Implementations either error out or quietly accept. And because TLS encrypts in records, <strong>a connection that dies mid-record loses the whole record</strong>, not a few bytes.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Move TLS termination to the load balancer — one more place to lose data</h4>
+    <div class="seq">TLS at the backend → at the load balancer
+connection segments 1 → <em>2</em> · loss points <em>2</em>
+loss bound 16KB → <em>32 KB</em></div>
+    <p class="why">Terminating TLS <strong>splits the connection in two.</strong> The AWS NLB documentation says exactly this about a TLS listener: <em>"uses a server certificate to terminate the front-end connection"</em>. <strong>TCP's ordering guarantee is per hop</strong> and does not carry across — the same structure as QoS being per hop in <a href="/en/mqtt/">no. 5</a>.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. shutdown(WR) → read the response → close — all clean</h4>
+    <div class="seq">close mode shutdown(WR) · close_notify sent
+signal on the wire <em>FIN</em> · loss bound <em>0</em> · verdicts <em>3 / 3</em></div>
+    <p class="why">Close the write side first to say "nothing more is coming", read the server's response to the end, then close. With nothing left unread there is no reason for a RST. <strong>This is the only case where all three layers agree that the shutdown was clean.</strong></p>
+  </div>
+
+  <h2>A FIN cannot overtake data</h2>
+
+  <p>Let us clear the wrong explanation out of the way first. The observed symptom is exactly that shape, which is why this story writes itself — but it does not hold.</p>
+
+  <table class="keytable">
+    <tr><th>Why it is impossible</th></tr>
+    <tr><td>A FIN <strong>occupies a position in the sequence number space</strong>. In the words of RFC 9293 §3.4, <em>"the FIN is considered to occur after the last actual data octet"</em> — one position, at the very end of the byte stream</td></tr>
+    <tr><td>A receiving TCP hands bytes up <strong>in order only</strong>. With a gap in the middle it holds whatever arrived after it</td></tr>
+    <tr><td>So <strong>EOF always appears after every byte has been delivered.</strong> The state "a clean EOF with a hole in it" does not exist</td></tr>
+  </table>
+
+  <div class="callout">A FIN segment <strong>can physically arrive</strong> before an earlier data segment — reordering happens. But it does not surface as EOF. If the data never arrives you get a <strong>timeout error</strong>, not an EOF.</div>
+
+  <p>This is not a single sentence in an RFC; it is a <strong>consequence of the ordered-delivery service model</strong>. So the page argues it rather than quoting it.</p>
+
+  <h2>"Clean shutdown" means three different things</h2>
+
+  <p>The three verdicts in the lab are the point of this page. Three layers look at the same moment and disagree.</p>
+
+  <table class="keytable">
+    <tr><th>Layer</th><th>What it judges on</th><th>In recipe 2</th></tr>
+    <tr><td>application</td><td>Did you call <code>close()</code></td><td><strong>Clean</strong> — the code has nothing but <code>close()</code></td></tr>
+    <tr><td>TLS</td><td>Did you send <code>close_notify</code> (RFC 8446 §6.1)</td><td>Clean (no TLS here)</td></tr>
+    <tr><td>TCP</td><td>FIN or RST</td><td><strong>Not clean</strong> — it was a RST</td></tr>
+  </table>
+
+  <div class="callout">Which is why <strong>"it shut down cleanly and lost data"</strong> is not a contradiction. The two halves of that sentence are talking about different layers. It is also where an application developer and a network engineer reach opposite conclusions about the same incident.</div>
+
+  <h2>What the RFC requires versus what implementations do</h2>
+
+  <p>Building this page meant checking the sources, and <strong>only one of three claims was actually in a specification.</strong> The others are implementation behaviour or argument. Worth separating.</p>
+
+  <table class="keytable">
+    <tr><th>Claim</th><th>Kind of evidence</th></tr>
+    <tr><td><code>close()</code> with unread data sends a RST</td><td><strong>In the spec.</strong> RFC 9293 §3.6.1 (<code>SHLD-3</code>). But it is a <strong>SHOULD, not a MUST</strong> — implementations have latitude</td></tr>
+    <tr><td>A peer receiving a RST discards its receive buffer</td><td><strong>Implementation behaviour.</strong> §3.5.3 only goes as far as <em>"aborts the connection and advises the user"</em> and says nothing about buffer disposition. Every implementation does it; the spec does not demand it</td></tr>
+    <tr><td>There is no EOF with a hole</td><td><strong>An argument.</strong> It follows from the ordered-delivery model, and no single clause states it</td></tr>
+    <tr><td>What a proxy does with its buffer on a front-side RST</td><td><strong>Unknown.</strong> Not documented. What is confirmed is that nginx's <code>proxy_half_close</code> defaults to <code>off</code> (one direction closing closes both) — and nothing beyond that is asserted here</td></tr>
+  </table>
+
+  <h2>The fix that worked and the fix that did nothing</h2>
+
+  <p>The most instructive part of a real incident with this shape was the difference between two attempted fixes.</p>
+
+  <table class="keytable">
+    <tr><th>Fix</th><th>Outcome</th></tr>
+    <tr><td>Have the server <strong>wait a few seconds</strong> after noticing the disconnect, then finalise</td><td><strong>Completely ineffective.</strong> The server was not the one discarding anything, so waiting changed nothing. It was added and then deleted</td></tr>
+    <tr><td>Have the server <strong>echo the close signal</strong>, and the client close only after receiving it</td><td><strong>Works.</strong> The client has to <em>read</em> the response, so nothing is left unread and the RST disappears; the server's completion is confirmed; and the <code>close_notify</code> timing falls into place</td></tr>
+  </table>
+
+  <div class="callout">The second fix works <strong>whichever of this page's mechanisms was the culprit.</strong> So in hindsight you could say the cause did not need to be known. Except the same team <strong>shipped the ineffective fix first</strong> — because without the cause there is no basis for <em>choosing</em> the right fix.</div>
+
+  <p><a href="/en/retrystorm/">No. 14</a> and <a href="/en/rebalance/">no. 20</a> both dealt with raising a timeout as a fix, and the same test applies here: <strong>raising it knowing the distribution of the normal case is a fix; raising it without knowing is a deferral.</strong></p>
+
+  <h2>Out in the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>count this first</td><td>The <strong><code>connections reset</code></strong> counters in <code>netstat -s</code>. In tcpdump, isolate resets with <code>tcp[tcpflags] &amp; tcp-rst != 0</code>. <strong>If that number jumps alongside a deploy or a firmware change, this is your page</strong></td></tr>
+    <tr><td>client side</td><td>Does it <strong>read the response to the end</strong> before closing? Code that sends and discards the response is where this starts. If there is nothing more to send, say so with <code>shutdown(WR)</code>, read the response, then close</td></tr>
+    <tr><td><code>SO_LINGER</code></td><td>Go find where it is set to 0. <strong>It is an option that throws data away</strong></td></tr>
+    <tr><td>where TLS terminates</td><td>Terminating at the load balancer splits the connection. On AWS, <strong>a TLS listener terminates and a TCP listener passes through</strong> — the test is whether it <strong>terminates</strong>, not whether it is L4 or L7</td></tr>
+    <tr><td>proxy settings</td><td>For nginx stream, <code>proxy_half_close</code> defaults to <code>off</code>. Turn it on if your protocol closes one direction first</td></tr>
+    <tr><td>server shutdown</td><td>Spring Boot's <code>server.shutdown</code> currently defaults to <code>graceful</code>, which <strong>protects</strong> in-flight requests. The risk is setting it to <code>immediate</code>, or having <code>spring.lifecycle.timeout-per-shutdown-phase</code> <strong>longer than the platform's termination grace period</strong> so you get killed first</td></tr>
+    <tr><td>idle timeouts</td><td>Write to a connection the load balancer already reaped as idle and you get a RST (AWS NLB defaults to 350s). <a href="/en/keepalive/">No. 7</a> is the other side of this — <em>believing a dead connection is alive</em></td></tr>
+    <tr><td>application framing</td><td>Send without <code>Content-Length</code>, or drop the terminating chunk, and <strong>the server has no basis for deciding whether what it got is everything.</strong> The worst implementations parse the truncated body and pass it on — no error, just corrupt data</td></tr>
+  </table>
+
+  <p>If <a href="/en/keepalive/">no. 7</a> was <em>believing a connection is alive after it died</em>, this page is <em>closing one properly and losing data anyway</em>. Both come from "the connection ended" meaning different things at different layers.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/keepalive/"><span class="no">07</span><span><span class="t">Your server believes it for two hours</span><span class="why">The mirror — here a proper close loses data; in no. 7 a dead connection looks alive.</span></span></a></li>
+      <li><a href="/en/mqtt/"><span class="no">05</span><span><span class="t">What "exactly once" actually costs</span><span class="why">TCP ordering being per hop is the same structure as QoS being per hop.</span></span></a></li>
+      <li><a href="/en/rebalance/"><span class="no">20</span><span><span class="t">The consumers never stop and the lag never falls</span><span class="why">Like “clean shutdown”, “alive” also means different things per layer — heartbeats fine, dropped from the group.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">index</a> · <a href="/tcpclose/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uByte:'1 byte',
+  wLabel:'signal on the wire',
+  wFin:'nothing left unread — a FIN goes out normally. Loss is structurally zero',
+  wUnread:'close() was called with $1 unread in the receive buffer — the kernel sends a RST (RFC 9293 §3.6.1)',
+  wLinger:'SO_LINGER 0 sends a RST unconditionally, pending data or not',
+  sStart:'first byte', sPlain:'plaintext — truncation unit is 1 byte',
+  sRecords:'$1 TLS records · up to $2', sTail:'$1 at the tail',
+  hSingle:'connection (1 segment)', hFront:'front (client↔LB)', hBack:'back (LB↔backend)',
+  hTlsHere:'TLS terminates here', hTlsEnd:'the backend terminates TLS', hPlainEnd:'plaintext',
+  hPropagated:'front breaks and this closes too (half-close relay off)',
+  hHalfOpen:'half-close relay on — only one direction closes',
+  lApp:'application', lTls:'TLS', lTcp:'TCP',
+  tOk:'clean', tNo:'not clean',
+  wApp:'close() was called. This verdict is always clean',
+  wNoTls:'TLS is not in use',
+  wNotify:'close_notify was sent (RFC 8446 §6.1)',
+  wNoNotify:'no close_notify — finished and truncated are indistinguishable',
+  wTcpFin:'a FIN went out. EOF appears after every byte is delivered',
+  wTcpRst:'a RST went out. The peer discards its receive buffer (implementation behaviour)',
+  mSignal:'close signal', mLoss:'loss bound', mPoints:'loss points',
+  mUnit:'truncation unit', mOk:'clean verdicts', mSeen:'what the peer sees',
+  seen_eof:'EOF', seen_reset:'ECONNRESET', seen_ambiguous:'truncated?',
+  cMode:'close mode', cSignal:'wire', cLoss:'loss bound', cCode:'client code',
+  n_readClose:'read then close', n_blindClose:'close unread',
+  n_linger0:'SO_LINGER 0', n_shutWr:'shutdown(WR), read, close',
+  c_readClose:'one close()', c_blindClose:'one close() — identical to above',
+  c_linger0:'one option line + close()', c_shutWr:'one extra shutdown() line',
+  vClean:'<b>All three layers call this a clean shutdown.</b> A FIN went out and the loss bound is 0.<br><span class="at">A FIN sits at the tail of the stream, so EOF only appears after every byte is delivered</span>',
+  vRst:'<b>A RST went out on the wire</b> — because of $1 left unread (RFC 9293 §3.6.1).<br>The peer discards its receive buffer, so up to <b>$2</b> disappears <span class="at">— and the application verdict is still "clean"</span>',
+  vSplit:'<b>The connection is split in two, so there are two places to lose data</b> — bound <b>$1</b>.<br><span class="at">TCP ordering is per hop and does not carry from the front segment to the back one</span>',
+  vAmb:'<b>Every byte arrived and you cannot tell whether it finished or was cut.</b> No close_notify.<br><span class="at">TLS works in records, so dying mid-record loses up to $1 in one piece</span>',
+  hRst:'a RST is going out — the peer’s receive buffer is discarded',
+  hAmb:'no close_notify — truncation and completion are indistinguishable',
+  hOk:'a FIN goes out — no structural loss',
+  scene:[
+    'The baseline. The response is read to the end before closing, so nothing is pending and a FIN goes out. The loss bound is 0. Notice the close signal sitting at the tail of the stream diagram — a FIN occupies a position in the sequence number space at the very end of the byte stream. Which is why "a clean EOF with a hole in it" does not exist.',
+    'Only the close mode changed, to "close unread". With 1KB of response still unread in the receive buffer, calling close() makes the kernel send a RST instead of a FIN — RFC 9293 §3.6.1 says so. The peer discards its receive buffer. Look at the three verdicts: the application still says "clean", because you did call close().',
+    'Now only the server response size changed, to 0. Not one character of the client changed and a FIN goes out again, because there is no response left unread. This is why the bug is so hard to reproduce — it appears the day the server starts sending a response, or the day a header is added, and nothing changed on the client.',
+    'SO_LINGER set to 0. The response is 0 so nothing is pending, and a RST goes out anyway. Unconditionally. People turn this on to reclaim connections faster, but it is not a "get rid of TIME_WAIT" option — it is a "throw the data away" option.',
+    'TLS now terminates at the backend, and close_notify is not sent. RFC 8446 §6.1 requires it with a MUST. Without it the receiver cannot tell whether the sender finished or an attacker cut the connection. And the unit of truncation changes from a byte to a record — up to 16,384 bytes go in one piece.',
+    'TLS termination moved to the load balancer. Connection segments went from one to two, and so did the loss points, because terminating TLS splits the connection — the AWS NLB documentation says a TLS listener will "terminate the front-end connection". TCP ordering is per hop and does not carry from the front segment to the back one.',
+    'shutdown(WR) closes only the write side to say "nothing more is coming", the server response is read to the end, and then the socket closes. close_notify is sent too. With nothing left unread there is no reason for a RST. This is the only case where all three layers agree — and the client gained exactly one line.'
+  ],
+};
+</script>
+<script src="/shared/tcpclose-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "One close() call, and a RST goes out on the wire",
+  "description": "The client finished sending, called close(), and the server's copy of the body is truncated. It is tempting to say the FIN overtook the data, but that is impossible. Closing with unread data in the receive buffer makes the kernel send a RST instead of a FIN (RFC 9293 §3.6.1), and a RST makes the peer discard its receive buffer. The client code is one close() call in every case.",
+  "url": "https://lab.vermilion19.com/en/tcpclose/",
+  "inLanguage": "en",
+  "datePublished": "2026-08-13",
+  "dateModified": "2026-08-13",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "One close() call, and a RST goes out on the wire"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+</body>
+</html>

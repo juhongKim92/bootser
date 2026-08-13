@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>close() 한 줄인데 선로에는 RST 가 나간다 — 계층마다 다른 "정상 종료"</title>
+<meta name="description" content="전송을 마치고 close() 했는데 서버가 받은 본문이 잘려 있습니다. FIN이 데이터를 앞질렀다고 생각하기 쉽지만 그건 불가능합니다. 응답을 안 읽고 닫으면 커널이 FIN 대신 RST를 보내고(RFC 9293 §3.6.1), RST를 받은 쪽은 수신 버퍼를 버립니다. 클라이언트 코드는 세 경우 모두 close() 한 줄로 같습니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/tcpclose/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/tcpclose/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/tcpclose/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/tcpclose/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="close() 한 줄인데 선로에는 RST 가 나간다">
+<meta property="og:description" content="FIN은 데이터를 앞지를 수 없습니다. 실제로 일어난 일은 다릅니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/tcpclose/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="close() 한 줄인데 선로에는 RST 가 나간다">
+<meta name="twitter:description" content='"정상 종료"의 정의가 애플리케이션·TLS·TCP 세 계층에서 각각 다릅니다.'>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/tcpclose-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/tcpclose/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>close() 한 줄인데 선로에는 RST 가 나간다</h1>
+  <p class="lede">단말이 전송을 마치고 소켓을 닫았습니다. 서버에는 본문의 뒷부분이 없어요. <strong>"FIN 이 데이터를 앞질러 도착했다"고 생각하기 쉽지만 그건 불가능합니다.</strong> 실제로 일어난 일은 다르고, 클라이언트 코드는 세 경우 모두 <code>close()</code> 한 줄로 똑같습니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>클라이언트 종료 방식</label>
+          <div class="seg" id="segMode" role="group" aria-label="클라이언트가 소켓을 닫는 방식">
+            <button data-mode="readClose" aria-pressed="true">응답 읽고 close</button>
+            <button data-mode="blindClose">안 읽고 close</button>
+            <button data-mode="linger0">SO_LINGER 0</button>
+            <button data-mode="shutWr">shutdown(WR)</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sB">본문 크기</label>
+          <span class="v" id="vB">16 KB</span>
+          <input type="range" id="sB" min="0" max="5" step="1" value="2" aria-label="클라이언트가 보내는 본문 크기">
+        </div>
+        <div class="dial">
+          <label for="sR">서버 응답 크기</label>
+          <span class="v" id="vR">1 KB</span>
+          <input type="range" id="sR" min="0" max="3" step="1" value="1" aria-label="서버가 보내는 응답 크기">
+        </div>
+        <div class="dial">
+          <label>TLS 종단</label>
+          <div class="seg" id="segTls" role="group" aria-label="TLS 를 어디서 종단하나">
+            <button data-tls="none" aria-pressed="true">없음</button>
+            <button data-tls="lb">로드밸런서</button>
+            <button data-tls="backend">백엔드</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>close_notify</label>
+          <div class="seg" id="segNotify" role="group" aria-label="close_notify 를 보내나">
+            <button data-on="1" aria-pressed="true">보냄</button>
+            <button data-on="0">안 보냄</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>half-close 전파</label>
+          <div class="seg" id="segHalf" role="group" aria-label="프록시가 half-close 를 전파하나">
+            <button data-on="0" aria-pressed="true">off (기본)</button>
+            <button data-on="1">on</button>
+          </div>
+        </div>
+      </div>
+      <div class="hint" id="hint"></div>
+    </section>
+
+    <section>
+      <span class="cap">선로에 나간 종료 신호</span>
+      <div class="board">
+        <div class="wire" id="wire"></div>
+
+        <div class="stream">
+          <span class="cap">바이트 스트림 — 종료 신호는 언제나 맨 뒤에 있다</span>
+          <div class="bytes" id="bytes"></div>
+          <div class="streamx" id="streamX"></div>
+        </div>
+
+        <div class="hops" id="hops"></div>
+
+        <div class="verdicts" id="verdicts"></div>
+        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">종료 방식 네 가지 — 나머지 손잡이는 그대로</span>
+      <table class="cmp" id="cmp"></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>종료 방식</td><td>네 경우 모두 <strong>애플리케이션 코드는 <code>close()</code> 한 줄</strong>입니다. 선로에 나가는 것만 달라집니다.</td></tr>
+    <tr><td>서버 응답 크기</td><td>0 으로 내려보세요. <strong>같은 클라이언트 코드가 갑자기 안전해집니다</strong> — 읽지 않을 응답이 없으니까요.</td></tr>
+    <tr><td>TLS 종단</td><td><strong>로드밸런서에서 종단하면 커넥션이 둘로 쪼개집니다.</strong> 유실 지점이 하나 더 생깁니다.</td></tr>
+    <tr><td>close_notify</td><td>안 보내면 바이트는 다 도착하는데도 <strong>받는 쪽이 "끝난 것"과 "잘린 것"을 구별할 수 없습니다.</strong></td></tr>
+    <tr><td>half-close 전파</td><td>프록시가 한 방향 종료를 그대로 넘기는지. <strong>nginx 기본값은 off</strong> 입니다.</td></tr>
+  </table>
+
+  <p>수신 버퍼는 양쪽 모두 <strong>64KB</strong>로 두었습니다. TLS 레코드는 최대 <strong>16,384바이트</strong>(RFC 8446 §5.1)입니다.</p>
+
+  <p><strong>유실량이 아니라 유실 상한을 표시합니다.</strong> RST 로 사라지는 것은 "수신 측 커널 버퍼에 아직 애플리케이션이 안 읽은 바이트"인데, 그 값은 읽는 속도에 달려 있어 알 수 없습니다. 그래서 <code>min(본문, 수신 버퍼)</code> 라는 상한만 계산합니다. 지어낸 숫자를 보여주지 않으려고요.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 응답을 읽고 닫는다 — FIN, 유실 상한 0</h4>
+    <div class="seq">응답 읽고 close · 본문 16KB · 응답 1KB · TLS 없음
+선로에 나간 신호 <em>FIN</em> · 유실 상한 <em>0</em>
+정상 종료 판정 <em>3 / 3</em></div>
+    <p class="why">기준선입니다. <strong>FIN 이 나가면 유실은 구조적으로 0 입니다.</strong> FIN 은 시퀀스 번호 공간의 한 자리를 차지해 바이트 스트림 맨 끝에 놓이고, 수신 TCP 는 중간에 구멍이 있으면 그 뒤를 애플리케이션에 올리지 못합니다. <strong>"구멍 있는 깨끗한 EOF" 는 존재하지 않습니다.</strong> 스트림 그림에서 종료 신호가 언제나 맨 뒤에 붙어 있는 게 그 뜻이에요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 응답을 안 읽고 닫는다 — 같은 코드, 이번엔 RST</h4>
+    <div class="seq">종료 방식만 바꿈 (응답 1KB 는 그대로)
+선로에 나간 신호 FIN → <em>RST</em>
+유실 상한 0 → <em>16 KB</em> · 정상 종료 판정 3/3 → <em>2 / 3</em></div>
+    <p class="why">수신 버퍼에 안 읽은 1KB 가 남은 상태로 <code>close()</code> 를 부르면, 커널은 FIN 이 아니라 RST 를 보냅니다. RFC 9293 §3.6.1 이 그렇게 적어뒀어요 — <em>"if such a host issues a CLOSE call while received data is still pending … its TCP implementation <strong>SHOULD</strong> send a RST to show that data was lost"</em>. 그리고 RST 를 받은 쪽은 자기 수신 버퍼를 버립니다. <strong>애플리케이션 판정은 여전히 "정상" 입니다 — <code>close()</code> 를 불렀으니까요.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 서버 응답을 0 으로 — 같은 코드가 안전해진다</h4>
+    <div class="seq">응답 크기 1KB → 0 (종료 방식은 "안 읽고 close" 그대로)
+선로에 나간 신호 RST → <em>FIN</em> · 유실 상한 <em>0</em></div>
+    <p class="why">클라이언트는 한 글자도 안 바뀌었습니다. 그런데 안전해졌어요. <strong>읽지 않을 응답이 없으면 미독 데이터도 없으니까요.</strong> 이게 이 사고가 재현이 어려운 이유입니다 — 서버가 <code>100 Continue</code> 나 에러 응답을 보내기 시작한 날, 또는 응답에 헤더가 하나 늘어난 날 갑자기 터집니다. <strong>클라이언트 코드에는 아무 변화가 없습니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. SO_LINGER 를 0 으로 — 응답이 없어도 RST</h4>
+    <div class="seq">종료 방식 SO_LINGER 0 (응답은 여전히 0)
+선로에 나간 신호 FIN → <em>RST</em></div>
+    <p class="why">미독 데이터와 무관하게 무조건 RST 입니다. 커넥션을 빨리 회수하려고 <code>setSoLinger(true, 0)</code> 이나 <code>ChannelOption.SO_LINGER</code> 를 0 으로 켜두는 경우가 있는데, <strong>그건 "TIME_WAIT 를 없애는 옵션"이 아니라 "데이터를 버리는 옵션"입니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. TLS 를 백엔드에서 종단하고 close_notify 를 안 보낸다</h4>
+    <div class="seq">TLS 종단 백엔드 · close_notify 안 보냄
+정상 종료 판정 <em>2 / 3</em> (TLS 가 비정상)
+잘리는 단위가 바이트 → <em>16 KB (레코드)</em></div>
+    <p class="why">RFC 8446 §6.1 은 <em>"Each party <strong>MUST</strong> send a close_notify alert before closing its write side"</em> 라고 합니다. 안 보내면 받는 쪽은 <strong>"보내는 쪽이 끝낸 것"과 "공격자가 중간에서 끊은 것"을 구별할 수 없습니다</strong>(절단 공격). 구현에 따라 에러로 처리하거나 조용히 받아들입니다. 그리고 TLS 는 레코드 단위로 암호화하니 <strong>커넥션이 레코드 중간에서 죽으면 바이트 몇 개가 아니라 레코드 하나가 통째로</strong> 못 읽힙니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. TLS 종단을 로드밸런서로 — 유실 지점이 하나 더 생긴다</h4>
+    <div class="seq">TLS 종단 백엔드 → 로드밸런서
+커넥션 구간 1개 → <em>2개</em> · 유실 지점 <em>2곳</em>
+유실 상한 16KB → <em>32 KB</em></div>
+    <p class="why">TLS 를 종단하는 순간 <strong>커넥션이 둘로 쪼개집니다.</strong> AWS NLB 문서가 TLS 리스너에 대해 <em>"uses a server certificate to terminate the front-end connection"</em> 이라고 적어둔 그대로예요. <strong>TCP 순서 보장은 홉 단위</strong>라 앞단과 뒷단 사이에는 이어지지 않습니다 — <a href="/mqtt/">5번</a>에서 QoS 가 홉 단위 보장이었던 것과 같은 구조입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. shutdown(WR) → 응답 읽기 → close — 전부 정상</h4>
+    <div class="seq">종료 방식 shutdown(WR) · close_notify 보냄
+선로에 나간 신호 <em>FIN</em> · 유실 상한 <em>0</em> · 정상 종료 판정 <em>3 / 3</em></div>
+    <p class="why">쓰기만 먼저 닫아 "더 보낼 게 없다"를 알리고, 서버 응답을 끝까지 읽은 뒤에 닫습니다. 미독 데이터가 없으니 RST 가 나갈 이유가 없어요. <strong>세 계층이 모두 "정상 종료" 라고 답하는 유일한 경우입니다.</strong></p>
+  </div>
+
+  <h2>FIN 은 데이터를 앞지를 수 없다</h2>
+
+  <p>먼저 틀린 설명을 치워두겠습니다. 관찰되는 증상이 정확히 그 모양이라 이 설명이 자연스럽게 만들어지는데, 성립하지 않습니다.</p>
+
+  <table class="keytable">
+    <tr><th>왜 불가능한가</th></tr>
+    <tr><td>FIN 은 <strong>시퀀스 번호 공간의 한 자리를 차지</strong>합니다. RFC 9293 §3.4 의 표현으로는 <em>"the FIN is considered to occur after the last actual data octet"</em> — 바이트 스트림의 맨 끝에 놓이는 하나의 위치입니다</td></tr>
+    <tr><td>수신 TCP 는 <strong>순서대로만</strong> 애플리케이션에 올립니다. 중간이 비면 그 뒤에 도착한 것을 들고 기다립니다</td></tr>
+    <tr><td>따라서 <strong>EOF 는 언제나 모든 바이트가 전달된 뒤에 나타납니다.</strong> "구멍 있는 깨끗한 EOF" 라는 상태가 존재하지 않습니다</td></tr>
+  </table>
+
+  <div class="callout">FIN 세그먼트가 앞선 데이터 세그먼트보다 <strong>물리적으로 먼저 도착</strong>하는 것은 가능합니다 — 경로가 재배열되면요. 하지만 그게 EOF 로 올라가지 않습니다. 데이터가 끝까지 안 오면 EOF 가 아니라 <strong>타임아웃 에러</strong>가 납니다.</div>
+
+  <p>이건 RFC 의 한 문장으로 규정된 게 아니라 <strong>순서 보장이라는 서비스 모델의 귀결</strong>입니다. 그래서 인용이 아니라 논증으로 적었습니다.</p>
+
+  <h2>"정상 종료" 의 정의가 계층마다 다르다</h2>
+
+  <p>실험대의 판정 세 줄이 이 페이지의 축입니다. 같은 순간을 세 계층이 다르게 봅니다.</p>
+
+  <table class="keytable">
+    <tr><th>계층</th><th>무엇을 보고 판정하나</th><th>2번 설정에서</th></tr>
+    <tr><td>애플리케이션</td><td><code>close()</code> 를 불렀나</td><td><strong>정상</strong> — 코드에 <code>close()</code> 밖에 없다</td></tr>
+    <tr><td>TLS</td><td><code>close_notify</code> 를 보냈나 (RFC 8446 §6.1)</td><td>정상 (여기서는 TLS 없음)</td></tr>
+    <tr><td>TCP</td><td>FIN 이냐 RST 냐</td><td><strong>비정상</strong> — RST 다</td></tr>
+  </table>
+
+  <div class="callout">그래서 <strong>"정상 종료했는데 데이터가 유실됐다"</strong>는 모순이 아닙니다. 두 문장이 서로 다른 계층을 말하고 있을 뿐입니다. 애플리케이션 개발자와 네트워크 담당자가 같은 사건을 두고 다른 결론에 도달하는 자리이기도 하고요.</div>
+
+  <h2>RFC 가 규정하는 것과 구현이 하는 것</h2>
+
+  <p>이 페이지를 만들면서 근거를 1차 출처로 확인했는데, <strong>세 주장 중 하나만 규격에 있었습니다.</strong> 나머지는 구현 동작이거나 논증입니다. 구별해서 적어두겠습니다.</p>
+
+  <table class="keytable">
+    <tr><th>주장</th><th>근거의 성격</th></tr>
+    <tr><td>미독 데이터가 있으면 <code>close()</code> 가 RST 를 보낸다</td><td><strong>규격에 있다.</strong> RFC 9293 §3.6.1 (<code>SHLD-3</code>). 다만 <strong>SHOULD 이지 MUST 가 아닙니다</strong> — 구현 재량이 있습니다</td></tr>
+    <tr><td>RST 를 받은 쪽이 수신 버퍼를 버린다</td><td><strong>구현 동작입니다.</strong> §3.5.3 은 <em>"aborts the connection and advises the user"</em> 까지만 말하고 버퍼 처분을 규정하지 않습니다. 실제 구현이 전부 그렇게 동작하는 것이지 규격이 요구하는 게 아닙니다</td></tr>
+    <tr><td>구멍 있는 EOF 는 없다</td><td><strong>논증입니다.</strong> 순서 보장 서비스 모델의 귀결이고, 이걸 한 문장으로 규정한 조항은 없습니다</td></tr>
+    <tr><td>프록시가 앞단 RST 를 받으면 뒷단 버퍼를 어떻게 하나</td><td><strong>모릅니다.</strong> 문서화돼 있지 않습니다. nginx <code>proxy_half_close</code> 기본값이 <code>off</code>(한 방향이 닫히면 양쪽을 닫는다)인 것까지가 확인된 사실이고, 그 이상은 단정하지 않았습니다</td></tr>
+  </table>
+
+  <h2>맞는 처방과 무효한 처방</h2>
+
+  <p>이 사고를 실제로 겪은 팀의 기록에서 가장 배울 점은 처방 두 개의 차이였습니다.</p>
+
+  <table class="keytable">
+    <tr><th>처방</th><th>결과</th></tr>
+    <tr><td>서버가 연결이 끊긴 것을 감지한 뒤 <strong>몇 초 기다렸다가</strong> 마무리한다</td><td><strong>완전히 무효.</strong> 버리는 주체가 서버 쪽이 아니었으니 서버가 기다려도 달라질 게 없습니다. 넣었다가 삭제했습니다</td></tr>
+    <tr><td>서버가 <strong>종료 신호를 에코</strong>하고, 클라이언트는 그 응답을 받은 뒤에 닫는다</td><td><strong>동작합니다.</strong> 클라이언트가 응답을 <em>읽어야</em> 하니 미독 데이터가 없어져 RST 가 사라지고, 서버 처리 완료도 확인되고, <code>close_notify</code> 타이밍도 정리됩니다</td></tr>
+  </table>
+
+  <div class="callout">두 번째 처방은 <strong>이 페이지의 네 메커니즘 중 무엇이 범인이든 동작합니다.</strong> 그러니 결과만 보면 "원인을 몰라도 됐다"고 할 수 있어요. 그런데 같은 팀이 <strong>무효한 처방을 한 번 먼저 넣었습니다.</strong> 원인을 모르면 맞는 처방을 <em>고를 근거</em>가 없기 때문입니다.</div>
+
+  <p><a href="/retrystorm/">14번</a>과 <a href="/rebalance/">20번</a>에서 타임아웃을 늘리는 처방을 다뤘는데, 같은 기준이 여기도 적용됩니다 — <strong>정상 케이스의 분포를 알고 늘렸으면 정답, 모르고 늘렸으면 유예</strong>입니다.</p>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>먼저 셀 것</td><td><code>netstat -s</code> 의 <strong><code>connections reset</code></strong> 계열 카운터. tcpdump 라면 <code>tcp[tcpflags] &amp; tcp-rst != 0</code> 으로 RST 만 골라 셉니다. <strong>이 숫자가 배포·펌웨어 변경과 함께 뛰면 이 페이지입니다</strong></td></tr>
+    <tr><td>클라이언트 쪽</td><td>응답을 <strong>끝까지 읽고</strong> 닫는지. 전송만 하고 응답을 버리는 코드가 이 사고의 출발점입니다. 더 보낼 게 없다면 <code>shutdown(WR)</code> 로 알리고 응답을 읽은 뒤 닫습니다</td></tr>
+    <tr><td><code>SO_LINGER</code></td><td>0 으로 켜둔 곳이 있는지 찾으세요. <strong>데이터를 버리는 옵션입니다</strong></td></tr>
+    <tr><td>TLS 종단 위치</td><td>로드밸런서에서 종단하면 커넥션이 쪼개집니다. AWS 라면 <strong>TLS 리스너는 종단하고 TCP 리스너는 통과</strong>시킵니다 — L4 냐 L7 이냐가 아니라 <strong>종단하냐</strong>가 기준입니다</td></tr>
+    <tr><td>프록시 설정</td><td>nginx stream 이라면 <code>proxy_half_close</code> 가 기본 <code>off</code> 입니다. 한 방향만 닫는 프로토콜을 쓴다면 켜야 합니다</td></tr>
+    <tr><td>서버 종료</td><td>Spring Boot 의 <code>server.shutdown</code> 은 현재 기본값이 <code>graceful</code> 이고 in-flight 요청을 <strong>지키는</strong> 쪽입니다. 위험한 쪽은 <code>immediate</code> 로 두거나, <code>spring.lifecycle.timeout-per-shutdown-phase</code> 가 <strong>플랫폼의 종료 유예보다 길어</strong> 먼저 강제 종료되는 경우입니다</td></tr>
+    <tr><td>유휴 타임아웃</td><td>로드밸런서가 유휴로 끊은 커넥션에 뒤늦게 쓰면 RST 를 받습니다(AWS NLB 기본 350초). <a href="/keepalive/">7번</a>이 그 반대편 — <em>끊긴 걸 모르고 살아있다고 믿는</em> 쪽입니다</td></tr>
+    <tr><td>애플리케이션 프레임</td><td><code>Content-Length</code> 없이 보내거나 chunked 종료 청크가 빠지면, <strong>서버는 받은 게 전부인지 잘린 건지 판단할 근거가 없습니다.</strong> 잘린 본문을 그대로 파싱해 넘기는 구현이 가장 나쁩니다 — 에러도 안 나고 데이터만 깨집니다</td></tr>
+  </table>
+
+  <p><a href="/keepalive/">7번</a>이 <em>끊겼는데 살아있다고 믿는</em> 이야기였다면, 이 페이지는 <em>정상적으로 끊었는데 데이터가 사라지는</em> 이야기입니다. 둘 다 "연결이 끝났다"는 말이 계층마다 다른 뜻이라서 생깁니다.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/keepalive/"><span class="no">07</span><span><span class="t">서버는 두 시간 동안 살아있다고 믿는다</span><span class="why">반대편 — 이쪽은 정상적으로 끊었는데 유실되고, 7 번은 끊겼는데 살아있다고 믿습니다.</span></span></a></li>
+      <li><a href="/mqtt/"><span class="no">05</span><span><span class="t">한 번만 전달한다는 약속의 값</span><span class="why">TCP 순서 보장이 홉 단위인 것이 QoS 가 홉 단위인 것과 같은 구조입니다.</span></span></a></li>
+      <li><a href="/rebalance/"><span class="no">20</span><span><span class="t">컨슈머는 쉬지 않고 도는데 lag 는 줄지 않는다</span><span class="why">"정상 종료" 처럼 "살아 있다" 도 계층마다 다른 뜻입니다 — 하트비트는 정상인데 그룹에서 빠집니다.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/tcpclose/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uByte:'1 바이트',
+  wLabel:'선로에 나간 종료 신호',
+  wFin:'미독 데이터가 없다 — 정상적으로 FIN 이 나간다. 유실은 구조적으로 0 이다',
+  wUnread:'수신 버퍼에 안 읽은 $1 가 남은 채로 close() 를 불렀다 — 커널이 RST 를 보낸다 (RFC 9293 §3.6.1)',
+  wLinger:'SO_LINGER 0 은 미독 데이터와 무관하게 무조건 RST 다',
+  sStart:'첫 바이트', sPlain:'평문 — 잘리는 단위는 1 바이트',
+  sRecords:'TLS 레코드 $1개 · 최대 $2', sTail:'맨 뒤에 $1',
+  hSingle:'커넥션 (1구간)', hFront:'앞단 (클라이언트↔LB)', hBack:'뒷단 (LB↔백엔드)',
+  hTlsHere:'여기서 TLS 를 종단한다', hTlsEnd:'백엔드가 TLS 를 종단한다', hPlainEnd:'평문',
+  hPropagated:'앞단이 끊기면 여기도 닫힌다 (half-close 전파 off)',
+  hHalfOpen:'half-close 전파 on — 한 방향만 닫힌다',
+  lApp:'애플리케이션', lTls:'TLS', lTcp:'TCP',
+  tOk:'정상', tNo:'비정상',
+  wApp:'close() 를 불렀다. 이 판정은 언제나 정상이다',
+  wNoTls:'TLS 를 쓰지 않는다',
+  wNotify:'close_notify 를 보냈다 (RFC 8446 §6.1)',
+  wNoNotify:'close_notify 가 없다 — 끝난 것인지 잘린 것인지 구별할 수 없다',
+  wTcpFin:'FIN 이 나갔다. 모든 바이트가 전달된 뒤 EOF 가 뜬다',
+  wTcpRst:'RST 가 나갔다. 받는 쪽은 수신 버퍼를 버린다 (구현 동작)',
+  mSignal:'종료 신호', mLoss:'유실 상한', mPoints:'유실 지점',
+  mUnit:'잘리는 단위', mOk:'정상 종료 판정', mSeen:'수신 측이 보는 것',
+  seen_eof:'EOF', seen_reset:'ECONNRESET', seen_ambiguous:'절단인지 모름',
+  cMode:'종료 방식', cSignal:'선로', cLoss:'유실 상한', cCode:'클라이언트 코드',
+  n_readClose:'응답 읽고 close', n_blindClose:'안 읽고 close',
+  n_linger0:'SO_LINGER 0', n_shutWr:'shutdown(WR) 후 읽고 close',
+  c_readClose:'close() 한 줄', c_blindClose:'close() 한 줄 — 위와 동일하다',
+  c_linger0:'옵션 한 줄 + close()', c_shutWr:'shutdown() 한 줄이 더 있다',
+  vClean:'<b>세 계층이 모두 "정상 종료" 라고 답한다.</b> FIN 이 나갔고 유실 상한은 0 이다.<br><span class="at">FIN 은 스트림 맨 끝에 놓이므로, EOF 는 모든 바이트가 전달된 뒤에만 뜬다</span>',
+  vRst:'<b>선로에 RST 가 나갔다.</b> 미독 데이터 $1 때문이다 (RFC 9293 §3.6.1).<br>받는 쪽이 수신 버퍼를 버리므로 최대 <b>$2</b> 가 사라진다 <span class="at">— 애플리케이션 판정은 여전히 "정상" 이다</span>',
+  vSplit:'<b>커넥션이 둘로 쪼개져 유실 지점이 두 곳이다</b> — 유실 상한 <b>$1</b>.<br><span class="at">TCP 순서 보장은 홉 단위라 앞단과 뒷단 사이에는 이어지지 않는다</span>',
+  vAmb:'<b>바이트는 다 도착했는데 끝났는지 잘렸는지 알 수 없다.</b> close_notify 가 없다.<br><span class="at">TLS 는 레코드 단위라, 중간에서 죽으면 최대 $1 가 통째로 못 읽힌다</span>',
+  hRst:'RST 가 나가고 있다 — 받는 쪽 수신 버퍼가 버려진다',
+  hAmb:'close_notify 가 없다 — 절단과 완료를 구별할 수 없다',
+  hOk:'FIN 이 나간다 — 유실이 구조적으로 없다',
+  scene:[
+    '기준선입니다. 응답을 끝까지 읽고 닫으니 미독 데이터가 없고, 선로에는 FIN 이 나갑니다. 유실 상한이 0 이에요. 스트림 그림에서 종료 신호가 맨 뒤에 붙어 있는 걸 보세요 — FIN 은 시퀀스 번호 공간의 한 자리를 차지해 바이트 스트림 맨 끝에 놓입니다. 그래서 "구멍 있는 깨끗한 EOF" 라는 건 존재하지 않습니다.',
+    '종료 방식만 "안 읽고 close" 로 바꿨습니다. 응답 1KB 가 수신 버퍼에 안 읽힌 채 남아 있는데 close() 를 부르니, 커널이 FIN 대신 RST 를 보냅니다 — RFC 9293 §3.6.1 이 그렇게 적어뒀어요. 받는 쪽은 수신 버퍼를 버리고요. 판정 세 줄을 보세요: 애플리케이션은 여전히 "정상" 입니다. close() 를 불렀으니까요.',
+    '이번엔 서버 응답 크기만 0 으로 내렸습니다. 클라이언트 코드는 한 글자도 안 바뀌었는데 다시 FIN 이 나갑니다. 읽지 않을 응답이 없으니 미독 데이터도 없어서요. 이게 이 사고가 재현이 어려운 이유입니다 — 서버가 응답을 보내기 시작한 날, 또는 헤더가 하나 늘어난 날 갑자기 터지는데 클라이언트에는 아무 변화가 없습니다.',
+    'SO_LINGER 를 0 으로 켰습니다. 응답이 0 이라 미독 데이터가 없는데도 RST 가 나갑니다. 무조건이에요. 커넥션을 빨리 회수하려고 켜두는 옵션인데, 실은 "TIME_WAIT 를 없애는 옵션" 이 아니라 "데이터를 버리는 옵션" 입니다.',
+    'TLS 를 백엔드에서 종단하게 하고 close_notify 를 안 보내게 했습니다. RFC 8446 §6.1 은 MUST 로 요구하는데요. 안 보내면 받는 쪽은 보내는 쪽이 끝낸 것인지 공격자가 끊은 것인지 구별할 수 없습니다. 그리고 잘리는 단위가 바이트에서 레코드로 바뀝니다 — 최대 16,384 바이트가 통째로 못 읽힙니다.',
+    'TLS 종단을 로드밸런서로 옮겼습니다. 커넥션 구간이 1개에서 2개로 늘었고 유실 지점도 두 곳이 됐습니다. TLS 를 종단하는 순간 커넥션이 쪼개지기 때문이에요 — AWS NLB 문서가 TLS 리스너에 대해 "terminate the front-end connection" 이라고 적어둔 그대로입니다. TCP 순서 보장은 홉 단위라 앞단과 뒷단 사이에는 이어지지 않습니다.',
+    'shutdown(WR) 로 쓰기만 먼저 닫아 "더 보낼 게 없다" 를 알리고, 서버 응답을 끝까지 읽은 뒤에 닫습니다. close_notify 도 보내고요. 미독 데이터가 없으니 RST 가 나갈 이유가 없습니다. 세 계층이 모두 "정상 종료" 라고 답하는 유일한 경우예요. 클라이언트에 늘어난 건 shutdown() 한 줄입니다.'
+  ],
+};
+</script>
+<script src="/shared/tcpclose-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "close() 한 줄인데 선로에는 RST 가 나간다",
+  "description": "전송을 마치고 close() 했는데 서버가 받은 본문이 잘려 있습니다. FIN이 데이터를 앞질렀다고 생각하기 쉽지만 그건 불가능합니다. 응답을 안 읽고 닫으면 커널이 FIN 대신 RST를 보내고(RFC 9293 §3.6.1), RST를 받은 쪽은 수신 버퍼를 버립니다. 클라이언트 코드는 세 경우 모두 close() 한 줄로 같습니다.",
+  "url": "https://lab.vermilion19.com/tcpclose/",
+  "inLanguage": "ko",
+  "datePublished": "2026-08-13",
+  "dateModified": "2026-08-13",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "close() 한 줄인데 선로에는 RST 가 나간다"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+</body>
+</html>

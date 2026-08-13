@@ -286,6 +286,7 @@ sysctl net.ipv4.tcp_keepalive_time net.ipv4.tcp_keepalive_intvl net.ipv4.tcp_kee
       <li><a href="/gc/"><span class="no">02</span><span><span class="t">G1과 ZGC는 왜 다르게 멈추는가</span><span class="why">하트비트를 막는 정지가 실제로 얼마나 긴가.</span></span></a></li>
       <li><a href="/raft/"><span class="no">04</span><span><span class="t">네트워크가 갈라지면 누가 리더가 되는가</span><span class="why">실패 감지를 짧게 잡으면 오탐이 늘어납니다. 같은 저울의 반대쪽입니다.</span></span></a></li>
       <li><a href="/lockttl/"><span class="no">18</span><span><span class="t">락을 잡았는데 둘이 들어왔다</span><span class="why">하트비트가 못 나가는 것과 락 갱신이 못 나가는 것은 같은 사고입니다.</span></span></a></li>
+      <li><a href="/tcpclose/"><span class="no">21</span><span><span class="t">close() 한 줄인데 선로에는 RST 가 나간다</span><span class="why">반대편 — 끊긴 걸 모르는 게 아니라, 정상적으로 끊었는데 데이터가 사라집니다.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->
