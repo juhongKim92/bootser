@@ -246,6 +246,17 @@ jcmd &lt;pid&gt; VM.flags | tr ' ' '\n' | grep -i gc
   </article>
 
   <footer>JDK 25 · simplified teaching model · <a href="/gc/" hreflang="ko" lang="ko">한국어</a> / English · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/lockttl/"><span class="no">18</span><span><span class="t">You took the lock and two of you got in</span><span class="why">When that pause outlasts a distributed lock’s TTL the lock is gone — and the process cannot tell.</span></span></a></li>
+      <li><a href="/en/keepalive/"><span class="no">07</span><span><span class="t">Your server believes it for two hours</span><span class="why">During a pause the heartbeat cannot go out either — alive, and treated as dead.</span></span></a></li>
+      <li><a href="/en/connpool/"><span class="no">08</span><span><span class="t">A 17-millisecond query drains the pool</span><span class="why">Time spent paused still counts as time holding the connection.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
 </main>
 
 <script src="/shared/gc-lab.js"></script>

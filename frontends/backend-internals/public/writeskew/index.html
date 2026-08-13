@@ -33,7 +33,7 @@
   <nav><a class="btn" href="/en/writeskew/" hreflang="en" lang="en">EN</a></nav>
 </div></div>
 
-<main class="wrap">
+<main class="wrap prose">
 
   <h1>둘 다 확인했고 둘 다 통과했다</h1>
   <p class="lede">당직자는 최소 한 명 남아야 합니다. 빠지려는 사람은 먼저 확인해요 — "나 말고 한 명 더 있네." 두 사람이 동시에 확인하면 <strong>둘 다 한 명 더 있다고 보고 둘 다 빠집니다.</strong> 각자 자기 행만 건드렸으니 락도 안 걸리고 예외도 안 납니다.</p>
@@ -204,6 +204,17 @@ COMMIT;</div>
     <tr><td>비용</td><td>Serializable 은 읽기 술어를 추적하므로 공짜가 아닙니다. 경합이 심하면 40001 이 늘고, 그러면 재시도가 늘고, <a href="/retrystorm/">14번</a>의 증폭이 여기서도 시작됩니다.</td></tr>
     <tr><td>테스트</td><td>간격 0에서는 절대 재현되지 않습니다. <strong>읽기와 쓰기 사이에 일부러 지연을 넣는 테스트</strong>가 아니면 이 버그는 CI 를 그냥 통과합니다.</td></tr>
   </table>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/jobclaim/"><span class="no">09</span><span><span class="t">인스턴스를 2대로 늘리는 순간 같은 작업이 두 번 돈다</span><span class="why">그래서 락을 어디에 걸어야 하는가.</span></span></a></li>
+      <li><a href="/lockttl/"><span class="no">18</span><span><span class="t">락을 잡았는데 둘이 들어왔다</span><span class="why">예외도 로그도 없이 결과만 틀리는 같은 종류가 분산 락에서 나옵니다.</span></span></a></li>
+      <li><a href="/mvcc/"><span class="no">01</span><span><span class="t">DELETE 했는데 테이블이 줄지 않는 이유</span><span class="why">각자가 보고 있던 스냅숏이 무엇이었는가.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
 
 </main>
 

@@ -33,7 +33,7 @@
   <nav><a class="btn" href="/writeskew/" hreflang="ko" lang="ko">한국어</a></nav>
 </div></div>
 
-<main class="wrap">
+<main class="wrap prose">
 
   <h1>Both checked, and both passed</h1>
   <p class="lede">At least one person has to stay on call. Anyone stepping away checks first — "there's one other name here besides mine." When two people check at the same moment, <strong>both see one other name and both step away.</strong> Each touched only their own row, so no lock fired and no exception was raised.</p>
@@ -204,6 +204,17 @@ overlapping transactions <em>0</em> — they queue instead</div>
     <tr><td>the cost</td><td>Serializable tracks read predicates and is not free. Heavy contention means more 40001s, more retries, and the amplification from <a href="/en/retrystorm/">page 14</a> starting up right here.</td></tr>
     <tr><td>testing</td><td>It never reproduces at a gap of zero. Unless the test <strong>deliberately delays between the read and the write</strong>, this bug sails through CI.</td></tr>
   </table>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/jobclaim/"><span class="no">09</span><span><span class="t">Add a second instance and the same job runs twice</span><span class="why">So where does the lock have to go?</span></span></a></li>
+      <li><a href="/en/lockttl/"><span class="no">18</span><span><span class="t">You took the lock and two of you got in</span><span class="why">The same species — no exception, no log, just a wrong result — out of a distributed lock.</span></span></a></li>
+      <li><a href="/en/mvcc/"><span class="no">01</span><span><span class="t">Why your table never shrinks after DELETE</span><span class="why">What the snapshot each of them was reading actually was.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
 
 </main>
 

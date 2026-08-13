@@ -13,6 +13,7 @@
    실패가 하나라도 있으면 종료 코드 1 이다.
    ============================================================ */
 import { boot, scan, pages, PUB } from './lab-harness.mjs';
+import { RELATED, NO } from './related.mjs';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -110,6 +111,49 @@ for (const page of ['', 'en']) {
         if (!html.includes(`href="/${p}/"`)) bad('/' + (page ? page + '/' : ''), `/${p}/ 카드가 인덱스에 없다`);
     }
     console.log(`인덱스 /${page ? page + '/' : ''} — 카드 ${total}개 · 그룹 ${groups.length}개`);
+}
+
+/* 8. "이어서 볼 것" 링크 그래프 — 막다른 길도, 깨진 링크도, 자기 링크도 없어야 한다 */
+{
+    const slugs = LABS.filter(p => !p.startsWith('en/'));
+    const incoming = new Map(slugs.map(s => [s, 0]));
+    for (const [from, list] of Object.entries(RELATED)) {
+        if (!slugs.includes(from)) bad('related.mjs', `${from} 은 실험대 페이지가 아니다`);
+        if (!list.length) bad('related.mjs', `${from} 에 나가는 링크가 없다`);
+        const seen = new Set();
+        for (const r of list) {
+            if (r.to === from) bad('related.mjs', `${from} 이 자기를 가리킨다`);
+            if (seen.has(r.to)) bad('related.mjs', `${from} → ${r.to} 가 중복이다`);
+            seen.add(r.to);
+            if (!slugs.includes(r.to)) { bad('related.mjs', `${from} → ${r.to} — 없는 페이지다`); continue; }
+            if (!NO[r.to]) bad('related.mjs', `${r.to} 의 번호가 NO 에 없다`);
+            for (const lang of ['ko', 'en']) {
+                if (!r[lang] || !r[lang].trim()) bad('related.mjs', `${from} → ${r.to} 의 ${lang} 이유가 비었다`);
+            }
+            incoming.set(r.to, incoming.get(r.to) + 1);
+        }
+    }
+    const orphan = [...incoming].filter(([, n]) => n === 0).map(([s]) => s);
+    if (orphan.length) bad('related.mjs', `들어오는 링크가 없는 페이지: ${orphan.join(', ')}`);
+    const missing = slugs.filter(s => !RELATED[s]);
+    if (missing.length) bad('related.mjs', `링크 맵에 없는 페이지: ${missing.join(', ')}`);
+
+    /* 블록이 실제로 HTML 에 박혀 있고 링크가 맞나 */
+    for (const page of LABS) {
+        const html = readFileSync(join(PUB, page, 'index.html'), 'utf8');
+        const label = '/' + page + '/';
+        const m = html.match(/<!-- onward:start[\s\S]*?<!-- onward:end -->/);
+        if (!m) { bad(label, '"이어서 볼 것" 블록이 없다 — node tools/gen-related.mjs'); continue; }
+        const en = page.startsWith('en/');
+        const slug = page.replace(/^en\//, '');
+        const hrefs = [...m[0].matchAll(/href="([^"]+)"/g)].map(x => x[1]);
+        const want = RELATED[slug].map(r => (en ? '/en/' : '/') + r.to + '/');
+        if (hrefs.join(',') !== want.join(',')) bad(label, `블록 링크가 맵과 다르다 — 있음 [${hrefs}] 기대 [${want}]`);
+        /* 문단 여백이 붙는 규칙이 걸려 있나 (01~13 은 <article class="prose">,
+           14 이후는 <main class="wrap prose">). 부분문자열이 아니라 단어 경계로 본다. */
+        if (!/class="[^"]*\bprose\b/.test(html)) bad(label, 'prose 규칙이 없다 — 문단 여백이 0 이 된다');
+    }
+    console.log(`"이어서 볼 것" — 링크 ${Object.values(RELATED).reduce((a, v) => a + v.length, 0)}개 · 막다른 길 0개`);
 }
 
 console.log('');

@@ -33,7 +33,7 @@
   <nav><a class="btn" href="/timeout/" hreflang="ko" lang="ko">한국어</a></nav>
 </div></div>
 
-<main class="wrap">
+<main class="wrap prose">
 
   <h1>Everyone got a second and nobody gets to use one</h1>
   <p class="lede">One second at the gateway, one at the service, one at the DB client. Three layers, each picking a reasonable number on its own. And in that configuration <strong>the inner timeouts never fire at all.</strong> They expire at 1000ms, 1025ms and 1050ms — the outer layer always gives up first.</p>
@@ -268,6 +268,17 @@ mean answer 499 &rarr; <em>294ms</em> · a failing request answers at 3.05s &rar
   </table>
 
   <p>If <a href="/en/retrystorm/">no. 14</a> was <em>how capacity collapses when work continues after everyone gave up</em>, this page is <em>why that work starts in the first place</em>. Each layer's number was reasonable on its own, and the moment they multiplied they contradicted each other.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/retrystorm/"><span class="no">14</span><span><span class="t">The load is gone and it still will not recover</span><span class="why">How the work that continues after everyone gave up takes capacity down.</span></span></a></li>
+      <li><a href="/en/connpool/"><span class="no">08</span><span><span class="t">A 17-millisecond query drains the pool</span><span class="why">Raise the budget and occupancy rises, so capacity falls.</span></span></a></li>
+      <li><a href="/en/correlation/"><span class="no">12</span><span><span class="t">When does matching responses by order go wrong</span><span class="why">The case where a late answer becomes the next request’s pair.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
 
 </main>
 

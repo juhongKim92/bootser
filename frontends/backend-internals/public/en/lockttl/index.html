@@ -33,7 +33,7 @@
   <nav><a class="btn" href="/lockttl/" hreflang="ko" lang="ko">한국어</a></nav>
 </div></div>
 
-<main class="wrap">
+<main class="wrap prose">
 
   <h1>You took the lock and two of you got in</h1>
   <p class="lede">You acquired the Redis lock correctly. No contention, a clean acquisition. And then <strong>the work ran longer than the TTL, so the lock expired while you were still holding it.</strong> The next instance starts the same job, and the first worker keeps going with no idea that its lock is gone.</p>
@@ -266,6 +266,17 @@ waiting on a dead worker's lock <em>up to 9.0s</em></div>
   </table>
 
   <p>If <a href="/en/jobclaim/">no. 9</a> was <em>how to claim a lock correctly</em>, this page is <em>what happens when a correctly claimed lock disappears mid-flight</em>. Whichever of no. 9's four approaches you picked, this problem is still there — every lock with an expiry has it.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/jobclaim/"><span class="no">09</span><span><span class="t">Add a second instance and the same job runs twice</span><span class="why">How you claim that lock correctly in the first place.</span></span></a></li>
+      <li><a href="/en/gc/"><span class="no">02</span><span><span class="t">Why G1 and ZGC stop differently</span><span class="why">How long a process actually stops — the number that belongs in your TTL.</span></span></a></li>
+      <li><a href="/en/mqtt/"><span class="no">05</span><span><span class="t">What "exactly once" actually costs</span><span class="why">The price and the payoff of allowing duplicates and being idempotent instead.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
 
 </main>
 

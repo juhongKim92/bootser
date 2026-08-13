@@ -33,7 +33,7 @@
   <nav><a class="btn" href="/en/timeout/" hreflang="en" lang="en">EN</a></nav>
 </div></div>
 
-<main class="wrap">
+<main class="wrap prose">
 
   <h1>각자 1초씩 줬는데 왜 아무도 1초를 못 쓰나</h1>
   <p class="lede">게이트웨이 1초, 서비스 1초, DB 클라이언트 1초. 세 계층이 각자 합리적으로 정했습니다. 그런데 이 설정에서 <strong>안쪽 타임아웃은 한 번도 발동하지 않습니다.</strong> 발동 시각이 1000ms · 1025ms · 1050ms 라서, 언제나 바깥이 먼저 포기하거든요.</p>
@@ -268,6 +268,17 @@ C 호출 1.80 → <em>1.00건</em> · 기한 뒤 시작 0.80 → <em>0.00건</em
   </table>
 
   <p><a href="/retrystorm/">14번</a>이 <em>포기한 뒤에도 일이 계속되면 용량이 어떻게 무너지는가</em>였다면, 이 페이지는 <em>애초에 왜 그 일이 시작되는가</em>입니다. 계층마다 따로 정한 값은 각자 합리적이었고, 곱해지는 순간 서로 모순됐습니다.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/retrystorm/"><span class="no">14</span><span><span class="t">부하는 걷혔는데 돌아오지 않는다</span><span class="why">포기한 뒤에도 계속되는 그 일이 용량을 어떻게 무너뜨리는가.</span></span></a></li>
+      <li><a href="/connpool/"><span class="no">08</span><span><span class="t">17밀리초 쿼리가 커넥션 풀을 말린다</span><span class="why">예산을 늘리면 점유가 늘어 용량이 줍니다.</span></span></a></li>
+      <li><a href="/correlation/"><span class="no">12</span><span><span class="t">응답을 순서로 맞추면 언제 어긋나는가</span><span class="why">늦게 도착한 응답이 다음 요청의 짝이 되는 경우.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
 
 </main>
 

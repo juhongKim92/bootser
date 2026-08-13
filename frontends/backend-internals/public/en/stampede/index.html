@@ -33,7 +33,7 @@
   <nav><a class="btn" href="/stampede/" hreflang="ko" lang="ko">한국어</a></nav>
 </div></div>
 
-<main class="wrap">
+<main class="wrap prose">
 
   <h1>The moment the TTL ends</h1>
   <p class="lede">The cache hit rate is 99.4%. Nothing on any dashboard looks wrong. And every thirty seconds the latency graph takes another nail. <strong>Because that 0.6% does not arrive spread out — it arrives all at once.</strong></p>
@@ -210,6 +210,17 @@ in exchange, <em>100 stale responses per expiry</em></div>
   </table>
 
   <p>Where <a href="/en/hashring/">page 3 (consistent hashing)</a> asked <em>how the cache collapses when a node leaves</em>, this page asks <em>what happens when nobody leaves but the clocks agree</em>.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/lockttl/"><span class="no">18</span><span><span class="t">You took the lock and two of you got in</span><span class="why">Move the mutex to a distributed lock and the lock’s TTL becomes the new problem.</span></span></a></li>
+      <li><a href="/en/genericplan/"><span class="no">13</span><span><span class="t">Slow from the sixth execution</span><span class="why">The optimiser makes the same mistake — sizing by the average.</span></span></a></li>
+      <li><a href="/en/hashring/"><span class="no">03</span><span><span class="t">How a cache falls apart when one node leaves</span><span class="why">The cache collapse when a node does leave.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
 
 </main>
 

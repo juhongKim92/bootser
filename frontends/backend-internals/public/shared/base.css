@@ -137,6 +137,29 @@ h3{font-family:var(--sans);font-size:15px;font-weight:700;margin:24px 0 6px}
   max-width:66ch;
 }
 
+/* --- 이어서 볼 것 -------------------------------------------------------
+   전 페이지 공통 블록. `tools/gen-related.mjs` 가 HTML 에 직접 써 넣는다.
+   .prose 규칙보다 뒤에 와야 한다 — .prose a 의 밑줄·색을 여기서 되돌린다. */
+.onward{margin-top:6px}
+.onward ul{list-style:none;margin:0;padding:0;max-width:68ch}
+.onward li{border-bottom:1px solid var(--rule)}
+.onward li:last-child{border-bottom:none}
+.onward a{
+  display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:baseline;
+  padding:12px 0;text-decoration:none;color:inherit;
+  transition:background .15s;
+}
+.onward a:hover{background:var(--paper-2)}
+.onward a:focus-visible{outline:1px solid var(--horizon);outline-offset:2px}
+.onward .no{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--ink-3)}
+.onward .t{
+  display:block;
+  font-family:var(--serif);font-size:16.5px;font-weight:700;line-height:1.35;
+  color:var(--ink);
+}
+.onward a:hover .t{color:var(--horizon)}
+.onward .why{display:block;font-size:13.5px;color:var(--ink-2);margin-top:3px;max-width:58ch}
+
 footer{
   margin-top:64px;
   border-top:1px solid var(--rule);

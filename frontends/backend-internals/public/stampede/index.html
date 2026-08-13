@@ -33,7 +33,7 @@
   <nav><a class="btn" href="/en/stampede/" hreflang="en" lang="en">EN</a></nav>
 </div></div>
 
-<main class="wrap">
+<main class="wrap prose">
 
   <h1>TTL 이 끝나는 순간</h1>
   <p class="lede">캐시 히트율은 99.4%입니다. 대시보드 어디를 봐도 문제가 없어요. 그런데 30초마다 응답 시간 그래프에 못이 하나씩 박힙니다. <strong>0.6%가 고르게 흩어져 오지 않고 한 순간에 몰려 오기 때문입니다.</strong></p>
@@ -210,6 +210,17 @@
   </table>
 
   <p><a href="/hashring/">3번(컨시스턴트 해싱)</a>이 <em>노드가 빠지면 캐시가 어떻게 무너지는가</em>였다면, 이 페이지는 <em>아무도 빠지지 않았는데 시각이 겹치면 무슨 일이 일어나는가</em>입니다.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/lockttl/"><span class="no">18</span><span><span class="t">락을 잡았는데 둘이 들어왔다</span><span class="why">뮤텍스를 분산 락으로 옮기면 락의 TTL 이 새 문제가 됩니다.</span></span></a></li>
+      <li><a href="/genericplan/"><span class="no">13</span><span><span class="t">여섯 번째 실행부터 느려진다</span><span class="why">평균으로 용량을 잡는 같은 실수를 옵티마이저도 합니다.</span></span></a></li>
+      <li><a href="/hashring/"><span class="no">03</span><span><span class="t">노드 하나가 빠지면 캐시는 어떻게 무너지는가</span><span class="why">노드가 빠질 때의 캐시 붕괴.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
 
 </main>
 
