@@ -19,7 +19,12 @@
 
   --serif:'Gowun Batang', 'Noto Serif KR', Georgia, serif;
   --sans:'Pretendard Variable', Pretendard, -apple-system, system-ui, sans-serif;
-  --mono:'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  /* JetBrains Mono 에는 한글 글리프가 없다. 한글을 그냥 두면 브라우저 기본 monospace
+     (Windows 는 대개 Courier New)로 떨어지고 거기도 한글이 없어 다시 시스템 폰트로
+     떨어진다 — 페이지마다 다른 폰트로 보이고 작은 크기에서 잘 안 읽힌다.
+     폰트 폴백은 **글리프 단위**라, Pretendard 를 뒤에 두면 숫자·라틴은 JetBrains Mono 를
+     그대로 쓰고(tabular-nums 정렬이 유지된다) 한글만 Pretendard 로 간다. */
+  --mono:'JetBrains Mono', 'Pretendard Variable', Pretendard, ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
 @media (prefers-color-scheme: dark){

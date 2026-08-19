@@ -24,17 +24,18 @@
 .board{border:1px solid var(--rule);border-radius:3px;background:var(--paper);padding:14px 15px 12px}
 .two{display:flex;gap:14px;flex-wrap:wrap;align-items:stretch}
 .num{flex:1;min-width:180px;border:1px solid var(--rule);border-radius:3px;padding:11px 13px;background:var(--paper-2)}
-.num .k{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:5px}
+.num .k{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;color:var(--ink-3);margin-bottom:5px}
 .num .big{font-family:var(--mono);font-size:27px;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.1}
-.num .sub{display:block;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:5px;line-height:1.6}
+/* 한글 설명문이라 mono 의 작은 크기·넓은 자간이 특히 안 읽힌다 — 본문 폰트로 올린다 */
+.num .sub{display:block;font-family:var(--sans);font-size:12px;color:var(--ink-2);margin-top:6px;line-height:1.6}
 .num.a{border-left:2px solid var(--horizon)}
 .num.b{border-left:2px solid var(--free)}
 .gap{flex:none;min-width:110px;display:flex;flex-direction:column;justify-content:center;align-items:center;
   border:1px dashed var(--rule);border-radius:3px;padding:8px 10px}
-.gap .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.gap .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;color:var(--ink-3)}
 .gap .big{font-family:var(--mono);font-size:21px;font-variant-numeric:tabular-nums;color:var(--live);margin-top:3px}
 .gap.diff .big{color:var(--blocked)}
-.gap .sub{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:3px}
+.gap .sub{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:3px}
 
 /* --- 날짜별 표본 (폭 = 표본 수, 높이 = 평균) --- */
 .days{display:flex;align-items:flex-end;gap:3px;height:96px;margin-top:17px;border-bottom:1px solid var(--rule)}
@@ -44,12 +45,12 @@
 .day .lab2{position:absolute;top:-14px;font-family:var(--mono);font-size:9px;color:var(--ink-3);white-space:nowrap}
 .day.moved .bar{background:repeating-linear-gradient(135deg,transparent 0 3px,var(--free) 3px 4.5px);border-color:var(--free)}
 .daysx{display:flex;gap:3px;margin-top:5px}
-.daysx span{font-family:var(--mono);font-size:9px;color:var(--ink-3);text-align:center;overflow:hidden;white-space:nowrap}
+.daysx span{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);text-align:center;overflow:hidden;white-space:nowrap}
 
 /* --- 계산 단계 --- */
 .steps{margin-top:16px;border-top:1px solid var(--rule)}
 .step{display:grid;grid-template-columns:104px 1fr 96px;gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--rule)}
-.step .nm{font-family:var(--mono);font-size:10px;color:var(--ink-3);text-align:right}
+.step .nm{font-family:var(--mono);font-size:11px;color:var(--ink-2);text-align:right}
 .step .ex{font-family:var(--mono);font-size:10.5px;color:var(--ink-2);overflow-x:auto}
 .step .rs{font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums;text-align:right;color:var(--ink)}
 .step.a .nm{color:var(--horizon)}
@@ -58,7 +59,7 @@
 /* --- 미터 --- */
 .meters{display:flex;gap:22px;flex-wrap:wrap;margin-top:15px}
 .meters .m{min-width:86px}
-.meters .k{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.meters .k{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;color:var(--ink-3);margin-bottom:3px}
 .meters .n{font-family:var(--mono);font-size:18px;color:var(--ink);font-variant-numeric:tabular-nums}
 .meters .n small{font-size:11px;color:var(--ink-3);margin-left:2px}
 .meters .m.bad .n{color:var(--blocked)}
