@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>A 17-millisecond query drains the connection pool — OSIV and transaction boundaries</title>
 <meta name="description" content="The leak warning points at a 17ms query. That query is not the culprit. See how OSIV and transaction boundaries stretch connection hold time, and how Little's Law decides how many connections you actually need.">
 <link rel="canonical" href="https://lab.vermilion19.com/en/connpool/">

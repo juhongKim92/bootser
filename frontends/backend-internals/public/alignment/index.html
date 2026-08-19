@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>필드를 다 더했는데 크기가 안 맞는다 — 정렬과 패딩</title>
 <meta name="description" content="필드 크기를 더하면 16바이트인데 sizeof는 24입니다. 컴파일러가 정렬을 맞추려고 사이와 끝에 패딩을 넣기 때문이고, 한 필드가 밀리면 그 뒤가 전부 밀립니다. 배열이면 꼬리 패딩이 누적되는데 원소 하나로는 오차가 0이라 테스트가 통과합니다. Java의 FFM은 패딩을 자동으로 넣지 않습니다.">
 <link rel="canonical" href="https://lab.vermilion19.com/alignment/">

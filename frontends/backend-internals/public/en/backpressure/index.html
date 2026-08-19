@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>Rejection is a signal, not a bug — what an unbounded queue really costs</title>
 <meta name="description" content="RejectedExecutionException flooded the logs, so you made the queue unbounded. The exception disappears and an OutOfMemoryError arrives minutes later. Run bounded+Abort, CallerRuns and unbounded under the same load and see what backpressure actually trades.">
 <link rel="canonical" href="https://lab.vermilion19.com/en/backpressure/">

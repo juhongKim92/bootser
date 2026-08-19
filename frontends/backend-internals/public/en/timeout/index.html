@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>Everyone got a second and nobody gets to use one — deadline propagation</title>
 <meta name="description" content="One second at the gateway, one at the service, one at the DB client. In that configuration the inner timeouts never fire at all: they expire at 1000ms, 1025ms and 1050ms, so the outer layer always gives up first. Tripling the retries leaves the success rate at 90.0%.">
 <link rel="canonical" href="https://lab.vermilion19.com/en/timeout/">

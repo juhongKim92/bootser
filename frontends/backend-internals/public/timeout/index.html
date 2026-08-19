@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>각자 1초씩 줬는데 왜 아무도 1초를 못 쓰나 — 데드라인 전파</title>
 <meta name="description" content="게이트웨이 1초, 서비스 1초, DB 클라이언트 1초. 세 계층이 각자 정한 이 설정에서 안쪽 타임아웃은 한 번도 발동하지 않습니다. 발동 시각이 1000ms · 1025ms · 1050ms 라 항상 바깥이 먼저 포기하니까요. 재시도를 3배로 늘려도 성공률은 90.0% 그대로입니다.">
 <link rel="canonical" href="https://lab.vermilion19.com/timeout/">

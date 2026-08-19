@@ -3,6 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <title>PostgreSQL MVCC와 VACUUM — 왜 DELETE 해도 테이블이 줄지 않는가</title>
   <meta name="description" content="열려 있는 트랜잭션 하나가 어떻게 VACUUM 전체를 막고 테이블 블로트를 만드는지 직접 조작하며 확인합니다. xmin horizon, 죽은 튜플, VACUUM FULL과 pg_repack까지.">
   <link rel="canonical" href="https://lab.vermilion19.com/mvcc/">

@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>WebSocket 다중 서버 — 서버를 늘렸더니 메시지가 안 간다</title>
 <meta name="description" content="WebSocket 서버를 두 대로 늘리는 순간 메시지 도달률이 절반이 됩니다. Redis Pub/Sub 으로 푸는 과정과 그때 생기는 팬아웃 비용, 그리고 Pub/Sub 이 저장하지 않아 재연결 중에 생기는 공백을 직접 조작하며 확인합니다.">
 <link rel="canonical" href="https://lab.vermilion19.com/websocket/">

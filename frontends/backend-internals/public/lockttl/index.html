@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>락을 잡았는데 둘이 들어왔다 — 락 만료와 펜싱 토큰</title>
 <meta name="description" content="Redis 분산 락을 제대로 잡았습니다. 그런데 작업이 TTL보다 길어서 일하는 중에 만료되고, 다음 인스턴스가 같은 일을 시작합니다. 펜싱 토큰을 켜도 중복 실행률은 100.0% 그대로입니다 — 펜싱이 막는 것은 중복 실행이 아니라 낡은 쓰기가 최종 상태가 되는 것입니다.">
 <link rel="canonical" href="https://lab.vermilion19.com/lockttl/">

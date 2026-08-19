@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>The consumers never stop and the lag never falls — the Kafka rebalance loop</title>
 <meta name="description" content="Consumer CPU is 98% busy and the committed offset does not move a single notch. Once max.poll.records × per-record processing time exceeds max.poll.interval.ms, the consumer is dropped from the group on every single batch and that batch is never committed. Effective throughput is exactly zero.">
 <link rel="canonical" href="https://lab.vermilion19.com/en/rebalance/">

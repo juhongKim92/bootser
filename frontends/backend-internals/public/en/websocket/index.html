@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>WebSocket across servers — scaling out broke the messages</title>
 <meta name="description" content="Add a second WebSocket server and half your messages stop arriving. Work through fixing it with Redis Pub/Sub, the fan-out it costs, and the gap it leaves during reconnects because Pub/Sub stores nothing.">
 <link rel="canonical" href="https://lab.vermilion19.com/en/websocket/">

@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>컨슈머는 쉬지 않고 도는데 lag 는 줄지 않는다 — Kafka 리밸런싱 루프</title>
 <meta name="description" content="컨슈머 CPU는 98% 바쁩니다. 그런데 커밋된 오프셋은 한 칸도 안 움직여요. max.poll.records × 레코드당 처리시간이 max.poll.interval.ms를 넘으면 매 배치마다 확정적으로 그룹에서 빠지고, 그 배치는 커밋되지 않습니다. 유효 처리량이 정확히 0입니다.">
 <link rel="canonical" href="https://lab.vermilion19.com/rebalance/">

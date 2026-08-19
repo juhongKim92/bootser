@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>여섯 번째 실행부터 느려진다 — generic plan 과 파라미터 편향</title>
 <meta name="description" content="같은 쿼리가 처음 다섯 번은 빠르고 여섯 번째부터 느려집니다. PostgreSQL 의 계획 캐시가 파라미터를 모른 채 평균으로 계획을 고르기 때문입니다. plan_cache_mode 와 파라미터 편향을 직접 조작하며 확인합니다.">
 <link rel="canonical" href="https://lab.vermilion19.com/genericplan/">

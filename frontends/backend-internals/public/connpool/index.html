@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>17밀리초 쿼리가 커넥션 풀을 말린다 — OSIV 와 트랜잭션 경계</title>
 <meta name="description" content="누수 경고 스택 최상단이 17ms 짜리 쿼리를 가리킵니다. 그런데 그 쿼리는 범인이 아닙니다. OSIV 와 트랜잭션 경계가 커넥션 점유 시간을 어떻게 늘리는지, 리틀의 법칙으로 필요 커넥션 수가 어떻게 결정되는지 직접 조작하며 확인합니다.">
 <link rel="canonical" href="https://lab.vermilion19.com/connpool/">

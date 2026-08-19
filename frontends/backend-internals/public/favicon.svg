@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Backend Internals — 계단형 막대 3개. 실험대들이 공유하는 막대 그래프 모티프.
+       48 그리드에 3의 배수만 써서 16px 로 줄여도 픽셀 경계에 맞는다
+       (막대 12 = 4px, 간격 3 = 1px). 색은 shared/base.css 토큰과 같다. -->
+  <style>
+    .bg{fill:#f5f2ec}
+    .bar{fill:#1b1917}
+    .acc{fill:#1b4f7a}
+    @media (prefers-color-scheme:dark){
+      .bg{fill:#17161a}
+      .bar{fill:#ece7dd}
+      .acc{fill:#6aa9dd}
+    }
+  </style>
+  <rect class="bg" width="48" height="48"/>
+  <rect class="bar" x="3"  y="24" width="12" height="18"/>
+  <rect class="bar" x="18" y="15" width="12" height="27"/>
+  <rect class="acc" x="33" y="6"  width="12" height="36"/>
+</svg>

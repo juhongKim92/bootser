@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>A rollback does not give the sequence back — how a retry loop burns two billion</title>
 <meta name="description" content="Thirty million rows in the table, two billion consumed from the sequence. Validate after the COPY and every rolled-back row costs a sequence value permanently, while a retry loop with no exit repeats it every minute. Drive the validation order and the three retry requirements yourself.">
 <link rel="canonical" href="https://lab.vermilion19.com/en/retryloop/">

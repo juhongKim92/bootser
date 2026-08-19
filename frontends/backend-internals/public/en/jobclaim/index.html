@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>Add a second instance and the same job runs twice — claiming work safely</title>
 <meta name="description" content="On one instance all four claiming strategies look identical. Add a second and the first two break. Run in-memory locks, read-then-write, conditional UPDATE and SELECT FOR UPDATE SKIP LOCKED side by side to see where duplicates and contention come from.">
 <link rel="canonical" href="https://lab.vermilion19.com/en/jobclaim/">

@@ -6,7 +6,8 @@
      2. 렌더 결과에 undefined · 미치환 $1 · NaN 이 남지 않나 (= i18n 키 누락 검사)
      3. 실험대가 `$('#id')` 로 찾는 요소가 HTML 에 실제로 있나
      4. 주요 태그가 짝이 맞나 (div 를 </p> 로 닫은 실수를 잡는다)
-     5. canonical + hreflang 3줄 + 자기 실험대 자산 링크가 있나
+     5. canonical + hreflang 3줄 + 파비콘 4줄 + 자기 실험대 자산 링크가 있나
+        (파비콘은 파일까지 열어서 정사각 + 48 의 배수인지 본다 — 구글 검색결과 아이콘 조건)
      6. ko/en i18n 키 집합이 같나
      7. 인덱스의 그룹별 카드 수와 <span class="count"> 표기가 맞나
 
@@ -22,6 +23,15 @@ const bad = (p, m) => fail.push(`${p}: ${m}`);
 const soft = (p, m) => warn.push(`${p}: ${m}`);
 
 const TAGS = ['div', 'section', 'table', 'tr', 'td', 'th', 'main', 'span', 'p', 'h1', 'h2', 'h4', 'details', 'summary'];
+
+/* 파비콘 — 검색결과 아이콘은 호스트당 하나지만, 어느 페이지가 먼저 크롤되든 같은 걸
+   가리키도록 전 페이지에 넣는다. 구글은 정사각 + 한 변이 48 의 배수를 요구한다. */
+const ICON_LINKS = [
+    'href="/favicon.ico"',
+    'href="/favicon.svg"',
+    'href="/icon-192.png"',
+    'rel="apple-touch-icon"',
+];
 const ALL = pages();
 const LABS = ALL.filter(p => p !== '' && p !== 'en');
 const i18nKeys = new Map();
@@ -64,8 +74,9 @@ for (const page of ALL) {
         if (o !== c) bad(label, `<${t}> 열림 ${o} / 닫힘 ${c}`);
     }
 
-    /* 5. canonical · hreflang · 자산 */
-    for (const need of ['rel="canonical"', 'hreflang="ko"', 'hreflang="en"', 'hreflang="x-default"']) {
+    /* 5. canonical · hreflang · 아이콘 · 자산 */
+    for (const need of ['rel="canonical"', 'hreflang="ko"', 'hreflang="en"', 'hreflang="x-default"',
+                        ...ICON_LINKS]) {
         if (!html.includes(need)) bad(label, `빠짐: ${need}`);
     }
     if (LABS.includes(page)) {                       // 목록 페이지에는 실험대가 없다
@@ -217,6 +228,45 @@ for (const page of ['', 'en']) {
         if (!isIndex && blocks.length !== 2) bad(label, `ld+json 블록이 ${blocks.length}개다 — Article + BreadcrumbList 2개여야 한다`);
     }
     console.log(`JSON-LD — Article ${arts}개 · BreadcrumbList ${crumbs}개 · CollectionPage ${colls}개`);
+}
+
+/* 10. 파비콘 자산 — 링크만 있고 파일이 없으면 검색결과가 기본 지구본으로 돌아간다.
+   구글 조건은 정사각 + 한 변이 48 의 배수다. */
+{
+    const size = f => {                                  // PNG IHDR 에서 크기를 읽는다
+        const b = readFileSync(join(PUB, f));
+        if (b.readUInt32BE(0) !== 0x89504e47) throw new Error('PNG 서명이 아니다');
+        return [b.readUInt32BE(16), b.readUInt32BE(20)];
+    };
+    const check = (f, fn) => {
+        try { fn(); } catch (e) { bad('public/' + f, e.code === 'ENOENT' ? '파일이 없다' : e.message); }
+    };
+    const before = fail.length;
+
+    /* 구글은 apple-touch-icon 도 아이콘 후보로 읽으므로 둘 다 48 의 배수로 맞춘다 */
+    for (const f of ['icon-192.png', 'apple-touch-icon.png']) check(f, () => {
+        const [w, h] = size(f);
+        if (w !== h) throw new Error(`정사각이 아니다 — ${w}x${h}`);
+        if (w % 48) throw new Error(`한 변이 48 의 배수가 아니다 — ${w}px (구글이 안 쓴다)`);
+    });
+    check('favicon.ico', () => {
+        const b = readFileSync(join(PUB, 'favicon.ico'));
+        if (b.readUInt16LE(2) !== 1) throw new Error('ICO 헤더가 아니다');
+        const sizes = [];
+        for (let i = 0, n = b.readUInt16LE(4); i < n; i++) {
+            const w = b.readUInt8(6 + 16 * i) || 256, h = b.readUInt8(7 + 16 * i) || 256;
+            if (w !== h) throw new Error(`${i}번 이미지가 정사각이 아니다 — ${w}x${h}`);
+            sizes.push(w);
+        }
+        if (!sizes.includes(48)) throw new Error(`48x48 이 없다 — 담긴 크기 ${sizes.join('/')}`);
+    });
+    check('favicon.svg', () => {
+        const vb = (readFileSync(join(PUB, 'favicon.svg'), 'utf8').match(/viewBox="([^"]+)"/) || [])[1];
+        if (!vb) throw new Error('viewBox 가 없다');
+        const [, , w, h] = vb.trim().split(/\s+/).map(Number);
+        if (w !== h) throw new Error(`viewBox 가 정사각이 아니다 — ${w}x${h}`);
+    });
+    if (fail.length === before) console.log('파비콘 — ico(48 포함) · svg · png 192 · apple-touch 192');
 }
 
 console.log('');

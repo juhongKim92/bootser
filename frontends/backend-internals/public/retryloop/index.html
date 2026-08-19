@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>롤백해도 시퀀스는 돌아오지 않는다 — 재시도 루프가 21억을 태우는 법</title>
 <meta name="description" content="적재된 행은 3천만인데 시퀀스는 21억입니다. 검증을 COPY 뒤에 두면 롤백된 행마다 시퀀스가 영구히 소비되고, 종료 조건 없는 재시도가 그걸 매분 반복합니다. 검증 순서와 재시도 3요건을 직접 조작하며 확인합니다.">
 <link rel="canonical" href="https://lab.vermilion19.com/retryloop/">

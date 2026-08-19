@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>close() 한 줄인데 선로에는 RST 가 나간다 — 계층마다 다른 "정상 종료"</title>
 <meta name="description" content="전송을 마치고 close() 했는데 서버가 받은 본문이 잘려 있습니다. FIN이 데이터를 앞질렀다고 생각하기 쉽지만 그건 불가능합니다. 응답을 안 읽고 닫으면 커널이 FIN 대신 RST를 보내고(RFC 9293 §3.6.1), RST를 받은 쪽은 수신 버퍼를 버립니다. 클라이언트 코드는 세 경우 모두 close() 한 줄로 같습니다.">
 <link rel="canonical" href="https://lab.vermilion19.com/tcpclose/">

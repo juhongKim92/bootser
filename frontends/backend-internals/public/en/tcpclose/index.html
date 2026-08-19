@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>One close() call, and a RST goes out on the wire — three layers, three definitions of "clean"</title>
 <meta name="description" content="The client finished sending, called close(), and the server's copy of the body is truncated. It is tempting to say the FIN overtook the data, but that is impossible. Closing with unread data in the receive buffer makes the kernel send a RST instead of a FIN (RFC 9293 §3.6.1), and a RST makes the peer discard its receive buffer. The client code is one close() call in every case.">
 <link rel="canonical" href="https://lab.vermilion19.com/en/tcpclose/">
