@@ -84,7 +84,7 @@ const L = {
         homeTitle: (n) => `${SITE} — ${n}개국 공휴일과 다음 공휴일까지 D-day`,
         homeDesc: (n) => `오늘이 공휴일인지, 다음 공휴일까지 며칠 남았는지. 대한민국을 비롯한 ${n}개국의 법정 공휴일을 날짜순으로 봅니다.`,
         homeH1: '오늘, 쉬는 날인가',
-        homeLede: (n) => `오늘이 공휴일인지, 다음 공휴일까지 며칠 남았는지 봅니다. 브라우저의 지역 설정으로 국가를 먼저 맞춰 두고, ${n}개국 아무 곳으로나 바꿀 수 있습니다.`,
+        homeLede: '오늘이 공휴일인지, 다음 공휴일까지 며칠 남았는지 봅니다.',
         countriesCap: (n) => `국가 ${n}개`,
         countriesH2: '국가별 공휴일',
         todayCap: '전 세계',
@@ -125,7 +125,7 @@ const L = {
         homeTitle: (n) => `${SITE} — public holidays in ${n} countries, counted down`,
         homeDesc: (n) => `Is today a holiday, and how many days until the next one? Public holidays for ${n} countries, in date order.`,
         homeH1: 'Is today a holiday?',
-        homeLede: (n) => `See whether today is a public holiday and how many days remain until the next one. Your browser's region picks the country to start with; switch to any of ${n}.`,
+        homeLede: 'See whether today is a public holiday and how many days remain until the next one.',
         countriesCap: (n) => `${n} countries`,
         countriesH2: 'Holidays by country',
         todayCap: 'Around the world',
@@ -351,7 +351,7 @@ ${top(t, { slug: '', home: true, label: esc(t.pickerLabel) })}
 <main class="wrap">
 
   <h1>${esc(t.homeH1)}</h1>
-  <p class="lede">${esc(t.homeLede(n))}</p>
+  <p class="lede">${esc(t.homeLede)}</p>
 
   <div class="now" id="home" hidden></div>
 
