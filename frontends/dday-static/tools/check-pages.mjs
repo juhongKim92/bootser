@@ -6,7 +6,8 @@
      1. 페이지가 예외 없이 구동되고 window.DDAY 손잡이가 나오나
      2. dday.js 가 찾는 #id 가 HTML 에 실제로 있나
      3. 주요 태그가 짝이 맞나
-     4. canonical(자기 주소) · title · description · 파비콘 4줄 · 자산 링크가 있나
+     4. canonical(자기 주소) · hreflang 3줄(ko/en/x-default, 양쪽에 똑같이) ·
+        title · description · 파비콘 4줄 · 자산 링크가 있나
         (파비콘은 파일까지 열어 정사각 + 48 의 배수인지 본다 — 구글 검색결과 아이콘 조건)
      5. HTML 표의 날짜 집합이 data/<CC>.json 과 정확히 같나
         (생성기가 자료를 흘리거나 겹쳐 쓰지 않았나)
@@ -15,6 +16,8 @@
      7. 첫 화면 국가 링크 · countries.json · 실제 페이지 디렉터리가 1:1 인가
      8. sitemap.xml 의 URL 집합이 페이지 집합과 같나
      9. 브라우저 지역 감지(DDAY.detect)가 기대대로 갈리나
+    10. ko / en 이 짝으로 있고, 두 벌이 같은 국가 집합을 덮나
+    11. 영어 페이지가 한국어 말을 흘리지 않나
 
    실패가 하나라도 있으면 종료 코드 1 이다.
    ============================================================ */
@@ -42,9 +45,15 @@ const ICON_LINKS = [
    그게 가장 알아채기 어려운 고장이라 여기서 본다. */
 const NEED_IDS = { country: ['picker', 'now', 'next', 'prev'], home: ['picker', 'home'] };
 
-const ALL = pages();
-const COUNTRY = ALL.filter((p) => p !== '');
-console.log(`페이지 ${ALL.length}개 (국가 ${COUNTRY.length}개)\n`);
+/* 슬러그를 언어와 국가로 가른다.  '' | 'en' | 'kr' | 'en/kr' */
+const ALL = pages().map((p) => {
+    const en = p === 'en' || p.startsWith('en/');
+    const slug = en ? p.slice(3) : p;                    /* '' | 'kr' */
+    return { page: p, lang: en ? 'en' : 'ko', slug, label: '/' + (p ? p + '/' : '') };
+});
+const COUNTRY = ALL.filter((p) => p.slug !== '');
+console.log(`페이지 ${ALL.length}개 (한국어 ${ALL.filter((p) => p.lang === 'ko').length}` +
+    ` · 영어 ${ALL.filter((p) => p.lang === 'en').length})\n`);
 
 /* ------------------------------------------------------------ 파비콘 크기
    구글이 검색결과에 아이콘을 쓰는 조건은 정사각 + 한 변이 48 의 배수다.
@@ -119,6 +128,17 @@ check('favicon.svg', (file) => {
 const TODAY = today();
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+/* 카드에 나와야 하는 말. dday.js 의 STR 을 가져다 쓰지 않고 여기 따로 적는다 —
+   같은 표를 보고 견주면 번역이 통째로 틀려도 통과한다. */
+const WORDS = {
+    ko: { noHoliday: '오늘은 공휴일이 아닙니다', off: ' — 오늘 쉽니다',
+          partial: ' — 일부 지역만 쉽니다', outOfRange: '담긴 자료 범위 밖입니다',
+          asofYear: (y) => String(y) },
+    en: { noHoliday: 'Today is not a public holiday', off: ' — a day off today',
+          partial: ' — observed only in some regions', outOfRange: 'Outside the range of the data',
+          asofYear: (y) => String(y) },
+};
+
 const PROBE = '2026-06-15';                     /* 아무 날이나 — 재현 가능하기만 하면 된다 */
 function epochDayRef(iso) {
     const [y, m, d] = iso.split('-').map(Number);
@@ -138,10 +158,9 @@ function expectRef(dates, today) {
 }
 
 /* ------------------------------------------------------------ 페이지 순회 */
-const linkedFromHome = new Set();
+const linkedFromHome = { ko: new Set(), en: new Set() };
 
-for (const page of ALL) {
-    const label = '/' + (page ? page + '/' : '');
+for (const { page, lang, slug, label } of ALL) {
     let r;
     try { r = boot(page); }
     catch (e) { bad(label, `구동 실패 — ${e.message}`); continue; }
@@ -150,7 +169,26 @@ for (const page of ALL) {
     if (!r.dday) { bad(label, 'window.DDAY 손잡이가 없다 — dday.js 가 안 실렸다'); continue; }
 
     const html = r.html;
-    const isHome = page === '';
+    const isHome = slug === '';
+    const dir = lang === 'en' ? '/en' : '';
+
+    /* <html lang> 이 곧 dday.js 의 갈림길이다. 경로와 어긋나면 영어 페이지가
+       한국어 말로 그려진다 — 화면으로만 보이고 어디서도 에러가 안 난다. */
+    const declared = (html.match(/<html lang="([a-z]{2})">/) || [])[1];
+    if (declared !== lang) bad(label, `<html lang="${declared}"> 가 경로와 다르다 (기대 ${lang})`);
+    if (r.dday.lang !== lang) bad(label, `dday.js 가 ${r.dday.lang} 로 잡았다 (기대 ${lang})`);
+
+    /* 1.5. 언어 전환 단추 — 가는 곳과 적힌 글자가 같아야 한다.
+       href 는 반대 언어인데 글자는 현재 언어면 눌러 보기 전엔 아무도 모른다. */
+    {
+        const other = lang === 'ko' ? 'en' : 'ko';
+        const href = other === 'en' ? `/en/${slug ? slug + '/' : ''}` : `/${slug ? slug + '/' : ''}`;
+        const want = `<a class="btn" href="${href}" hreflang="${other}" lang="${other}">${other.toUpperCase()}</a>`;
+        if (!html.includes(want)) {
+            const got = (html.match(/<a class="btn"[^>]*>[^<]*<\/a>/) || ['(단추가 없다)'])[0];
+            bad(label, `언어 단추가 ${got} — ${want} 이어야 한다`);
+        }
+    }
 
     /* 2. 필요한 id */
     for (const id of (isHome ? NEED_IDS.home : NEED_IDS.country)) {
@@ -170,7 +208,12 @@ for (const page of ALL) {
     }
 
     /* 4. head */
+    const koUrl = `${BASE}/${slug ? slug + '/' : ''}`;
+    const enUrl = `${BASE}/en/${slug ? slug + '/' : ''}`;
     for (const need of [`rel="canonical" href="${BASE}${label}"`,
+                        `hreflang="ko" href="${koUrl}"`,
+                        `hreflang="en" href="${enUrl}"`,
+                        `hreflang="x-default" href="${enUrl}"`,
                         'name="description"', '<title>', ...ICON_LINKS,
                         'href="/shared/base.css"', 'href="/shared/dday.css"',
                         'src="/shared/dday.js"']) {
@@ -182,13 +225,31 @@ for (const page of ALL) {
     if (desc.length > 160) soft(label, `description 이 ${desc.length}자 — 잘린다`);
 
     if (isHome) {
-        /* 7. 첫 화면 국가 링크 */
-        for (const m of html.matchAll(/<li><a href="\/([a-z]{2})\/">/g)) {
-            linkedFromHome.add(m[1].toUpperCase());
+        /* 7. 첫 화면 국가 링크 — 같은 언어 칸 안으로만 걸려야 한다 */
+        const seen = linkedFromHome[lang];
+        for (const m of html.matchAll(/<li data-cc="([A-Z]{2})" data-key="[^"]*"><a href="([^"]+)"/g)) {
+            seen.add(m[1]);
+            const want = `${dir}/${m[1].toLowerCase()}/`;
+            if (m[2] !== want) bad(label, `${m[1]} 링크가 ${m[2]} — ${want} 이어야 한다`);
         }
-        const shown = (html.match(/국가 (\d+)개/) || [])[1];
-        if (shown && +shown !== linkedFromHome.size) {
-            bad(label, `"국가 ${shown}개" 라고 적혀 있는데 링크는 ${linkedFromHome.size}개다`);
+        const shown = (html.match(/(\d+)(?:개국|\s*countries)/) || [])[1];
+        if (shown && +shown !== seen.size) {
+            bad(label, `"${shown}" 이라고 적혀 있는데 링크는 ${seen.size}개다`);
+        }
+        /* 보이는 이름순인가. countries.json 은 한글 이름순으로 저장돼 있어서,
+           영어 화면에서 그대로 쓰면 Ghana(가나)가 맨 앞에 오는 무작위 순서가 된다. */
+        const shownNames = [...html.matchAll(
+            /<li data-cc="[A-Z]{2}" data-key="[^"]*"><a href="[^"]*">[^ ]+ ([^<]+)<span class="cc">/g
+        )].map((m) => m[1]);
+        const inOrder = [...shownNames].sort((a, b) => a.localeCompare(b, lang));
+        if (shownNames.join('|') !== inOrder.join('|')) {
+            const at = shownNames.findIndex((n, i) => n !== inOrder[i]);
+            bad(label, `국가 목록이 이름순이 아니다 — ${at + 1}번째가 "${shownNames[at]}" (기대 "${inOrder[at]}")`);
+        }
+
+        /* 검색칸이 있어야 204줄을 눈으로 훑지 않는다 */
+        for (const id of ['csearch', 'clist', 'cnone']) {
+            if (!html.includes(`id="${id}"`)) bad(label, `국가 검색에 필요한 #${id} 가 없다`);
         }
         continue;
     }
@@ -196,7 +257,7 @@ for (const page of ALL) {
     /* ---------------------------------------------------- 국가 페이지 본문 */
     const cc = (html.match(/<body data-cc="([A-Z]{2})">/) || [])[1];
     if (!cc) { bad(label, '<body data-cc="XX"> 가 없다 — dday.js 가 국가 페이지로 못 알아본다'); continue; }
-    if (cc.toLowerCase() !== page) bad(label, `data-cc="${cc}" 가 경로 /${page}/ 와 다르다`);
+    if (cc.toLowerCase() !== slug) bad(label, `data-cc="${cc}" 가 경로 ${label} 와 다르다`);
 
     const src = join(DATA, `${cc}.json`);
     if (!existsSync(src)) { bad(label, `자료가 없다: data/${cc}.json`); continue; }
@@ -244,23 +305,27 @@ for (const page of ALL) {
         prev: r.doc.querySelector('#prev').innerHTML,
     };
     const want2 = expectRef(jsonDates, TODAY);
-    const nameAt = (d) => (data.days.find((x) => x.d === d) || {}).n;
+    /* 영어 페이지는 영어 이름을 앞세운다 — 생성기·클라이언트와 같은 규칙이어야 한다 */
+    const nameAt = (d) => {
+        const day = data.days.find((x) => x.d === d) || {};
+        return lang === 'en' ? (day.e || day.n) : day.n;
+    };
 
     if (!drawn.asof.includes(String(new Date().getFullYear()))) {
         bad(label, `기준 날짜 문안이 이상하다: "${drawn.asof}"`);
     }
+    const w = WORDS[lang];
     const wantVerdict = want2.todays.length
         ? want2.todays.map(nameAt).join(' · ') +
-            (want2.todays.every((d) => data.days.find((x) => x.d === d).r)
-                ? ' — 일부 지역만 쉽니다' : ' — 오늘 쉽니다')
-        : '오늘은 공휴일이 아닙니다';
+            (want2.todays.every((d) => data.days.find((x) => x.d === d).r) ? w.partial : w.off)
+        : w.noHoliday;
     if (drawn.verdict !== wantVerdict) {
         bad(label, `오늘 카드 문안 "${drawn.verdict}" / 기대 "${wantVerdict}"`);
     }
     for (const [key, e, sign] of [['next', want2.next, '-'], ['prev', want2.prev, '+']]) {
         const html2 = drawn[key];
         if (!e) {
-            if (!html2.includes('범위 밖')) bad(label, `${key}: 자료가 없는데 무언가를 그렸다`);
+            if (!html2.includes(w.outOfRange)) bad(label, `${key}: 자료가 없는데 무언가를 그렸다`);
             continue;
         }
         if (!html2.includes(`D${sign}${Math.abs(e.diff)}<`)) {
@@ -283,7 +348,7 @@ for (const page of ALL) {
 /* -------------------------------------------------- 7. 목록 ↔ 페이지 1:1 */
 const indexCodes = new Set(JSON.parse(readFileSync(join(DATA, 'countries.json'), 'utf8'))
     .map((c) => c.code));
-const dirCodes = new Set(COUNTRY.map((p) => p.toUpperCase()));
+const dirCodes = new Set(COUNTRY.map((p) => p.slug.toUpperCase()));
 const dataCodes = new Set(readdirSync(DATA)
     .filter((f) => f.endsWith('.json') && f !== 'countries.json')
     .map((f) => f.replace('.json', '')));
@@ -293,7 +358,8 @@ for (const [what, missing] of [
     ['countries.json 에 있는데 페이지가 없다', diff(indexCodes, dirCodes)],
     ['페이지는 있는데 countries.json 에 없다', diff(dirCodes, indexCodes)],
     ['자료는 있는데 페이지가 없다', diff(dataCodes, dirCodes)],
-    ['첫 화면에서 링크되지 않는다', diff(dirCodes, linkedFromHome)],
+    ['한국어 첫 화면에서 링크되지 않는다', diff(dirCodes, linkedFromHome.ko)],
+    ['영어 첫 화면에서 링크되지 않는다', diff(dirCodes, linkedFromHome.en)],
 ]) {
     if (missing.length) bad('/', `${what}: ${missing.slice(0, 8).join(', ')}${missing.length > 8 ? ` 외 ${missing.length - 8}개` : ''}`);
 }
@@ -305,11 +371,16 @@ if (!existsSync(smFile)) {
 } else {
     const sm = readFileSync(smFile, 'utf8');
     const locs = new Set([...sm.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]));
-    const want = new Set(ALL.map((p) => `${BASE}/${p ? p + '/' : ''}`));
+    const want = new Set(ALL.map((p) => `${BASE}/${p.page ? p.page + '/' : ''}`));
     const only = (a, b) => [...a].filter((x) => !b.has(x));
     if (only(want, locs).length) bad('/sitemap.xml', `빠진 URL ${only(want, locs).length}개`);
     if (only(locs, want).length) bad('/sitemap.xml', `없는 페이지의 URL ${only(locs, want).length}개`);
     if (!/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/.test(sm)) bad('/sitemap.xml', 'lastmod 형식이 이상하다');
+    /* hreflang 세 줄은 url 마다 있어야 한다 — 한쪽만 있으면 구글이 통째로 버린다 */
+    for (const tag of ['hreflang="ko"', 'hreflang="en"', 'hreflang="x-default"']) {
+        const n = (sm.match(new RegExp(tag, 'g')) || []).length;
+        if (n !== locs.size) bad('/sitemap.xml', `${tag} 가 ${n}개 — url ${locs.size}개와 다르다`);
+    }
 }
 
 /* -------------------------------------------------------- 9. 지역 감지 */
@@ -353,6 +424,60 @@ if (!existsSync(smFile)) {
             if (!drawn.includes(need)) bad('/', `요약 카드에 빠짐: ${need}`);
         }
         if (!/D[-+]\d+/.test(drawn)) bad('/', '요약 카드에 D-day 숫자가 없다');
+    }
+}
+
+/* ---------------------------------------------------------------- 404
+   Cloudflare 는 경로를 거슬러 올라가며 가장 가까운 404.html 을 쓴다. 언어 칸마다
+   하나씩 있어야 /en/... 오타에 한국어 안내가 나오지 않는다. */
+for (const [file, lang, needle] of [
+    ['404.html', 'ko', '없는 쪽입니다'],
+    ['en/404.html', 'en', 'Not here'],
+]) {
+    const path = join(PUB, file);
+    if (!existsSync(path)) { bad('/' + file, '없다'); continue; }
+    const txt = readFileSync(path, 'utf8');
+    if (!txt.includes(`<html lang="${lang}">`)) bad('/' + file, `<html lang="${lang}"> 가 아니다`);
+    if (!txt.includes('name="robots" content="noindex"')) bad('/' + file, 'noindex 가 없다');
+    if (!txt.includes(needle)) bad('/' + file, `"${needle}" 가 없다 — 언어가 섞였다`);
+    if (txt.includes('rel="canonical"')) bad('/' + file, 'canonical 이 있다 — 색인될 쪽이 아니다');
+}
+
+/* ------------------------------------------------- 10. ko / en 짝 맞추기 */
+{
+    const key = (p) => `${p.lang}:${p.slug}`;
+    const have = new Set(ALL.map(key));
+    const orphan = ALL.filter((p) => !have.has(`${p.lang === 'ko' ? 'en' : 'ko'}:${p.slug}`));
+    if (orphan.length) {
+        bad('/', `짝이 없는 페이지 ${orphan.length}개: ${orphan.slice(0, 5).map((p) => p.label).join(', ')}`);
+    }
+    const ko = ALL.filter((p) => p.lang === 'ko').length;
+    const en = ALL.filter((p) => p.lang === 'en').length;
+    if (ko !== en) bad('/', `한국어 ${ko}개 / 영어 ${en}개 — 수가 다르다`);
+}
+
+/* ------------------------------------------- 11. 영어 페이지의 한국어 누출
+   말 표를 한 군데로 모아 두어도 생성기 쪽 문안은 손으로 쓴다. 영어 페이지에
+   한글이 남아 있으면 번역을 빠뜨린 것이다 — 공휴일 이름(현지어)은 자료에서
+   오는 것이라 <td class="name"> 안쪽과 <title>/description 의 국가명은 뺀다. */
+{
+    const HANGUL = /[가-힣]/;
+    for (const { page, lang, label } of ALL) {
+        if (lang !== 'en') continue;
+        const html = readFileSync(join(PUB, page, 'index.html'), 'utf8');
+
+        /* 자료에서 오는 자리를 들어낸다 */
+        const chrome = html
+            .replace(/<td class="name">[\s\S]*?<\/td>/g, '')
+            .replace(/<span class="regions">[\s\S]*?<\/span>/g, '')
+            .replace(/ data-ko="[^"]*"/g, '')
+            .replace(/ data-key="[^"]*"/g, '')
+            .replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, '');
+
+        if (HANGUL.test(chrome)) {
+            const hit = (chrome.match(/[^\s>]*[가-힣][^\s<]*/) || [''])[0];
+            bad(label, `영어 페이지에 한국어가 남았다: "${hit}"`);
+        }
     }
 }
 

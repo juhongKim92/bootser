@@ -143,6 +143,18 @@ details.year[open] > summary::before{content:'▾ '}
 .panel .none{padding:14px 13px;font-size:13px;color:var(--ink-3)}
 
 /* ------------------------------------------------ 국가 목록(첫 화면) */
+/* 목록이 204줄이라 눈으로 훑는 건 무리다. 선택기 안에도 검색이 있지만 그건
+   열어야 보이므로, 열려 있는 이 목록 위에 하나 더 둔다. */
+.find{
+  width:100%;max-width:340px;display:block;margin-bottom:14px;
+  border:1px solid var(--rule);background:var(--paper-2);color:var(--ink);
+  font-family:var(--sans);font-size:14px;padding:8px 12px;
+}
+.find:focus{outline:none;border-color:var(--ink-3);background:var(--paper)}
+.find::placeholder{color:var(--ink-3)}
+
+#cnone{padding:10px 0;font-size:14px;color:var(--ink-3)}
+
 .countries{
   list-style:none;
   columns:3;column-gap:22px;

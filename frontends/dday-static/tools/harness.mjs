@@ -74,9 +74,13 @@ export function makeEl(tag = 'div', { attrs: init = {}, kids = {} } = {}) {
 /* 같은 셀렉터는 같은 객체를 돌려준다 — 그래야 렌더 결과를 다시 읽을 수 있다.
    #picker 만은 안쪽 구조까지 미리 엮어 둔다. 선택기는 input · ul · .none 을 찾아
    서로 다른 갈림길로 가는데, 아무거나 돌려주면 그 갈림길이 사라진다. */
-function makeDoc(bodyAttrs, { pickerItems, rows, ids }) {
+function makeDoc(bodyAttrs, { pickerItems, rows, ids, lang }) {
     const cache = new Map();
     const body = makeEl('body', { attrs: bodyAttrs });
+    /* <html lang> 은 dday.js 가 말을 고르는 유일한 근거다. 안 옮기면 영어 페이지가
+       한국어로 그려지는데, 브라우저에서는 멀쩡하니 하니스만 틀리게 된다. */
+    const root = makeEl('html', { attrs: { lang } });
+    root.lang = lang;
 
     const pickerList = makeEl('ul', { kids: { li: pickerItems } });
     cache.set('#picker', makeEl('details', {
@@ -93,7 +97,7 @@ function makeDoc(bodyAttrs, { pickerItems, rows, ids }) {
 
     const doc = {
         readyState: 'complete',
-        documentElement: makeEl('html'), head: makeEl('head'), body,
+        documentElement: root, head: makeEl('head'), body,
         /* HTML 에 없는 id 는 null 이다 — 국가 페이지에 #home 이 없다는 사실이
            dday.js 의 갈림길이라, 아무거나 돌려주면 첫 화면 코드가 엉뚱하게 돈다 */
         querySelector(sel) {
@@ -200,6 +204,7 @@ export function boot(page, { languages = ['ko-KR'] } = {}) {
         pickerItems: parsePickerItems(html),
         rows: parseRows(html),
         ids: new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1])),
+        lang: (html.match(/<html lang="([a-z]{2})">/) || [])[1] || 'ko',
     });
     const fetched = [];
     const win = {};

@@ -1,22 +1,74 @@
 /* ============================================================
-   오늘 뭐 쉬나 — 클라이언트
+   this is the day — 클라이언트
    ------------------------------------------------------------
    서버가 없으므로 "오늘" 은 여기서만 정해진다. 정적 HTML 에는 날짜와 이름까지만
    들어 있고, D-day · 오늘 여부 · 지나감 표시는 전부 이 파일이 붙인다.
    그래서 페이지를 몇 달 전에 배포해 두어도 표시가 낡지 않는다.
 
+   한국어와 영어가 같은 파일을 쓴다. 갈림길은 <html lang> 하나이고, 말은 아래
+   STR 표에 모아 두었다 — 페이지마다 사전을 인라인하면 한쪽만 고쳐지는 일이 생긴다.
+
    국가 페이지는 공휴일 표를 다시 안 받는다 — 이미 HTML 안에
    <tr data-d="2026-10-03"> 로 들어 있어서 DOM 만 읽으면 된다.
    fetch 는 두 곳에만 쓴다.
-     · 국가 선택기 목록 — 204개 <li> 를 204개 페이지에 인라인하면 HTML 이 3.7MB 가
-       된다. 첫 화면(/)에만 인라인하고 국가 페이지에서는 countries.json 으로 채운다.
+     · 국가 선택기 목록 — 204개 <li> 를 410개 페이지에 인라인하면 HTML 이 7MB 가
+       된다. 첫 화면에만 인라인하고 국가 페이지에서는 countries.json 으로 채운다.
      · 첫 화면의 "내 국가" 요약 카드
    ============================================================ */
 (function () {
     'use strict';
 
-    var DOW = ['일', '월', '화', '수', '목', '금', '토'];
     var STORE = 'dday.country';
+
+    /* --------------------------------------------------------------- 말
+       <html lang> 하나로 갈린다. 페이지마다 인라인 사전을 심지 않는 이유는
+       두 언어가 같은 파일을 쓰기 때문이다 — 한쪽만 고쳐지는 일이 없다.
+
+       dir 은 링크를 만들 때 붙는 언어 칸이다. gen-pages.mjs 의 L.*.dir 과
+       반드시 같아야 한다 — 경로 규칙을 바꿀 때 여기도 같이 고칠 것. */
+    var LANG = (document.documentElement.getAttribute('lang') === 'en') ? 'en' : 'ko';
+
+    var STR = {
+        ko: {
+            dow: ['일', '월', '화', '수', '목', '금', '토'],
+            date: function (p) { return p.y + '년 ' + p.m + '월 ' + p.d + '일'; },
+            short: function (p) { return p.m + '월 ' + p.d + '일'; },
+            asof: function (d) { return '기준 ' + d + ' · 내 기기 시간'; },
+            today: '오늘',
+            noHoliday: '오늘은 공휴일이 아닙니다',
+            off: ' — 오늘 쉽니다',
+            partial: ' — 일부 지역만 쉽니다',
+            outOfRange: '담긴 자료 범위 밖입니다',
+            allOf: function (name) { return name + ' 공휴일 전체 보기 →'; },
+            dtAll: '전체',
+            dtNext: '다음',
+            dtPrev: '지난',
+            loadFail: '국가 목록을 불러오지 못했습니다.',
+            name: function (c) { return c.ko || c.name; },
+            dir: ''
+        },
+        en: {
+            dow: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+            mon: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+            date: function (p) { return STR.en.mon[p.m - 1] + ' ' + p.d + ', ' + p.y; },
+            short: function (p) { return STR.en.mon[p.m - 1] + ' ' + p.d; },
+            asof: function (d) { return 'As of ' + d + ' · this device'; },
+            today: 'today',
+            noHoliday: 'Today is not a public holiday',
+            off: ' — a day off today',
+            partial: ' — observed only in some regions',
+            outOfRange: 'Outside the range of the data',
+            allOf: function (name) { return 'All ' + name + ' holidays →'; },
+            dtAll: 'All',
+            dtNext: 'Next',
+            dtPrev: 'Last',
+            loadFail: 'Could not load the country list.',
+            name: function (c) { return c.name || c.ko; },
+            dir: '/en'
+        }
+    };
+    var T = STR[LANG];
 
     var $ = function (sel, root) { return (root || document).querySelector(sel); };
     var $$ = function (sel, root) {
@@ -45,12 +97,10 @@
         return new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay();
     }
     function human(iso) {
-        var p = parts(iso);
-        return p.y + '년 ' + p.m + '월 ' + p.d + '일 (' + DOW[dow(iso)] + ')';
+        return T.date(parts(iso)) + ' (' + T.dow[dow(iso)] + ')';
     }
     function shortHuman(iso) {
-        var p = parts(iso);
-        return p.m + '월 ' + p.d + '일 (' + DOW[dow(iso)] + ')';
+        return T.short(parts(iso)) + ' (' + T.dow[dow(iso)] + ')';
     }
 
     /* 국가 코드 → 국기 이모지. 두 글자를 지역 표시 기호로 옮긴다. */
@@ -128,7 +178,7 @@
 
             if (m.diff === 0) {
                 tr.classList.add('is-today');
-                if (mark) mark.innerHTML = '<span class="now">오늘</span>';
+                if (mark) mark.innerHTML = '<span class="now">' + T.today + '</span>';
             } else if (m.diff < 0) {
                 tr.classList.add('is-past');
                 if (mark) mark.textContent = 'D+' + (-m.diff);
@@ -152,11 +202,11 @@
     /* --------------------------------------------------------- 오늘 카드 문안
        국가 페이지와 첫 화면이 같은 문장을 쓰도록 여기서만 만든다. */
     function verdictOf(todays, nameFn) {
-        if (!todays.length) return { text: '오늘은 공휴일이 아닙니다', rest: false };
+        if (!todays.length) return { text: T.noHoliday, rest: false };
         var partial = todays.every(function (m) { return m.item.local; });
         return {
             text: todays.map(function (m) { return nameFn(m.item); }).join(' · ') +
-                (partial ? ' — 일부 지역만 쉽니다' : ' — 오늘 쉽니다'),
+                (partial ? T.partial : T.off),
             rest: !partial
         };
     }
@@ -166,7 +216,7 @@
         if (!card) return;
 
         var asof = $('.asof', card);
-        if (asof) asof.textContent = '기준 ' + human(today) + ' · 내 기기 시간';
+        if (asof) asof.textContent = T.asof(human(today));
 
         var verdict = $('.verdict', card);
         if (verdict) {
@@ -183,7 +233,7 @@
         dd.innerHTML = entry
             ? '<span class="dd">D' + sign + Math.abs(entry.diff) + '</span>' +
               esc(nameOf(entry.item.tr)) + '<em>' + shortHuman(entry.item.d) + '</em>'
-            : '<em>담긴 자료 범위 밖입니다</em>';
+            : '<em>' + T.outOfRange + '</em>';
     }
 
     /* ------------------------------------------------------------- 선택기 */
@@ -220,19 +270,23 @@
             wire();                                   /* 첫 화면 — 이미 박혀 있다 */
         } else {
             countries().then(function (all) {
-                list.innerHTML = all.map(function (c) {
+                /* countries.json 은 한글 이름순이다. 영어 화면에서 그대로 쓰면
+                   Ghana(가나)가 맨 앞에 오는 무작위 순서로 보인다. */
+                list.innerHTML = all.slice().sort(function (a, b) {
+                    return T.name(a).localeCompare(T.name(b), LANG);
+                }).map(function (c) {
                     var cur = c.code === here;
                     return '<li data-cc="' + c.code + '" data-key="' +
                         esc(searchKey(c)) + '">' +
-                        '<a href="/' + c.code.toLowerCase() + '/" data-cc="' + c.code + '"' +
+                        '<a href="' + T.dir + '/' + c.code.toLowerCase() + '/" data-cc="' + c.code + '"' +
                         (cur ? ' aria-current="true"' : '') + '>' +
-                        '<span class="flag">' + flag(c.code) + '</span>' + esc(c.ko) +
+                        '<span class="flag">' + flag(c.code) + '</span>' + esc(T.name(c)) +
                         '<span class="cc">' + c.code + '</span></a></li>';
                 }).join('');
                 wire();
             }).catch(function () {
                 list.innerHTML = '';
-                if (none) { none.hidden = false; none.textContent = '국가 목록을 불러오지 못했습니다.'; }
+                if (none) { none.hidden = false; none.textContent = T.loadFail; }
             });
         }
 
@@ -313,7 +367,7 @@
     function renderHomeCard(home, data) {
         var today = todayIso();
         var got = classify(data.days.map(function (day) {
-            return { d: day.d, n: day.n, local: !!day.r };
+            return { d: day.d, n: (LANG === 'en' ? (day.e || day.n) : day.n), local: !!day.r };
         }), today);
 
         var v = verdictOf(got.todays, function (it) { return it.n; });
@@ -322,25 +376,61 @@
             return '<dt>' + label + '</dt><dd>' + (e
                 ? '<span class="dd">D' + sign + Math.abs(e.diff) + '</span>' + esc(e.item.n) +
                   '<em>' + shortHuman(e.item.d) + '</em>'
-                : '<em>담긴 자료 범위 밖입니다</em>') + '</dd>';
+                : '<em>' + T.outOfRange + '</em>') + '</dd>';
         };
 
+        var label = T.name(data);
         home.innerHTML =
-            '<div class="asof">기준 ' + human(today) + ' · 내 기기 시간</div>' +
+            '<div class="asof">' + T.asof(human(today)) + '</div>' +
             '<div class="verdict' + (v.rest ? ' rest' : '') + '">' +
-                flag(data.code) + ' ' + esc(data.ko) + ' — ' + esc(v.text) + '</div>' +
+                flag(data.code) + ' ' + esc(label) + ' — ' + esc(v.text) + '</div>' +
             '<dl class="pair">' +
-                line('다음', got.next, '-') +
-                line('지난', got.prev, '+') +
-                '<dt>전체</dt><dd><a href="/' + data.code.toLowerCase() + '/">' +
-                    esc(data.ko) + ' 공휴일 전체 보기 →</a></dd>' +
+                line(T.dtNext, got.next, '-') +
+                line(T.dtPrev, got.prev, '+') +
+                '<dt>' + T.dtAll + '</dt><dd><a href="' + T.dir + '/' +
+                    data.code.toLowerCase() + '/">' + esc(T.allOf(label)) + '</a></dd>' +
             '</dl>';
         home.hidden = false;
+    }
+
+    /* ------------------------------------------------- 첫 화면 국가 검색
+       선택기 안에도 검색이 있지만 그건 열어야 보인다. 첫 화면의 204줄짜리
+       목록은 열려 있는 채로 눈앞에 있으니, 그 자리에서 바로 줄여야 한다. */
+    function initFind() {
+        var input = $('#csearch');
+        var list = $('#clist');
+        var none = $('#cnone');
+        if (!input || !list) return;
+
+        var items = $$('li[data-key]', list).map(function (li) {
+            return { li: li, key: (li.getAttribute('data-key') || '').toLowerCase() };
+        });
+
+        input.addEventListener('input', function () {
+            var q = input.value.trim().toLowerCase();
+            var hit = 0;
+            items.forEach(function (it) {
+                var on = !q || it.key.indexOf(q) >= 0;
+                it.li.hidden = !on;
+                if (on) hit++;
+            });
+            if (none) none.hidden = hit > 0;
+            /* 다 걸러지면 목록이 빈 칸으로 남는다 — 줄여서 "없음" 만 보이게 */
+            list.hidden = hit === 0;
+        });
+
+        /* Esc 로 비운다 — type="search" 의 기본 동작은 브라우저마다 다르다 */
+        input.addEventListener('keydown', function (e) {
+            if (e.key !== 'Escape' || !input.value) return;
+            input.value = '';
+            input.dispatchEvent(new Event('input'));
+        });
     }
 
     /* ---------------------------------------------------------------- 시동 */
     function start() {
         initPicker();
+        initFind();
 
         var page = document.body.getAttribute('data-cc');
         if (page) {
@@ -354,6 +444,7 @@
     /* 하니스 손잡이 — tools/check-pages.mjs 가 배포되는 이 코드 그대로를 돌려
        날짜 계산을 검사한다. 브라우저 동작에는 쓰이지 않는다. */
     window.DDAY = {
+        lang: LANG, t: T,
         epochDay: epochDay, todayIso: todayIso, human: human, shortHuman: shortHuman,
         flag: flag, classify: classify, verdictOf: verdictOf, detect: detect,
         searchKey: searchKey
