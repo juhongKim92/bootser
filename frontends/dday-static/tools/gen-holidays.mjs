@@ -11,7 +11,7 @@
    필드 이름이 한 글자인 것도 같은 이유다. 204개 × 3년치라 키 이름이 곧 용량이다.
      d 날짜 · n 현지어 이름 · e 영어 이름(현지어와 같으면 생략) · r 지역 한정 코드
    ============================================================ */
-import { writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from 'node:fs';
+import { writeFileSync, readFileSync, mkdirSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DATA, NAGER, CONCURRENCY, YEARS, isPublic, today } from './config.mjs';
 
@@ -112,6 +112,22 @@ const built = await pool(countries, async (c, i) => {
    조용히 빠지면 나중에 왜 없는지 알 수 없으니 남은 수를 찍는다. */
 const usable = built.filter(c => c.days.length > 0);
 const empty = built.filter(c => c.days.length === 0).map(c => c.code);
+
+/* 급격히 줄었으면 멈춘다.
+   이 스크립트는 매달 사람 없이 도는데, 아래에서 data/ 를 통째로 지우고 새로 쓴다.
+   Nager 가 잠시 절반만 돌려주는 날이 있으면 국가 페이지 100개가 조용히 사라지고,
+   1:1 대응은 그대로라 check-pages 도 통과한다. 그때 알아챌 방법이 없다.
+
+   진짜로 줄어든 것이라면 --allow-shrink 로 넘긴다. */
+const before = existsSync(join(DATA, 'countries.json'))
+    ? JSON.parse(readFileSync(join(DATA, 'countries.json'), 'utf8')).length
+    : 0;
+const FLOOR = 0.9;
+if (before && usable.length < before * FLOOR && !process.argv.includes('--allow-shrink')) {
+    console.error(`국가가 ${before}개에서 ${usable.length}개로 줄었다 — Nager 응답이 온전한지 확인할 것.`);
+    console.error('진짜로 줄어든 것이라면: node tools/gen-holidays.mjs --allow-shrink');
+    process.exit(1);
+}
 
 /* 데이터 디렉터리는 통째로 다시 만든다. 그래야 Nager 에서 사라진 국가의
    파일이 남아 sitemap 에 유령 URL 로 들어가는 일이 없다. */
