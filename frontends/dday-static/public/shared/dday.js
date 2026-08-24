@@ -11,9 +11,10 @@
    국가 페이지는 공휴일 표를 다시 안 받는다 — 이미 HTML 안에
    <tr data-d="2026-10-03"> 로 들어 있어서 DOM 만 읽으면 된다.
    fetch 는 두 곳에만 쓴다.
-     · 국가 선택기 목록 — 204개 <li> 를 410개 페이지에 인라인하면 HTML 이 7MB 가
-       된다. 첫 화면에만 인라인하고 국가 페이지에서는 countries.json 으로 채운다.
+     · 국가 선택기 목록 (countries.json) — 204개 <li> 를 410개 페이지에 인라인하면
+       HTML 만 7MB 가 된다. 첫 화면의 국가 목록만 HTML 에 박고 선택기는 여기서 채운다.
      · 첫 화면의 "내 국가" 요약 카드
+     · 첫 화면의 "오늘 공휴일인 나라" — 이번 달 색인 하나 (data/month/YYYY-MM.json)
    ============================================================ */
 (function () {
     'use strict';
@@ -44,7 +45,14 @@
             dtNext: '다음',
             dtPrev: '지난',
             loadFail: '국가 목록을 불러오지 못했습니다.',
+            todayCapN: function (n) { return '전 세계 · ' + n + '곳'; },
+            todayNone: '오늘은 어느 나라도 공휴일이 아닙니다.',
+            todayFail: '오늘 공휴일인 나라를 불러오지 못했습니다.',
+            todayOut: '담긴 자료 범위 밖의 날짜입니다.',
+            regionOnly: function (n) { return '일부 지역 ' + n + '곳'; },
             name: function (c) { return c.ko || c.name; },
+            holiday: function (h) { return h.n; },
+            holidaySub: function (h) { return h.e || ''; },
             dir: ''
         },
         en: {
@@ -64,7 +72,14 @@
             dtNext: 'Next',
             dtPrev: 'Last',
             loadFail: 'Could not load the country list.',
+            todayCapN: function (n) { return 'Around the world · ' + n; },
+            todayNone: 'No country has a public holiday today.',
+            todayFail: 'Could not load today’s holidays.',
+            todayOut: 'That date is outside the range of the data.',
+            regionOnly: function (n) { return n + ' regions'; },
             name: function (c) { return c.name || c.ko; },
+            holiday: function (h) { return h.e || h.n; },
+            holidaySub: function (h) { return h.e ? h.n : ''; },
             dir: '/en'
         }
     };
@@ -119,22 +134,14 @@
     }
 
     /* --------------------------------------------------------- 국가 목록 확보
-       첫 화면은 HTML 에 이미 박혀 있고, 국가 페이지는 받아 온다.
-       어느 쪽이든 같은 약속을 돌려주므로 부르는 쪽은 구분하지 않는다. */
+       선택기도, 첫 화면의 "오늘 공휴일인 나라" 도 나라 이름이 필요하다.
+       한 번만 받아 두고 돌려 쓴다 — 12KB 이고 CDN 이 캐시한다.
+
+       페이지에 인라인하지 않는 이유는 410개 페이지 × 204줄이면 HTML 만
+       7MB 가 되기 때문이다. 첫 화면의 국가 목록은 따로 박혀 있다. */
     var listCache = null;
     function countries() {
-        if (listCache) return listCache;
-
-        var inline = $$('#picker li[data-cc]');
-        if (inline.length) {
-            listCache = Promise.resolve(inline.map(function (li) {
-                return {
-                    code: li.getAttribute('data-cc'),
-                    ko: li.getAttribute('data-ko') || '',
-                    name: li.getAttribute('data-en') || ''
-                };
-            }));
-        } else {
+        if (!listCache) {
             listCache = fetch('/data/countries.json').then(function (r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json();
@@ -249,12 +256,6 @@
         var here = document.body.getAttribute('data-cc');
         var items = [];
 
-        function wire() {
-            items = $$('li', list).map(function (li) {
-                return { li: li, key: (li.getAttribute('data-key') || '').toLowerCase() };
-            });
-            apply();
-        }
         function apply() {
             var q = input.value.trim().toLowerCase();
             var hit = 0;
@@ -266,29 +267,28 @@
             if (none) none.hidden = hit > 0;
         }
 
-        if ($('li', list)) {
-            wire();                                   /* 첫 화면 — 이미 박혀 있다 */
-        } else {
-            countries().then(function (all) {
-                /* countries.json 은 한글 이름순이다. 영어 화면에서 그대로 쓰면
-                   Ghana(가나)가 맨 앞에 오는 무작위 순서로 보인다. */
-                list.innerHTML = all.slice().sort(function (a, b) {
-                    return T.name(a).localeCompare(T.name(b), LANG);
-                }).map(function (c) {
-                    var cur = c.code === here;
-                    return '<li data-cc="' + c.code + '" data-key="' +
-                        esc(searchKey(c)) + '">' +
-                        '<a href="' + T.dir + '/' + c.code.toLowerCase() + '/" data-cc="' + c.code + '"' +
-                        (cur ? ' aria-current="true"' : '') + '>' +
-                        '<span class="flag">' + flag(c.code) + '</span>' + esc(T.name(c)) +
-                        '<span class="cc">' + c.code + '</span></a></li>';
-                }).join('');
-                wire();
-            }).catch(function () {
-                list.innerHTML = '';
-                if (none) { none.hidden = false; none.textContent = T.loadFail; }
+        countries().then(function (all) {
+            /* countries.json 은 한글 이름순이다. 영어 화면에서 그대로 쓰면
+               Ghana(가나)가 맨 앞에 오는 무작위 순서로 보인다. */
+            list.innerHTML = all.slice().sort(function (a, b) {
+                return T.name(a).localeCompare(T.name(b), LANG);
+            }).map(function (c) {
+                var cur = c.code === here;
+                return '<li data-cc="' + c.code + '" data-key="' + esc(searchKey(c)) + '">' +
+                    '<a href="' + T.dir + '/' + c.code.toLowerCase() + '/" data-cc="' + c.code + '"' +
+                    (cur ? ' aria-current="true"' : '') + '>' +
+                    '<span class="flag">' + flag(c.code) + '</span>' + esc(T.name(c)) +
+                    '<span class="cc">' + c.code + '</span></a></li>';
+            }).join('');
+
+            items = $$('li', list).map(function (li) {
+                return { li: li, key: (li.getAttribute('data-key') || '').toLowerCase() };
             });
-        }
+            apply();
+        }).catch(function () {
+            list.innerHTML = '';
+            if (none) { none.hidden = false; none.textContent = T.loadFail; }
+        });
 
         input.addEventListener('input', apply);
 
@@ -393,6 +393,68 @@
         home.hidden = false;
     }
 
+    /* --------------------------------------------- 오늘 공휴일인 나라
+       국가별 파일로는 답할 수 없는 물음이다 — 204개를 다 받아야 하니까.
+       그래서 gen-holidays.mjs 가 같은 자료를 달 단위로 한 번 더 색인해 두고,
+       여기서는 이번 달 하나만 받아 오늘에 해당하는 줄만 꺼낸다.
+
+       나라 이름은 countries.json 에서 온다. 달 파일에는 코드만 들어 있어서,
+       이름이 두 군데로 갈라지지 않는다. */
+    function initToday() {
+        var list = $('#tlist');
+        var note = $('#tnote');
+        if (!list) return;
+
+        var today = todayIso();
+        var month = today.slice(0, 7);
+
+        function fail(msg) {
+            list.innerHTML = '';
+            if (note) { note.hidden = false; note.textContent = msg; }
+        }
+
+        Promise.all([
+            countries(),
+            fetch('/data/month/' + month + '.json').then(function (r) {
+                if (r.status === 404) return null;        /* 자료 범위 밖의 달 */
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+        ]).then(function (both) {
+            var all = both[0], data = both[1];
+            if (!data) { fail(T.todayOut); return; }
+
+            var rows = (data.d && data.d[today]) || [];
+            if (!rows.length) { fail(T.todayNone); return; }
+
+            var byCode = {};
+            all.forEach(function (c) { byCode[c.code] = c; });
+
+            var items = rows.map(function (h) {
+                var c = byCode[h.c] || { code: h.c, ko: h.c, name: h.c };
+                return { h: h, c: c, label: T.name(c) };
+            }).sort(function (a, b) {
+                return a.label.localeCompare(b.label, LANG);
+            });
+
+            list.innerHTML = items.map(function (it) {
+                var sub = T.holidaySub(it.h);
+                return '<li>' +
+                    '<span class="who">' + flag(it.c.code) + ' <a href="' + T.dir + '/' +
+                        it.c.code.toLowerCase() + '/">' + esc(it.label) + '</a></span>' +
+                    '<span class="what">' + esc(T.holiday(it.h)) +
+                        (sub ? '<span class="en">' + esc(sub) + '</span>' : '') +
+                        (it.h.r ? '<span class="local" title="' + esc(it.h.r.join(', ')) + '">' +
+                            esc(T.regionOnly(it.h.r.length)) + '</span>' : '') +
+                    '</span></li>';
+            }).join('');
+
+            if (note) note.hidden = true;
+            var cap = $('#tcap');
+            if (cap) cap.textContent = T.todayCapN(items.length);
+        }).catch(function () { fail(T.todayFail); });
+    }
+
     /* ------------------------------------------------- 첫 화면 국가 검색
        선택기 안에도 검색이 있지만 그건 열어야 보인다. 첫 화면의 204줄짜리
        목록은 열려 있는 채로 눈앞에 있으니, 그 자리에서 바로 줄여야 한다. */
@@ -431,6 +493,7 @@
     function start() {
         initPicker();
         initFind();
+        initToday();
 
         var page = document.body.getAttribute('data-cc');
         if (page) {

@@ -10,9 +10,10 @@
    실제로 그 문자열이 문서에 있다.
    날짜에 따라 달라지는 것(D-day · 오늘 여부)만 shared/dday.js 가 붙인다.
 
-   선택기 <ul> 은 첫 화면에만 인라인하고 국가 페이지에서는 비워 둔다 —
-   204개 <li> × 410개 페이지면 HTML 만 7MB 가 된다. 국가 페이지는
-   dday.js 가 countries.json 으로 채운다.
+   선택기 <ul> 은 어느 페이지에서도 비워 둔다 — 204개 <li> × 410개 페이지면
+   HTML 만 7MB 가 된다. dday.js 가 countries.json 으로 채운다.
+   첫 화면의 국가 목록은 그와 별개로 HTML 에 박혀 있어서, 자바스크립트가 없어도
+   204개국으로 갈 수 있다.
 
    'en' 은 국가 코드가 아니다(ISO 3166-1 에 없다). 그래서 /en/ 을 언어 칸으로
    써도 국가 경로와 부딪히지 않는데, Nager 목록이 바뀌어 부딪히면 조용히
@@ -86,6 +87,9 @@ const L = {
         homeLede: (n) => `오늘이 공휴일인지, 다음 공휴일까지 며칠 남았는지 봅니다. 브라우저의 지역 설정으로 국가를 먼저 맞춰 두고, ${n}개국 아무 곳으로나 바꿀 수 있습니다.`,
         countriesCap: (n) => `국가 ${n}개`,
         countriesH2: '국가별 공휴일',
+        todayCap: '전 세계',
+        todayH2: '오늘 공휴일인 나라',
+        todayWait: '확인하는 중…',
         searchLabel: '국가 검색',
         searchHint: '국가 검색 — 한글·영어·코드',
         noCountry: '찾는 국가가 없습니다.',
@@ -124,6 +128,9 @@ const L = {
         homeLede: (n) => `See whether today is a public holiday and how many days remain until the next one. Your browser's region picks the country to start with; switch to any of ${n}.`,
         countriesCap: (n) => `${n} countries`,
         countriesH2: 'Holidays by country',
+        todayCap: 'Around the world',
+        todayH2: 'Countries on holiday today',
+        todayWait: 'Checking…',
         searchLabel: 'Search countries',
         searchHint: 'Search — name or code',
         noCountry: 'No country matches.',
@@ -194,23 +201,22 @@ function top(t, { slug, home, label }) {
     return `<div class="top"><div class="wrap">
   <a class="brand" href="${t.dir}/">${home ? '' : '← '}${SITE}</a>
   <nav>
-${picker(t, label, [])}
+${picker(t, label)}
     <a class="btn" href="${o.dir}/${slug}" hreflang="${o.lang}" lang="${o.lang}">${t.otherLabel}</a>
   </nav>
 </div></div>`;
 }
 
-/* 선택기. items 가 비면 <ul> 만 두고 dday.js 가 채운다. */
-function picker(t, label, items) {
-    const li = items.map((c) => `        <li data-cc="${c.code}" data-ko="${esc(c.ko)}" data-en="${esc(c.name)}" data-key="${esc(searchKey(c))}"><a href="${t.dir}/${c.code.toLowerCase()}/" data-cc="${c.code}"><span class="flag">${flag(c.code)}</span>${esc(t.name(c))}<span class="cc">${c.code}</span></a></li>`).join('\n');
-
+/* 선택기. <ul> 은 늘 비워 두고 dday.js 가 countries.json 으로 채운다 —
+   204개 <li> 를 410개 페이지에 인라인하면 HTML 만 7MB 가 된다.
+   자바스크립트가 없으면 선택기는 빈 채로 남지만, 첫 화면의 국가 목록은
+   HTML 에 그대로 박혀 있어서 거기서 고를 수 있다. */
+function picker(t, label) {
     return `    <details class="picker" id="picker">
       <summary>${label}</summary>
       <div class="panel">
         <input type="search" placeholder="${esc(t.searchHint)}" aria-label="${esc(t.searchLabel)}" autocomplete="off">
-        <ul>
-${li}
-        </ul>
+        <ul></ul>
         <div class="none" hidden>${esc(t.noCountry)}</div>
       </div>
     </details>`;
@@ -348,6 +354,13 @@ ${top(t, { slug: '', home: true, label: esc(t.pickerLabel) })}
   <p class="lede">${esc(t.homeLede(n))}</p>
 
   <div class="now" id="home" hidden></div>
+
+  <section id="today">
+    <span class="cap" id="tcap">${esc(t.todayCap)}</span>
+    <h2>${esc(t.todayH2)}</h2>
+    <p class="pending" id="tnote">${esc(t.todayWait)}</p>
+    <ul class="worldwide" id="tlist"></ul>
+  </section>
 
   <section id="countries">
     <span class="cap">${esc(t.countriesCap(n))}</span>

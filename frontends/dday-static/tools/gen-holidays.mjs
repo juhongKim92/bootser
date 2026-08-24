@@ -127,6 +127,44 @@ const index = usable
     .sort((a, b) => a.ko.localeCompare(b.ko, 'ko'));
 writeFileSync(join(DATA, 'countries.json'), JSON.stringify(index) + '\n');
 
+/* ------------------------------------------------------------ 날짜 색인
+   "오늘 어느 나라가 쉬나" 는 국가별 파일로는 답할 수 없다 — 204개를 다 받아야 한다.
+   그래서 같은 자료를 날짜로 한 번 더 색인해 둔다.
+
+   달 단위로 쪼개는 이유. 하루 단위면 파일이 973개가 되고, 통째로 한 파일이면
+   900KB 를 받아 그중 하루치만 쓴다. 달 파일은 36개에 평균 200여 건이라
+   브라우저가 이번 달 하나만 받으면 된다.
+
+   국가 이름은 넣지 않는다 — countries.json 에 이미 있고 그 파일은 선택기가
+   어차피 받는다. 여기 또 넣으면 이름이 두 군데가 되어 갈라진다. */
+const months = new Map();
+for (const c of usable) {
+    for (const day of c.days) {
+        const m = day.d.slice(0, 7);
+        if (!months.has(m)) months.set(m, new Map());
+        const byDay = months.get(m);
+        if (!byDay.has(day.d)) byDay.set(day.d, []);
+
+        const entry = { c: c.code, n: day.n };
+        if (day.e) entry.e = day.e;
+        if (day.r) entry.r = day.r;
+        byDay.get(day.d).push(entry);
+    }
+}
+
+const MONTHS = join(DATA, 'month');
+mkdirSync(MONTHS, { recursive: true });
+for (const [m, byDay] of months) {
+    /* 나라 순서를 코드순으로 굳혀 둔다 — 자료가 안 바뀌었는데 diff 가 뜨면
+       매달 갱신할 때 무엇이 진짜 바뀌었는지 보이지 않는다. */
+    const d = {};
+    for (const key of [...byDay.keys()].sort()) {
+        d[key] = byDay.get(key).sort((a, b) => a.c.localeCompare(b.c));
+    }
+    writeFileSync(join(MONTHS, `${m}.json`), JSON.stringify({ m, d }) + '\n');
+}
+
 const total = usable.reduce((n, c) => n + c.days.length, 0);
-console.log(`\n국가 ${usable.length}개 · 공휴일 ${total}건 · data/ 파일 ${readdirSync(DATA).length}개`);
+console.log(`\n국가 ${usable.length}개 · 공휴일 ${total}건`);
+console.log(`data/ 파일 ${readdirSync(DATA).length}개 · data/month/ ${readdirSync(MONTHS).length}개`);
 if (empty.length) console.log(`Public 공휴일 0건이라 제외: ${empty.join(', ')}`);

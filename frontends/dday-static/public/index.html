@@ -35,9 +35,7 @@
       <summary>국가 선택</summary>
       <div class="panel">
         <input type="search" placeholder="국가 검색 — 한글·영어·코드" aria-label="국가 검색" autocomplete="off">
-        <ul>
-
-        </ul>
+        <ul></ul>
         <div class="none" hidden>찾는 국가가 없습니다.</div>
       </div>
     </details>
@@ -51,6 +49,13 @@
   <p class="lede">오늘이 공휴일인지, 다음 공휴일까지 며칠 남았는지 봅니다. 브라우저의 지역 설정으로 국가를 먼저 맞춰 두고, 204개국 아무 곳으로나 바꿀 수 있습니다.</p>
 
   <div class="now" id="home" hidden></div>
+
+  <section id="today">
+    <span class="cap" id="tcap">전 세계</span>
+    <h2>오늘 공휴일인 나라</h2>
+    <p class="pending" id="tnote">확인하는 중…</p>
+    <ul class="worldwide" id="tlist"></ul>
+  </section>
 
   <section id="countries">
     <span class="cap">국가 204개</span>

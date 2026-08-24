@@ -43,7 +43,10 @@ const ICON_LINKS = [
 
 /* dday.js 가 이름으로 찾는 것들. 없으면 조용히 아무 일도 안 일어난다 —
    그게 가장 알아채기 어려운 고장이라 여기서 본다. */
-const NEED_IDS = { country: ['picker', 'now', 'next', 'prev'], home: ['picker', 'home'] };
+const NEED_IDS = {
+    country: ['picker', 'now', 'next', 'prev'],
+    home: ['picker', 'home', 'tcap', 'tnote', 'tlist', 'csearch', 'clist', 'cnone'],
+};
 
 /* 슬러그를 언어와 국가로 가른다.  '' | 'en' | 'kr' | 'en/kr' */
 const ALL = pages().map((p) => {
@@ -397,16 +400,90 @@ if (!existsSync(smFile)) {
         if (got !== want) bad('/', `지역 감지: ${langs.join(',')} → ${got} (기대 ${want})`);
     }
 
-    /* 첫 화면이 실제로 요약 카드용 자료를 받아 가나.
-       fetch 는 약속(promise)이라 boot 이 돌아온 시점에는 아직 안 끝났다 —
-       한 틱 넘겨 밀린 미소작업을 흘려보낸 뒤에 본다. */
-    const r = boot('', { languages: ['ko-KR'] });
+}
+
+/* --------------------------------------- 첫 화면이 실제로 그리는 것
+   fetch 는 약속(promise)이라 boot 이 돌아온 시점에는 아직 안 끝났다 —
+   한 틱 넘겨 밀린 미소작업을 흘려보낸 뒤에 본다. 두 언어를 다 본다. */
+for (const [page, lang, langs, wantCc] of [
+    ['', 'ko', ['ko-KR'], 'KR'],
+    ['en', 'en', ['en-US', 'en'], 'US'],
+]) {
+    const label = '/' + (page ? page + '/' : '');
+    const dir = lang === 'en' ? '/en' : '';
+    const r = boot(page, { languages: langs });
     await new Promise((res) => setImmediate(res));
+
     const asked = r.fetched.filter((u) => /\/data\/[A-Z]{2}\.json$/.test(u));
     if (!asked.length) {
-        bad('/', '첫 화면이 국가 자료를 받지 않았다 — 요약 카드가 안 뜬다');
-    } else if (!asked.some((u) => u.endsWith('/KR.json'))) {
-        bad('/', `ko-KR 인데 ${asked[0]} 를 받았다 — KR.json 이어야 한다`);
+        bad(label, '첫 화면이 국가 자료를 받지 않았다 — 요약 카드가 안 뜬다');
+    } else if (!asked.some((u) => u.endsWith(`/${wantCc}.json`))) {
+        bad(label, `${langs[0]} 인데 ${asked[0]} 를 받았다 — ${wantCc}.json 이어야 한다`);
+    }
+    if (!r.fetched.some((u) => u.endsWith(`/month/${TODAY.slice(0, 7)}.json`))) {
+        bad(label, '이번 달 색인을 받지 않았다 — 오늘 쉬는 나라가 안 뜬다');
+    }
+
+    /* 선택기를 dday.js 가 채운 결과. 204개라 정렬이 틀리면 반드시 드러난다 —
+       "오늘 쉬는 나라" 목록도 같은 방식으로 정렬하는데 그쪽은 하루 두어 곳뿐이라
+       어떤 날에는 틀려도 티가 안 난다. 여기서 대신 붙잡는다. */
+    {
+        const filled = r.doc.pickerList.innerHTML || '';
+        const n = (filled.match(/<li /g) || []).length;
+        if (n !== indexCodes.size) {
+            bad(label, `선택기에 ${n}개가 찼다 / 기대 ${indexCodes.size}개`);
+        }
+        const order = [...filled.matchAll(/<\/span>([^<]+)<span class="cc">/g)].map((m) => m[1]);
+        const want = [...order].sort((a, b) => a.localeCompare(b, lang));
+        if (order.join('|') !== want.join('|')) {
+            const at = order.findIndex((x, i) => x !== want[i]);
+            bad(label, `선택기가 이름순이 아니다 — ${at + 1}번째가 "${order[at]}" (기대 "${want[at]}")`);
+        }
+        if (!filled.includes(`href="${dir}/kr/"`)) bad(label, `선택기 링크가 ${dir} 칸을 안 쓴다`);
+    }
+
+    /* "오늘 공휴일인 나라" 가 실제로 무엇을 그리는지. 기대값은 달 색인에서
+       여기가 따로 뽑는다 — 나라 수, 나라 이름, 공휴일 이름까지 견준다. */
+    {
+        const monthFile = join(DATA, 'month', `${TODAY.slice(0, 7)}.json`);
+        const rows = existsSync(monthFile)
+            ? (JSON.parse(readFileSync(monthFile, 'utf8')).d[TODAY] || [])
+            : [];
+        const names = Object.fromEntries(
+            JSON.parse(readFileSync(join(DATA, 'countries.json'), 'utf8'))
+                .map((c) => [c.code, lang === 'en' ? c.name : c.ko]));
+
+        const drawnList = r.doc.querySelector('#tlist').innerHTML || '';
+        const note = r.doc.querySelector('#tnote');
+        const cap = r.doc.querySelector('#tcap');
+
+        if (!rows.length) {
+            if (drawnList) bad(label, '오늘 공휴일인 나라가 없는데 목록을 그렸다');
+            if (note.hidden) bad(label, '빈 날인데 안내 문구를 숨겼다');
+        } else {
+            const shown = (drawnList.match(/<li>/g) || []).length;
+            if (shown !== rows.length) bad(label, `오늘 쉬는 나라 ${shown}줄 / 기대 ${rows.length}곳`);
+            if (!note.hidden) bad(label, '목록을 그려 놓고 안내 문구를 안 숨겼다');
+            if (!cap.textContent.includes(String(rows.length))) {
+                bad(label, `머리말에 나라 수가 없다: "${cap.textContent}"`);
+            }
+            for (const h of rows) {
+                const who = esc(names[h.c] || '');
+                const what = esc(lang === 'en' ? (h.e || h.n) : h.n);
+                if (who && !drawnList.includes(`>${who}</a>`)) bad(label, `오늘 목록에 "${who}" 가 없다`);
+                if (!drawnList.includes(what)) bad(label, `오늘 목록에 "${what}" 가 없다`);
+                if (!drawnList.includes(`href="${dir}/${h.c.toLowerCase()}/"`)) {
+                    bad(label, `오늘 목록의 ${h.c} 링크가 ${dir} 칸을 안 쓴다`);
+                }
+            }
+            /* 보이는 이름순 */
+            const order = [...drawnList.matchAll(/">([^<]+)<\/a><\/span>/g)].map((m) => m[1]);
+            const want = [...order].sort((a, b) => a.localeCompare(b, lang));
+            if (order.join('|') !== want.join('|')) bad(label, '오늘 목록이 이름순이 아니다');
+        }
+        for (const smell of ['undefined', 'NaN', '[object Object]']) {
+            if (drawnList.includes(smell)) bad(label, `오늘 목록에 "${smell}" 가 있다`);
+        }
     }
 
     /* 카드가 실제로 어떤 문자열을 그리는지 본다. 스텁은 셀렉터마다 같은 객체를
@@ -414,16 +491,55 @@ if (!existsSync(smFile)) {
     const card = r.doc.querySelector('#home');
     const drawn = card.innerHTML || '';
     if (!drawn) {
-        bad('/', '요약 카드가 비어 있다 — renderHomeCard 가 안 돌았다');
+        bad(label, '요약 카드가 비어 있다 — renderHomeCard 가 안 돌았다');
     } else {
-        if (card.hidden) bad('/', '요약 카드를 그려 놓고 hidden 을 안 풀었다');
+        if (card.hidden) bad(label, '요약 카드를 그려 놓고 hidden 을 안 풀었다');
         for (const smell of ['undefined', 'NaN', '[object Object]']) {
-            if (drawn.includes(smell)) bad('/', `요약 카드에 "${smell}" 가 있다`);
+            if (drawn.includes(smell)) bad(label, `요약 카드에 "${smell}" 가 있다`);
         }
-        for (const need of ['class="asof"', 'class="verdict"', '대한민국', '/kr/']) {
-            if (!drawn.includes(need)) bad('/', `요약 카드에 빠짐: ${need}`);
+        const wantName = lang === 'en' ? 'United States' : '대한민국';
+        for (const need of ['class="asof"', 'class="verdict"', wantName,
+                            `${dir}/${wantCc.toLowerCase()}/`]) {
+            if (!drawn.includes(need)) bad(label, `요약 카드에 빠짐: ${need}`);
         }
-        if (!/D[-+]\d+/.test(drawn)) bad('/', '요약 카드에 D-day 숫자가 없다');
+        if (!/D[-+]\d+/.test(drawn)) bad(label, '요약 카드에 D-day 숫자가 없다');
+    }
+}
+
+/* --------------------------------------------------- 날짜 색인 대조
+   data/month/*.json 은 국가별 파일을 날짜로 다시 색인한 것이다. 같은 자료를 두 벌
+   들고 있으니 갈라질 수 있다 — 한 건이라도 어긋나면 "오늘 쉬는 나라" 가 조용히
+   틀린다. 양쪽을 (날짜, 국가, 이름) 으로 통째로 견준다. */
+{
+    const MONTHS = join(DATA, 'month');
+    if (!existsSync(MONTHS)) bad('/data/month/', '없다 — node tools/gen-holidays.mjs 를 돌릴 것');
+    else {
+        const fromCountry = new Set();
+        for (const f of readdirSync(DATA).filter((x) => x.endsWith('.json') && x !== 'countries.json')) {
+            const d = JSON.parse(readFileSync(join(DATA, f), 'utf8'));
+            for (const day of d.days) fromCountry.add(`${day.d}|${d.code}|${day.n}`);
+        }
+
+        const fromMonth = new Set();
+        for (const f of readdirSync(MONTHS)) {
+            const m = JSON.parse(readFileSync(join(MONTHS, f), 'utf8'));
+            if (f !== `${m.m}.json`) bad('/data/month/' + f, `안에 적힌 달이 ${m.m} 이다`);
+            for (const [date, rows] of Object.entries(m.d)) {
+                if (!date.startsWith(m.m)) bad('/data/month/' + f, `${date} 는 이 달이 아니다`);
+                for (const h of rows) fromMonth.add(`${date}|${h.c}|${h.n}`);
+            }
+        }
+
+        const only = (a, b) => [...a].filter((x) => !b.has(x));
+        const missing = only(fromCountry, fromMonth);
+        const extra = only(fromMonth, fromCountry);
+        if (missing.length) bad('/data/month/', `국가 파일엔 있는데 달 색인엔 없다 ${missing.length}건: ${missing.slice(0, 3).join(' / ')}`);
+        if (extra.length) bad('/data/month/', `달 색인에만 있다 ${extra.length}건: ${extra.slice(0, 3).join(' / ')}`);
+
+        /* 오늘 달이 있어야 첫 화면이 답을 낸다 */
+        if (!existsSync(join(MONTHS, `${TODAY.slice(0, 7)}.json`))) {
+            bad('/data/month/', `이번 달(${TODAY.slice(0, 7)}) 파일이 없다 — 자료가 낡았다`);
+        }
     }
 }
 

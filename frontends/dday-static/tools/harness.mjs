@@ -23,7 +23,7 @@ export { PUB, DATA };
 
 /* kids: 셀렉터 → 자식 요소(들). 없는 셀렉터에는 null / [] 을 돌려준다 —
    진짜 querySelector 가 그렇게 동작하고, dday.js 는 그 null 로 갈림길을 고른다.
-   (국가 페이지는 선택기 <ul> 이 비어 있어야 countries.json 을 받으러 간다) */
+   (국가 페이지에 #home 이 없다는 사실이 첫 화면 코드를 건너뛰게 하는 조건이다) */
 export function makeEl(tag = 'div', { attrs: init = {}, kids = {} } = {}) {
     const attrs = { ...init };
     const el = {
@@ -74,7 +74,7 @@ export function makeEl(tag = 'div', { attrs: init = {}, kids = {} } = {}) {
 /* 같은 셀렉터는 같은 객체를 돌려준다 — 그래야 렌더 결과를 다시 읽을 수 있다.
    #picker 만은 안쪽 구조까지 미리 엮어 둔다. 선택기는 input · ul · .none 을 찾아
    서로 다른 갈림길로 가는데, 아무거나 돌려주면 그 갈림길이 사라진다. */
-function makeDoc(bodyAttrs, { pickerItems, rows, ids, lang }) {
+function makeDoc(bodyAttrs, { rows, ids, lang }) {
     const cache = new Map();
     const body = makeEl('body', { attrs: bodyAttrs });
     /* <html lang> 은 dday.js 가 말을 고르는 유일한 근거다. 안 옮기면 영어 페이지가
@@ -82,7 +82,9 @@ function makeDoc(bodyAttrs, { pickerItems, rows, ids, lang }) {
     const root = makeEl('html', { attrs: { lang } });
     root.lang = lang;
 
-    const pickerList = makeEl('ul', { kids: { li: pickerItems } });
+    /* 선택기 <ul> 은 배포되는 HTML 에서도 비어 있다 — dday.js 가 채운다.
+       비어 있다는 사실 자체가 그 코드가 도는 조건이라 그대로 둔다. */
+    const pickerList = makeEl('ul', { kids: { li: [] } });
     cache.set('#picker', makeEl('details', {
         kids: {
             input: makeEl('input'),
@@ -108,8 +110,10 @@ function makeDoc(bodyAttrs, { pickerItems, rows, ids, lang }) {
             return cache.get(sel);
         },
         querySelectorAll(sel) {
-            if (sel === '#picker li[data-cc]') return pickerItems;
             if (sel === 'tr[data-d]') return rows;
+            /* 선택기 항목은 dday.js 가 innerHTML 로 넣는다. 스텁은 트리를 만들지
+               않으니 여기서 되읽을 수 없고, 채워진 결과는 check-pages.mjs 가
+               pickerList.innerHTML 로 본다. */
             return [];
         },
         getElementById(id) { return doc.querySelector('#' + id); },
@@ -119,18 +123,6 @@ function makeDoc(bodyAttrs, { pickerItems, rows, ids, lang }) {
         cache, pickerList, rows,
     };
     return doc;
-}
-
-/* HTML 에 박힌 선택기 항목만 좁게 뽑는다. 첫 화면에는 있고 국가 페이지에는 없는데,
-   그 차이가 곧 dday.js 의 갈림길이라 흉내가 아니라 실제 값이어야 한다. */
-function parsePickerItems(html) {
-    const out = [];
-    for (const m of html.matchAll(/<li ((?:data-[a-z]+="[^"]*"\s*)+)>/g)) {
-        const attrs = {};
-        for (const a of m[1].matchAll(/(data-[a-z]+)="([^"]*)"/g)) attrs[a[1]] = a[2];
-        if (attrs['data-cc']) out.push(makeEl('li', { attrs }));
-    }
-    return out;
 }
 
 const unesc = (s) => s
@@ -201,7 +193,6 @@ export function boot(page, { languages = ['ko-KR'] } = {}) {
     for (const m of bodyTag.matchAll(/([a-z-]+)="([^"]*)"/gi)) bodyAttrs[m[1]] = m[2];
 
     const doc = makeDoc(bodyAttrs, {
-        pickerItems: parsePickerItems(html),
         rows: parseRows(html),
         ids: new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1])),
         lang: (html.match(/<html lang="([a-z]{2})">/) || [])[1] || 'ko',

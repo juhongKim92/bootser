@@ -142,6 +142,20 @@ details.year[open] > summary::before{content:'▾ '}
 }
 .panel .none{padding:14px 13px;font-size:13px;color:var(--ink-3)}
 
+/* ------------------------------------------- 오늘 공휴일인 나라(첫 화면) */
+.worldwide{list-style:none;font-size:14px}
+.worldwide li{
+  display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+  padding:8px 0;border-bottom:1px solid var(--rule);
+}
+.worldwide li:last-child{border-bottom:none}
+.worldwide .who{white-space:nowrap}
+.worldwide .who a{color:var(--ink);text-decoration:none}
+.worldwide .who a:hover{color:var(--soon);text-decoration:underline}
+.worldwide .what{color:var(--ink-2)}
+.worldwide .what .en{color:var(--ink-3);font-size:12px;margin-left:6px}
+.pending{font-size:14px;color:var(--ink-3)}
+
 /* ------------------------------------------------ 국가 목록(첫 화면) */
 /* 목록이 204줄이라 눈으로 훑는 건 무리다. 선택기 안에도 검색이 있지만 그건
    열어야 보이므로, 열려 있는 이 목록 위에 하나 더 둔다. */
