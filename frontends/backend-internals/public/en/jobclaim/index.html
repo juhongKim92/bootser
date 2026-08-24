@@ -82,25 +82,25 @@
 
     <section>
       <span class="cap">competing for one job</span>
-      <div class="nodes" id="nodes"></div>
+      <div class="nodes" id="nodes"><!--pr--><div class="node "><span class="nm">worker-0<em></em></span><div class="rows"><span>claimed<b>0</b></span><span class="">of those, duplicate<b>0</b></span><span>wasted attempts<b>0</b></span></div></div><!--/pr--></div>
       <p class="boardnote">A green border marks the instance that claimed the job; a red one marks an instance that <strong>claimed something already taken</strong>. Amber dashed means it lost the race and did the work for nothing.</p>
     </section>
 
     <section>
       <span class="cap">per-job outcome</span>
       <div class="jobs" id="jobs"></div>
-      <div class="meters" id="meters"></div>
+      <div class="meters" id="meters"><!--pr--><div class="good"><span class="k">excess runs</span><span class="n">0.0%</span><span class="e">exp 0.0</span></div><div class=""><span class="k">wasted / job</span><span class="n">0.00</span><span class="e">exp 0.00</span></div><div class=""><span class="k">zombie rows</span><span class="n">0</span><span class="e">&nbsp;</span></div><div class=""><span class="k">jobs</span><span class="n">0</span><span class="e">&nbsp;</span></div><!--/pr--></div>
       <p class="boardnote">An empty green cell is a job that ran once; the number in a red cell is <strong>how many times it ran</strong>; an amber dashed cell is a zombie row — claimed but never finished. Grey numbers in the readouts are the expected values for these conditions.</p>
     </section>
 
     <section>
       <span class="cap">same instance count, only the strategy changes</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>strategy</th><th>excess runs</th><th>wasted</th><th>verdict</th></tr><tr class="on"><td>in-memory + synchronized</td><td class="num good">0.0%</td><td class="num ">0.00</td><td class="good">no duplicates</td></tr><tr class=""><td>read, then write state</td><td class="num good">0.0%</td><td class="num ">0.00</td><td class="good">no duplicates</td></tr><tr class=""><td>conditional UPDATE</td><td class="num good">0.0%</td><td class="num ">0.00</td><td class="good">no duplicates</td></tr><tr class=""><td>SELECT … FOR UPDATE SKIP LOCKED</td><td class="num good">0.0%</td><td class="num ">0.00</td><td class="good">no duplicates</td></tr><!--/pr--></table>
     </section>
 
     <section>
       <span class="cap">event log</span>
-      <div class="events" id="events"></div>
+      <div class="events" id="events"><!--pr--><div class="warn">1 instances · in-memory + synchronized — readouts reset</div><!--/pr--></div>
     </section>
 
     <section class="transport">

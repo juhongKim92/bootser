@@ -95,14 +95,14 @@
           <button id="btnRun">pause</button>
         </div>
       </div>
-      <div class="hint" id="hint"></div>
+      <div class="hint" id="hint"><!--pr-->0ms &middot; worker 1 takes the lock (TTL 3s · expires 3s)<!--/pr--></div>
     </section>
 
     <section>
       <span class="cap">One job — who works when, and what ends up in the resource</span>
       <div class="board">
-        <div id="board"></div>
-        <div class="tlx" id="boardX"></div>
+        <div id="board"><!--pr--><div class="lane "><span class="ln">worker 1</span><div class="tl"><div class="head" style="left:0%"></div><div class="held" style="left:0%;width:36.05769230769231%">token 1 · holds lock</div><div class="zombie" style="left:36.05769230769231%;width:24.03846153846154%" title="the lock has expired and the work continues — the worker does not know"></div><div class="exp" style="left:36.05769230769231%"></div><div class="wr" style="left:60.09615384615385%"></div></div></div><div class="lane "><span class="ln">worker 2</span><div class="tl"><div class="head" style="left:0%"></div><div class="held" style="left:36.05769230769231%;width:36.05769230769231%">token 2 · holds lock</div><div class="zombie" style="left:72.11538461538461%;width:24.038461538461547%" title="the lock has expired and the work continues — the worker does not know"></div><div class="exp" style="left:72.11538461538461%"></div><div class="wr" style="left:96.15384615384616%"></div></div></div><div class="lane res"><span class="ln">resource</span><div class="tl"><div class="head" style="left:0%"></div><div class="land" style="left:60.09615384615385%" title="token 1’s write was accepted">1</div><div class="land" style="left:96.15384615384616%" title="token 2’s write was accepted">2</div></div></div><!--/pr--></div>
+        <div class="tlx" id="boardX"><!--pr--><span>0</span><span>2s</span><span>4s</span><span>6s</span><span>8s</span><!--/pr--></div>
         <div class="legend">
           <span><i class="h"></i>holding the lock</span>
           <span><i class="e"></i>expiry</span>
@@ -111,15 +111,15 @@
           <span><i class="w"></i>write accepted</span>
           <span><i class="r"></i>write rejected</span>
         </div>
-        <div class="final" id="final"></div>
-        <div class="meters" id="meters"></div>
-        <div class="verdict" id="verdict"></div>
+        <div class="final" id="final"><!--pr--><b>The final state is token 2’s write</b> (arrived at 8s) <span class="at">— the last holder’s result</span><!--/pr--></div>
+        <div class="meters" id="meters"><!--pr--><div class="m bad"><span class="k">same job executed</span><span class="n">2.00<small>×</small></span></div><div class="m bad"><span class="k">duplicate execution</span><span class="n">100.0<small>%</small></span></div><div class="m good"><span class="k">stale write final</span><span class="n">0.0<small>%</small></span></div><div class="m "><span class="k">writes rejected</span><span class="n">0.00</span></div><div class="m bad"><span class="k">worked without lock</span><span class="n">4000<small>ms</small></span></div><div class="m "><span class="k">dead-worker wait</span><span class="n">3s</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>Duplicate execution 100.0% · the same job runs 2.00 times.</b><br>Time spent working without the lock: <b>4000ms</b> <span class="at">— and the worker believes it holds it</span><!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">Same configuration, only the defence changes</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>defence</th><th>same job</th><th>duplicate exec</th><th>stale write final</th><th>rejected</th></tr><tr class="on"><td>none</td><td class="num same">2.00</td><td class="num same">100.0%</td><td class="num same">0.0%</td><td class="num">0.00</td></tr><tr class=""><td>fencing token</td><td class="num same">2.00</td><td class="num same">100.0%</td><td class="num same">0.0%</td><td class="num">0.00</td></tr><tr class=""><td>auto-renew</td><td class="num good">1.00</td><td class="num good">0.0%</td><td class="num same">0.0%</td><td class="num">0.00</td></tr><tr class=""><td>renew + fencing</td><td class="num good">1.00</td><td class="num good">0.0%</td><td class="num same">0.0%</td><td class="num">0.00</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

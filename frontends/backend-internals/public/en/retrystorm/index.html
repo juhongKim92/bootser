@@ -90,23 +90,23 @@
     <section>
       <span class="cap">goodput — responses a client actually received</span>
       <div class="board">
-        <div class="trace" id="trace"></div>
-        <div class="tracex" id="traceX"></div>
+        <div class="trace" id="trace"><!--pr--><div class="ref" style="bottom:50%"><span>capacity 100/s</span></div><i class="load" style="height:30%"></i><i class="dead" style="height:0%"></i><!--/pr--></div>
+        <div class="tracex" id="traceX"><!--pr--><span>60s ago</span><span>now</span><!--/pr--></div>
 
         <div class="qwrap">
           <div class="qbar"><div class="fill" id="qFill"></div><div class="stale" id="qStale"></div></div>
-          <div class="qmeta" id="qMeta"></div>
+          <div class="qmeta" id="qMeta"><!--pr--><span>server queue 0 — 0 of them already abandoned by the client</span><span>cap 500</span><!--/pr--></div>
         </div>
 
-        <div class="meters" id="meters"></div>
-        <div class="verdict" id="verdict"></div>
-        <div class="hyst" id="hyst"></div>
+        <div class="meters" id="meters"><!--pr--><div class="m "><span class="k">attempts reaching server</span><span class="n">0.0<small>/s</small></span></div><div class="m bad"><span class="k">goodput</span><span class="n">0.0<small>/s</small></span></div><div class="m "><span class="k">work nobody wants</span><span class="n">0.0<small>/s</small></span></div><div class="m good"><span class="k">amplification A = r^L</span><span class="n">1<small>×</small></span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>Draining.</b> The queue is shrinking — retries are not quite eating all the capacity<!--/pr--></div>
+        <div class="hyst" id="hyst"><!--pr--><div class="ax"></div><div class="gap" style="left:50%;width:0%"></div><div class="mk rec" style="left:50%"><b>recover 100.0/s</b></div><div class="mk brk" style="left:50%"><b>break 100/s</b></div><div class="now" style="left:30%"></div><!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">same depth, only the retry count changed</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>attempts r</th><th>amplification A</th><th>recovery threshold</th><th>hysteresis</th></tr><tr class="on"><td>1 tries</td><td class="num">1×</td><td class="num good">100.0/s</td><td class="num">none</td></tr><tr class=""><td>2 tries</td><td class="num">8×</td><td class="num bad">12.5/s</td><td class="num">8×</td></tr><tr class=""><td>3 tries</td><td class="num">27×</td><td class="num bad">3.7/s</td><td class="num">27×</td></tr><tr class=""><td>4 tries</td><td class="num">64×</td><td class="num bad">1.6/s</td><td class="num">64×</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

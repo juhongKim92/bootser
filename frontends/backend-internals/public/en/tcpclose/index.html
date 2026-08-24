@@ -94,25 +94,25 @@
     <section>
       <span class="cap">What went out on the wire</span>
       <div class="board">
-        <div class="wire" id="wire"></div>
+        <div class="wire" id="wire"><!--pr--><span class="lb">signal on the wire</span><span class="sigbox">FIN</span><span class="note">nothing left unread — a FIN goes out normally. Loss is structurally zero</span><!--/pr--></div>
 
         <div class="stream">
           <span class="cap">The byte stream — the close signal is always at the tail</span>
-          <div class="bytes" id="bytes"></div>
-          <div class="streamx" id="streamX"></div>
+          <div class="bytes" id="bytes"><!--pr--><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><span class="tail">FIN</span><!--/pr--></div>
+          <div class="streamx" id="streamX"><!--pr--><span>first byte</span><span>plaintext — truncation unit is 1 byte</span><span>FIN at the tail</span><!--/pr--></div>
         </div>
 
-        <div class="hops" id="hops"></div>
+        <div class="hops" id="hops"><!--pr--><div class="hop"><span class="nm">connection (1 segment)</span><span class="ln">plaintext</span><span class="amt">0</span></div><!--/pr--></div>
 
-        <div class="verdicts" id="verdicts"></div>
-        <div class="meters" id="meters"></div>
-        <div class="verdict" id="verdict"></div>
+        <div class="verdicts" id="verdicts"><!--pr--><div class="vrow"><span class="who">application</span><span class="tag ok">clean</span><span class="why">close() was called. This verdict is always clean</span></div><div class="vrow"><span class="who">TLS</span><span class="tag ok">clean</span><span class="why">TLS is not in use</span></div><div class="vrow"><span class="who">TCP</span><span class="tag ok">clean</span><span class="why">a FIN went out. EOF appears after every byte is delivered</span></div><!--/pr--></div>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">close signal</span><span class="n">FIN</span></div><div class="m good"><span class="k">loss bound</span><span class="n">0</span></div><div class="m good"><span class="k">loss points</span><span class="n">0</span></div><div class="m "><span class="k">truncation unit</span><span class="n">1 byte</span></div><div class="m good"><span class="k">clean verdicts</span><span class="n">3 / 3</span></div><div class="m good"><span class="k">what the peer sees</span><span class="n">EOF</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>All three layers call this a clean shutdown.</b> A FIN went out and the loss bound is 0.<br><span class="at">A FIN sits at the tail of the stream, so EOF only appears after every byte is delivered</span><!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">Four ways to close — other dials unchanged</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>close mode</th><th>wire</th><th>loss bound</th><th>client code</th></tr><tr class="on"><td>read then close</td><td class="num good">FIN</td><td class="num good">0</td><td>one close()</td></tr><tr class=""><td>close unread</td><td class="num bad">RST</td><td class="num bad">16 KB</td><td>one close() — identical to above</td></tr><tr class=""><td>SO_LINGER 0</td><td class="num bad">RST</td><td class="num bad">16 KB</td><td>one option line + close()</td></tr><tr class=""><td>shutdown(WR), read, close</td><td class="num good">FIN</td><td class="num good">0</td><td>one extra shutdown() line</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

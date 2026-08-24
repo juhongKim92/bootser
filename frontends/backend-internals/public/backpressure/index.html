@@ -92,19 +92,19 @@
           <div class="qwrap">
             <div class="qbar"><div class="fill" id="qFill"></div><div class="lim" id="qLim"></div></div>
             <div class="qmeta"><span id="qNow"></span><span id="qScale"></span></div>
-            <div class="workers" id="workers"></div>
+            <div class="workers" id="workers"><!--pr--><i class="idle"></i><i class="idle"></i><i class="idle"></i><i class="idle"></i><i class="idle"></i><i class="idle"></i><i class="idle"></i><i class="idle"></i><!--/pr--></div>
           </div>
           <div class="box" id="boxOut"><span class="k">나감</span><span class="n" id="nOut">0</span><span class="k">/s · 용량 <span id="nCap">0</span></span></div>
         </div>
         <div class="alert" id="alert"></div>
-        <div class="meters" id="meters"></div>
+        <div class="meters" id="meters"><!--pr--><div class=""><span class="k">큐 깊이</span><span class="n">0</span><span class="e">상한 500</span></div><div class=""><span class="k">큐가 잡은 힙</span><span class="n">0.0 MB</span><span class="e">여유 512MB</span></div><div class="good"><span class="k">누적 거부</span><span class="n">0</span><span class="e">초당 133.3</span></div><div class="bad"><span class="k">처리</span><span class="n">66.7 /s</span><span class="e">용량 66.7/s</span></div><div class=""><span class="k">경과</span><span class="n">0.0초</span><span class="e">&nbsp;</span></div><!--/pr--></div>
       </div>
       <p class="boardnote">가운데 막대가 큐입니다. 세로선은 상한이고, 무제한일 때는 사라지면서 눈금이 <strong>OOM 임계</strong>로 바뀝니다. 아래 칸은 소비 스레드예요 — 초록은 일하는 중, 노란 칸은 CallerRuns 로 <strong>생산자 스레드가 직접 처리하는 중</strong>입니다. 태스크 하나가 큐에서 256KB 를 잡고 있고 여유 힙은 512MB 로 뒀습니다.</p>
     </section>
 
     <section>
       <span class="cap">지금 부하에서 세 정책이 각각</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>정책</th><th>큐 깊이</th><th>거부/s</th><th>처리/s</th><th>대가</th></tr><tr class="on"><td>유계 + Abort</td><td class="num ">500</td><td class="num warn">133.3</td><td class="num">66.7</td><td class="warn">초과분 유실</td></tr><tr class=""><td>유계 + CallerRuns</td><td class="num ">500</td><td class="num ">0.0</td><td class="num">75.0</td><td class="warn">생산자가 느려짐</td></tr><tr class=""><td>무제한</td><td class="num bad">∞</td><td class="num ">0.0</td><td class="num">66.7</td><td class="bad">15.4초 뒤 OOM</td></tr><!--/pr--></table>
     </section>
 
     <section>

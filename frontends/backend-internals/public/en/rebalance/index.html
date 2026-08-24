@@ -95,26 +95,26 @@
     <section>
       <span class="cap">The inequality — cross it and you are dropped on every batch</span>
       <div class="board">
-        <div class="ineq" id="ineq"></div>
+        <div class="ineq" id="ineq"><!--pr--><div class="bar2 batch over"><span class="nm">batch time (500×700ms)</span><span class="tr"><span class="fl" style="width:98.0392156862745%"></span></span><span class="val">5.8m</span></div><div class="bar2 limit"><span class="nm">max.poll.interval.ms</span><span class="tr"><span class="fl" style="width:84.03361344537815%"></span></span><span class="val">5m</span></div><!--/pr--></div>
         <div class="verdictline" id="ineqVerdict"></div>
         <div class="cycle">
           <span class="cap">Where the time goes in one cycle</span>
-          <div class="track" id="track"></div>
-          <div class="cyclex" id="cycleX"></div>
+          <div class="track" id="track"><!--pr--><span class="seg2 waste" style="width:98.22950819672131%">discarded</span><span class="seg2 rebal" style="width:1.639344262295082%">rebalancing</span><!--/pr--></div>
+          <div class="cyclex" id="cycleX"><!--pr--><span>0</span><span>5m — dropped</span><span>5.1m</span><!--/pr--></div>
           <div class="legend">
             <span><i class="d"></i>processing that reached a commit</span>
             <span><i class="w"></i>processed, never committed</span>
             <span><i class="r"></i>rebalancing — nobody is consuming</span>
           </div>
         </div>
-        <div class="meters" id="meters"></div>
-        <div class="verdict" id="verdict"></div>
+        <div class="meters" id="meters"><!--pr--><div class="m bad"><span class="k">effective tput</span><span class="n">0.00<small>rec/s</small></span></div><div class="m bad"><span class="k">wasted</span><span class="n">4.21<small>rec/s</small></span></div><div class="m bad"><span class="k">commit ratio</span><span class="n">0.0%</span></div><div class="m bad"><span class="k">rebalances</span><span class="n">0.20<small>/min</small></span></div><div class="m "><span class="k">consumer busy</span><span class="n">98.4%</span></div><div class="m "><span class="k">detection delay</span><span class="n">5m</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>Effective throughput is exactly zero.</b> It processes <b>428 records</b> before the deadline and discards all of them.<br>The consumer is <b>98.4%</b> busy and <b>4.21 records/s</b> are wasted <span class="at">— the offset does not move one notch</span><!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">Same configuration, only the assignor changes</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>assignor</th><th>effective tput</th><th>consumer busy</th></tr><tr class="on"><td>eager (all stop)</td><td class="num same">0.00</td><td class="num">98.4%</td></tr><tr class=""><td>cooperative-sticky</td><td class="num same">0.00</td><td class="num">98.4%</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

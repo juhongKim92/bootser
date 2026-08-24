@@ -90,23 +90,23 @@
     <section>
       <span class="cap">굿풋 — 클라이언트가 실제로 받아간 응답</span>
       <div class="board">
-        <div class="trace" id="trace"></div>
-        <div class="tracex" id="traceX"></div>
+        <div class="trace" id="trace"><!--pr--><div class="ref" style="bottom:50%"><span>용량 100/s</span></div><i class="load" style="height:30%"></i><i class="dead" style="height:0%"></i><!--/pr--></div>
+        <div class="tracex" id="traceX"><!--pr--><span>60초 전</span><span>지금</span><!--/pr--></div>
 
         <div class="qwrap">
           <div class="qbar"><div class="fill" id="qFill"></div><div class="stale" id="qStale"></div></div>
-          <div class="qmeta" id="qMeta"></div>
+          <div class="qmeta" id="qMeta"><!--pr--><span>서버 큐 0건 — 그중 0건은 클라이언트가 이미 포기했다</span><span>상한 500</span><!--/pr--></div>
         </div>
 
-        <div class="meters" id="meters"></div>
-        <div class="verdict" id="verdict"></div>
-        <div class="hyst" id="hyst"></div>
+        <div class="meters" id="meters"><!--pr--><div class="m "><span class="k">서버가 받는 시도</span><span class="n">0.0<small>/s</small></span></div><div class="m bad"><span class="k">굿풋</span><span class="n">0.0<small>/s</small></span></div><div class="m "><span class="k">버려질 일</span><span class="n">0.0<small>/s</small></span></div><div class="m good"><span class="k">증폭 A = r^L</span><span class="n">1<small>배</small></span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>빠지는 중.</b> 큐가 줄고 있다 — 재시도가 용량을 다 먹지는 못한다<!--/pr--></div>
+        <div class="hyst" id="hyst"><!--pr--><div class="ax"></div><div class="gap" style="left:50%;width:0%"></div><div class="mk rec" style="left:50%"><b>회복 100.0/s</b></div><div class="mk brk" style="left:50%"><b>무너짐 100/s</b></div><div class="now" style="left:30%"></div><!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">같은 계층 수에서 재시도 횟수만 바꾸면</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>재시도 r</th><th>증폭 A</th><th>회복 임계</th><th>이력 폭</th></tr><tr class="on"><td>1회</td><td class="num">1배</td><td class="num good">100.0/s</td><td class="num">없음</td></tr><tr class=""><td>2회</td><td class="num">8배</td><td class="num bad">12.5/s</td><td class="num">8배</td></tr><tr class=""><td>3회</td><td class="num">27배</td><td class="num bad">3.7/s</td><td class="num">27배</td></tr><tr class=""><td>4회</td><td class="num">64배</td><td class="num bad">1.6/s</td><td class="num">64배</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

@@ -76,27 +76,27 @@
     <section>
       <span class="cap">요청 하나가 지나가는 동안</span>
       <div class="req">
-        <div class="bar" id="bar"></div>
-        <div class="hold" id="hold"></div>
+        <div class="bar" id="bar"><!--pr--><div class="free" style="width:1.4084507042253522%"></div><div class="db" style="width:4.788732394366197%"></div><div class="held" style="width:84.50704225352112%">외부 호출 — 커넥션을 쥐고 대기</div><div class="db" style="width:2.2535211267605635%"></div><div class="held" style="width:7.042253521126761%"></div><!--/pr--></div>
+        <div class="hold" id="hold"><!--pr--><div class="off" style="width:1.4084507042253522%"></div><div class="on" style="width:98.59154929577464%">커넥션 점유 350ms</div><div class="off" style="width:0%"></div><!--/pr--></div>
         <div class="legend">
           <span><i class="db"></i>쿼리 — 실제로 DB 를 쓰는 구간</span>
           <span><i class="held"></i>커넥션은 쥐고 있지만 DB 는 안 쓰는 구간</span>
           <span><i class="free"></i>커넥션을 안 쥐고 있는 구간</span>
         </div>
         <div class="leak" id="leak"></div>
-        <div class="meters" id="meters"></div>
+        <div class="meters" id="meters"><!--pr--><div class="bad"><span class="k">점유 시간</span><span class="n">350ms</span><span class="e">그중 DB 25ms</span></div><div class="bad"><span class="k">필요 커넥션</span><span class="n">17.5</span><span class="e">요청 × 점유</span></div><div class="bad"><span class="k">이용률</span><span class="n">175.0%</span><span class="e">&nbsp;</span></div><div class="bad"><span class="k">처리 상한</span><span class="n">28.6 req/s</span><span class="e">풀 10개 기준</span></div><!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">풀 — 리틀의 법칙으로 계산한 동시 점유</span>
-      <div class="pool" id="pool"></div>
-      <div class="queued" id="queued"></div>
+      <div class="pool" id="pool"><!--pr--><i class="busy"></i><i class="busy"></i><i class="busy"></i><i class="busy"></i><i class="busy"></i><i class="busy"></i><i class="busy"></i><i class="busy"></i><i class="busy"></i><i class="busy"></i><!--/pr--></div>
+      <div class="queued" id="queued"><!--pr-->동시에 17.5개 필요한데 풀은 10개 — 7.5개가 모자라 대기가 쌓인다<!--/pr--></div>
     </section>
 
     <section>
       <span class="cap">같은 부하에서 구성만 바꾸면</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>구성</th><th>점유 시간</th><th>그중 DB</th><th>필요 커넥션</th><th>상한(req/s)</th></tr><tr class="on"><td>OSIV 켜짐</td><td class="num bad">350ms</td><td class="num">25ms</td><td class="num bad">17.5</td><td class="num bad">28.6</td></tr><tr class=""><td>OSIV 끔</td><td class="num bad">325ms</td><td class="num">25ms</td><td class="num bad">16.3</td><td class="num bad">30.8</td></tr><tr class=""><td>OSIV 끔 + 외부 호출 분리</td><td class="num ">25ms</td><td class="num">25ms</td><td class="num good">1.3</td><td class="num good">400.0</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

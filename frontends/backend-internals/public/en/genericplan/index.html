@@ -76,17 +76,17 @@
       <span class="cap">time taken per execution</span>
       <div class="board">
         <div class="hist" id="hist"></div>
-        <div class="histx" id="histx"></div>
-        <div class="plan" id="plan"></div>
-        <div class="alert" id="verdict"></div>
-        <div class="meters" id="meters"></div>
+        <div class="histx" id="histx"><!--pr--><span>older runs</span><span>ceiling 150ms · log scale</span><span>latest</span><!--/pr--></div>
+        <div class="plan" id="plan"><!--pr--><span>plan in use</span><b>custom plan</b><span>· chosen per value</span><span class="est">0.4ms of planning per execution</span><!--/pr--></div>
+        <div class="alert" id="verdict"><!--pr--><b>0 of 5 runs</b> — still a custom plan, replanned with each value.<!--/pr--></div>
+        <div class="meters" id="meters"><!--pr--><div class=""><span class="k">runs</span><span class="n">0</span><span class="e">locked at —</span></div><div class="good"><span class="k">average</span><span class="n">41ms</span><span class="e">expected here</span></div><div class=""><span class="k">worst</span><span class="n">150ms</span><span class="e">on a common value</span></div><div class="good"><span class="k">typical</span><span class="n">4.4ms</span><span class="e">on a rare value</span></div><!--/pr--></div>
       </div>
       <p class="boardnote">Each bar is one execution. The vertical scale is <strong>logarithmic</strong> — without it a single exploded execution flattens everything else to the floor. Green is a custom plan, amber is a custom plan choosing a sequential scan, and <strong>red is a generic plan meeting a common value</strong>. The table holds a million rows; index scan cost is proportional to matched rows and a sequential scan is a flat 150ms.</p>
     </section>
 
     <section>
       <span class="cap">both plans under these conditions</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>plan</th><th>average</th><th>rare value</th><th>common value</th></tr><tr class="on"><td>force_custom_plan</td><td class="num">41ms</td><td class="num good">4.4ms</td><td class="num ">150ms</td></tr><tr class=""><td>force_generic_plan · index scan</td><td class="num">603ms</td><td class="num good">4.0ms</td><td class="num bad">2.40s</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

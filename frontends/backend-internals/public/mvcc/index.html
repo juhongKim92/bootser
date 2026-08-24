@@ -42,7 +42,7 @@
 
     <section class="axis">
       <span class="cap">트랜잭션 ID 축</span>
-      <div class="ticks" id="ticks"></div>
+      <div class="ticks" id="ticks"><!--pr--><span class="tick reclaimable">100</span><span class="tick" style="opacity:.45">101</span><!--/pr--></div>
       <div class="hz">
         <span>xmin horizon</span>
         <b id="hzVal">—</b>
@@ -84,7 +84,19 @@
         <div class="slot live"><span>103</span><span>—</span></div>
         <div class="txt"><b>위 = xmin · 이 버전을 만든 트랜잭션</b><br><b>아래 = xmax · 이 버전을 지운 트랜잭션 (— 이면 살아 있음)</b></div>
       </div>
-      <div class="pages" id="pages"></div>
+      <div class="pages" id="pages"><!--pr-->
+    <div class="page">
+      <span class="pno">page 0</span>
+      <div class="slots"><div class="slot live"><span>100</span><span>—</span></div><div class="slot live"><span>100</span><span>—</span></div><div class="slot live"><span>100</span><span>—</span></div><div class="slot live"><span>100</span><span>—</span></div><div class="slot live"><span>100</span><span>—</span></div><div class="slot live"><span>100</span><span>—</span></div><div class="slot live"><span>100</span><span>—</span></div><div class="slot live"><span>100</span><span>—</span></div></div>
+    </div>
+    <div class="page">
+      <span class="pno">page 1</span>
+      <div class="slots"><div class="slot live"><span>100</span><span>—</span></div><div class="slot live"><span>100</span><span>—</span></div><div class="slot live"><span>100</span><span>—</span></div><div class="slot live"><span>100</span><span>—</span></div><div class="slot live"><span>100</span><span>—</span></div><div class="slot live"><span>100</span><span>—</span></div><div class="slot live"><span>100</span><span>—</span></div><div class="slot live"><span>100</span><span>—</span></div></div>
+    </div>
+    <div class="page">
+      <span class="pno">page 2</span>
+      <div class="slots"><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div></div>
+    </div><!--/pr--></div>
       <div class="legend">
         <span class="l-live"><i></i><span>live</span></span>
         <span class="l-pending"><i></i><span>커밋 전</span></span>

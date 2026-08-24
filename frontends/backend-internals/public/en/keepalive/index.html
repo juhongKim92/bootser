@@ -84,22 +84,22 @@
     <section>
       <span class="cap">from the moment the client died</span>
       <div class="tl">
-        <div class="bar" id="bar"></div>
-        <div class="axis" id="axis"></div>
+        <div class="bar" id="bar"><!--pr--><div class="ghost" style="width:100%">server still believes it is alive · 2h 11m 15s</div><!--/pr--></div>
+        <div class="axis" id="axis"><!--pr--><span>client died</span><span>2h 11m 15s</span><!--/pr--></div>
         <div class="marks" id="marks"></div>
-        <div class="verdict" id="verdict"></div>
-        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"><!--pr--><span class="lbl">Last Will</span><span class="val pub">published</span><!--/pr--></div>
+        <div class="meters" id="meters"><!--pr--><div class="bad"><span class="k">ghost window</span><span class="n">2h 11m 15s</span></div><div class=""><span class="k">time to Will</span><span class="n">2h 11m 15s</span></div><!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">same conditions, only the detection method changes</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>method</th><th>calculation</th><th>ghost window</th></tr><tr class="on"><td>TCP default</td><td class="num">7200 + 75×9</td><td class="num bad">2h 11m 15s</td></tr><tr class=""><td>TCP tuned</td><td class="num">60 + 10×6</td><td class="num ">2m</td></tr><tr class=""><td>app keep-alive</td><td class="num">60 × 1.5</td><td class="num ">1m 30s</td></tr><!--/pr--></table>
     </section>
 
     <section>
       <span class="cap">sequence of events</span>
-      <div class="events" id="events"></div>
+      <div class="events" id="events"><!--pr--><div class="down"><span class="t">00:00:00</span><span>client loses power — no FIN</span></div><div class="warn"><span class="t">00:00:00</span><span>server: socket ESTABLISHED — still sitting in the connected list</span></div><div class="warn"><span class="t">02:00:00</span><span>first keepalive probe sent (after 7200s idle)</span></div><div class="down"><span class="t">02:11:15</span><span>9 probes unanswered (75s apart) → kernel closes the connection</span></div><div class="up"><span class="t">02:11:15</span><span>server: connection closed, marked offline</span></div><div class="down"><span class="t">02:11:15</span><span>broker publishes the Last Will (delay immediately)</span></div><!--/pr--></div>
     </section>
 
     <section class="transport">

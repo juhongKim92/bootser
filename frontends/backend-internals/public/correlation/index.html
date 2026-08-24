@@ -91,16 +91,16 @@
             <div class="track" id="strip"></div>
           </div>
         </div>
-        <div class="pend" id="pend"></div>
-        <div class="alert" id="verdict"></div>
-        <div class="meters" id="meters"></div>
+        <div class="pend" id="pend"><!--pr--><span class="k">응답을 기다리는 요청</span><i style="border-color:var(--rule);color:var(--ink-3)">없음</i><!--/pr--></div>
+        <div class="alert" id="verdict"><!--pr--><b>이 조건에서는 오매칭이 구조적으로 가능하다.</b> 화면의 빨간 칸은 호출자에게 정상 응답으로 보인다 — 예외도 로그도 남지 않는다.<!--/pr--></div>
+        <div class="meters" id="meters"><!--pr--><div class=""><span class="k">정확</span><span class="n">0.0%</span><span class="e">&nbsp;</span></div><div class="good"><span class="k">오매칭</span><span class="n">0.0%</span><span class="e">&nbsp;</span></div><div class=""><span class="k">유실</span><span class="n">0.0%</span><span class="e">&nbsp;</span></div><div class=""><span class="k">처리한 요청</span><span class="n">0</span><span class="e">동시 4건</span></div><!--/pr--></div>
       </div>
       <p class="boardnote">칸 하나가 요청 하나의 결말입니다. 초록은 <strong>자기 응답</strong>을 받은 것, 빨강은 <strong>남의 응답</strong>을 받은 것(오매칭), 노란 점선은 아무것도 못 받고 타임아웃된 것이에요. 아래 줄은 지금 응답을 기다리는 요청들입니다 — 단일 슬롯에서는 <strong>하나밖에 못 들고 있는 것</strong>이 보입니다.</p>
     </section>
 
     <section>
       <span class="cap">이 교란에서 네 방식이 원리적으로 안전한가</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>매칭 방식</th><th>안전한가</th><th>이유</th></tr><tr class="on"><td>단일 슬롯 (put)</td><td class="bad">오매칭 가능</td><td>새 요청이 앞의 future 를 덮어쓴다. 동시 요청이 1건일 때만 안전하다</td></tr><tr class=""><td>FIFO 큐</td><td class="good">안전</td><td>도착 순서가 요청 순서와 같으면 정확하다</td></tr><tr class=""><td>직렬화</td><td class="good">안전</td><td>동시에 한 건뿐이라 섞일 대상이 없다</td></tr><tr class=""><td>correlationId</td><td class="good">안전</td><td>id 로 찾으므로 순서에 기대지 않는다</td></tr><!--/pr--></table>
     </section>
 
     <section>

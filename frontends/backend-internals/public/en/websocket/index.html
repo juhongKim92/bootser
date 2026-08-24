@@ -86,16 +86,16 @@
         <span class="fan" id="fanNow"></span>
       </div>
 
-      <div class="servers" id="servers"></div>
-      <div class="offline" id="offline"></div>
-      <div class="meters" id="meters"></div>
+      <div class="servers" id="servers"><!--pr--><div class="srv  "><span class="nm">ws-0</span><div class="dots"><span class="st">nobody from this room</span></div><span class="st">&nbsp;</span></div><div class="srv  "><span class="nm">ws-1</span><div class="dots"><span class="st">nobody from this room</span></div><span class="st">&nbsp;</span></div><div class="srv  "><span class="nm">ws-2</span><div class="dots"><span class="st">nobody from this room</span></div><span class="st">&nbsp;</span></div><div class="srv  "><span class="nm">ws-3</span><div class="dots"><span class="st">nobody from this room</span></div><span class="st">&nbsp;</span></div><!--/pr--></div>
+      <div class="offline" id="offline"><!--pr--><i></i>0 of 12 reconnecting — attached to no server<!--/pr--></div>
+      <div class="meters" id="meters"><!--pr--><div class="bad"><span class="k">delivery</span><span class="n">0.0%</span><span class="e">exp 25.0</span></div><div class=""><span class="k">Redis fan-out</span><span class="n">0.00</span><span class="e">exp 0.00</span></div><div class=""><span class="k">wasted</span><span class="n">0.0%</span><span class="e">exp 0.0</span></div><div class=""><span class="k">missed total</span><span class="n">0</span><span class="e">of 0</span></div><!--/pr--></div>
 
       <p class="boardnote">Grey dots are room members connected to that server; green dots are the ones who received this message. A solid green border means the server received the message; a red dashed border means it <strong>received the message with nobody to give it to</strong>. Connection layout is redrawn on every publish — in reality a client stays pinned to one server, but this shows the average across many rooms and many moments on one screen. Grey numbers in the readouts are the expected values for these conditions.</p>
     </section>
 
     <section>
       <span class="cap">event log</span>
-      <div class="events" id="events"></div>
+      <div class="events" id="events"><!--pr--><div class="warn">4 servers · room of 12 · 0% reconnecting · local only — readouts reset</div><!--/pr--></div>
     </section>
 
     <section class="transport">

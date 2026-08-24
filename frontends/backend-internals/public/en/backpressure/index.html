@@ -92,19 +92,19 @@
           <div class="qwrap">
             <div class="qbar"><div class="fill" id="qFill"></div><div class="lim" id="qLim"></div></div>
             <div class="qmeta"><span id="qNow"></span><span id="qScale"></span></div>
-            <div class="workers" id="workers"></div>
+            <div class="workers" id="workers"><!--pr--><i class="idle"></i><i class="idle"></i><i class="idle"></i><i class="idle"></i><i class="idle"></i><i class="idle"></i><i class="idle"></i><i class="idle"></i><!--/pr--></div>
           </div>
           <div class="box" id="boxOut"><span class="k">out</span><span class="n" id="nOut">0</span><span class="k">/s · capacity <span id="nCap">0</span></span></div>
         </div>
         <div class="alert" id="alert"></div>
-        <div class="meters" id="meters"></div>
+        <div class="meters" id="meters"><!--pr--><div class=""><span class="k">queue depth</span><span class="n">0</span><span class="e">bound 500</span></div><div class=""><span class="k">heap held by queue</span><span class="n">0.0 MB</span><span class="e">of 512MB free</span></div><div class="good"><span class="k">rejected total</span><span class="n">0</span><span class="e">133.3 per second</span></div><div class="bad"><span class="k">throughput</span><span class="n">66.7 /s</span><span class="e">capacity 66.7/s</span></div><div class=""><span class="k">elapsed</span><span class="n">0.0s</span><span class="e">&nbsp;</span></div><!--/pr--></div>
       </div>
       <p class="boardnote">The middle bar is the queue. The vertical line is the bound; go unbounded and it disappears while the scale switches to the <strong>OOM threshold</strong>. The cells underneath are consumer threads — green is working, amber means CallerRuns has the <strong>producer thread doing the work itself</strong>. Each queued task holds 256KB and free heap is set to 512MB.</p>
     </section>
 
     <section>
       <span class="cap">all three policies at this load</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>policy</th><th>queue</th><th>rejected/s</th><th>through/s</th><th>cost</th></tr><tr class="on"><td>bounded + Abort</td><td class="num ">500</td><td class="num warn">133.3</td><td class="num">66.7</td><td class="warn">excess is lost</td></tr><tr class=""><td>bounded + CallerRuns</td><td class="num ">500</td><td class="num ">0.0</td><td class="num">75.0</td><td class="warn">producer slows</td></tr><tr class=""><td>unbounded</td><td class="num bad">∞</td><td class="num ">0.0</td><td class="num">66.7</td><td class="bad">OOM in 15.4s</td></tr><!--/pr--></table>
     </section>
 
     <section>

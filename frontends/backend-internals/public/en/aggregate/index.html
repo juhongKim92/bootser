@@ -83,20 +83,20 @@
     <section>
       <span class="cap">Same data, two paths</span>
       <div class="board">
-        <div class="two" id="two"></div>
+        <div class="two" id="two"><!--pr--><div class="num a"><span class="k">path A · re-aggregate source</span><span class="big">60.4167</span><span class="sub">overall weighted mean — counts the rows</span></div><div class="gap"><span class="k">difference</span><span class="big">0</span><span class="sub">identical</span></div><div class="num b"><span class="k">path B · reuse stored values</span><span class="big">60.4167</span><span class="sub">mean of daily means — ignores row counts</span></div><!--/pr--></div>
 
-        <div class="days" id="days"></div>
-        <div class="daysx" id="daysX"></div>
+        <div class="days" id="days"><!--pr--><div class="day" style="flex:100"><span class="lab2">40.25</span><span class="bar" style="height:45.596148399886715%"></span></div><div class="day" style="flex:100"><span class="lab2">60.75</span><span class="bar" style="height:68.81903143585386%"></span></div><div class="day" style="flex:100"><span class="lab2">80.25</span><span class="bar" style="height:90.9090909090909%"></span></div><!--/pr--></div>
+        <div class="daysx" id="daysX"><!--pr--><span style="flex:100">day 1 · 100 rows</span><span style="flex:100">day 2 · 100 rows</span><span style="flex:100">day 3 · 100 rows</span><!--/pr--></div>
 
-        <div class="steps" id="steps"></div>
-        <div class="meters" id="meters"></div>
-        <div class="verdict" id="verdict"></div>
+        <div class="steps" id="steps"><!--pr--><div class="step a"><span class="nm">path A</span><span class="ex">(100×40.25 + 100×60.75 + 100×80.25) / 300</span><span class="rs">60.4167</span></div><div class="step b"><span class="nm">path B · store</span><span class="ex">store each day’s mean at exact (trunc (discard))</span><span class="rs">40.25 · 60.75 · 80.25</span></div><div class="step b"><span class="nm">path B · mean</span><span class="ex">(40.25 + 60.75 + 80.25) / 3</span><span class="rs">60.4167</span></div><!--/pr--></div>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">difference</span><span class="n">0</span></div><div class="m good"><span class="k">relative</span><span class="n">0.000<small>%</small></span></div><div class="m good"><span class="k">decimals agreeing</span><span class="n">6</span></div><div class="m good"><span class="k">rows moved</span><span class="n">0</span></div><div class="m "><span class="k">rows per day</span><span class="n">100 / 100 / 100</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>Both paths give the same value.</b> Row counts are even and no precision was discarded.<br><span class="at">That combination rarely survives in practice — try moving a single dial</span><!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">Change only the rounding — same decimal place, three answers</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>rounding</th><th>stored values</th><th>path B</th><th>difference</th></tr><tr class="on"><td>trunc (discard)</td><td class="num2">40.25 · 60.75 · 80.25</td><td class="num2">60.4167</td><td class="num2 good">0</td></tr><tr class=""><td>round · numeric</td><td class="num2">40.25 · 60.75 · 80.25</td><td class="num2">60.4167</td><td class="num2 good">0</td></tr><tr class=""><td>round · double</td><td class="num2">40.25 · 60.75 · 80.25</td><td class="num2">60.4167</td><td class="num2 good">0</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

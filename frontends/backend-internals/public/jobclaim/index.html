@@ -82,25 +82,25 @@
 
     <section>
       <span class="cap">작업 하나를 놓고</span>
-      <div class="nodes" id="nodes"></div>
+      <div class="nodes" id="nodes"><!--pr--><div class="node "><span class="nm">worker-0<em></em></span><div class="rows"><span>집은 건수<b>0</b></span><span class="">그중 중복<b>0</b></span><span>헛돈 시도<b>0</b></span></div></div><!--/pr--></div>
       <p class="boardnote">초록 테두리는 작업을 집은 인스턴스, 빨간 테두리는 <strong>이미 남이 집은 걸 또 집은</strong> 인스턴스입니다. 노란 점선은 경합에서 져서 헛돈 인스턴스예요.</p>
     </section>
 
     <section>
       <span class="cap">작업별 결과</span>
       <div class="jobs" id="jobs"></div>
-      <div class="meters" id="meters"></div>
+      <div class="meters" id="meters"><!--pr--><div class="good"><span class="k">초과 실행률</span><span class="n">0.0%</span><span class="e">기대 0.0</span></div><div class=""><span class="k">헛돈 시도 / 건</span><span class="n">0.00</span><span class="e">기대 0.00</span></div><div class=""><span class="k">좀비 행</span><span class="n">0</span><span class="e">&nbsp;</span></div><div class=""><span class="k">작업 수</span><span class="n">0</span><span class="e">&nbsp;</span></div><!--/pr--></div>
       <p class="boardnote">초록 빈칸은 한 번만 실행된 작업, 빨간 칸의 숫자는 <strong>몇 번 실행됐는지</strong>, 노란 점선은 선점만 되고 끝나지 않은 좀비 행입니다. 계기의 회색 숫자는 이 조건에서의 기대값이에요.</p>
     </section>
 
     <section>
       <span class="cap">같은 인스턴스 수에서 방식만 바꾸면</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>선점 방식</th><th>초과 실행</th><th>헛돈 시도</th><th>판정</th></tr><tr class="on"><td>인메모리 + synchronized</td><td class="num good">0.0%</td><td class="num ">0.00</td><td class="good">중복 없음</td></tr><tr class=""><td>읽고 나서 상태 쓰기</td><td class="num good">0.0%</td><td class="num ">0.00</td><td class="good">중복 없음</td></tr><tr class=""><td>조건부 UPDATE</td><td class="num good">0.0%</td><td class="num ">0.00</td><td class="good">중복 없음</td></tr><tr class=""><td>SELECT … FOR UPDATE SKIP LOCKED</td><td class="num good">0.0%</td><td class="num ">0.00</td><td class="good">중복 없음</td></tr><!--/pr--></table>
     </section>
 
     <section>
       <span class="cap">사건 기록</span>
-      <div class="events" id="events"></div>
+      <div class="events" id="events"><!--pr--><div class="warn">인스턴스 1대 · 인메모리 + synchronized — 계기 초기화</div><!--/pr--></div>
     </section>
 
     <section class="transport">

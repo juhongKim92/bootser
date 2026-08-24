@@ -76,17 +76,17 @@
     <section>
       <span class="cap">당직 명단</span>
       <div class="board">
-        <div class="roster" id="roster"></div>
-        <div class="txs" id="txs"></div>
-        <div class="inv" id="inv"></div>
-        <div class="meters" id="meters"></div>
-        <div class="verdict" id="verdict"></div>
+        <div class="roster" id="roster"><!--pr--><div class="person on"><span class="nm">한지원</span><span class="st">당직 중</span></div><div class="person on"><span class="nm">서민재</span><span class="st">당직 중</span></div><div class="person on"><span class="nm">오세훈</span><span class="st">당직 중</span></div><div class="person on"><span class="nm">임하늘</span><span class="st">당직 중</span></div><div class="person on"><span class="nm">강도윤</span><span class="st">당직 중</span></div><!--/pr--></div>
+        <div class="txs" id="txs"><!--pr--><div class="empty">진행 중인 트랜잭션 없음</div><!--/pr--></div>
+        <div class="inv" id="inv"><!--pr--><span class="big">5</span><span>명 당직 중</span><span class="rule">규칙: 최소 1명</span><!--/pr--></div>
+        <div class="meters" id="meters"><!--pr--><div class="m "><span class="k">커밋</span><span class="n">0</span></div><div class="m "><span class="k">직렬화 실패 40001</span><span class="n">0</span></div><div class="m good"><span class="k">불변식 깬 커밋</span><span class="n">0</span></div><div class="m good"><span class="k">최소 당직</span><span class="n">5<small>명</small></span></div><div class="m "><span class="k">겹친 트랜잭션</span><span class="n">0</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>Read Committed.</b> 아직 겹치지 않았을 뿐이다 — 겹치는 순간 통과한다<!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">네 가지 방식이 각각 무엇을 주고 무엇을 받나</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>방식</th><th>write skew</th><th>40001</th><th>대가</th></tr><tr class="on"><td>Read Committed</td><td class="bad">막지 못한다</td><td>없음</td><td>없음 — 그래서 조용히 틀린다</td></tr><tr class=""><td>Repeatable Read</td><td class="bad">막지 못한다</td><td>없음</td><td>없음 — 그래서 조용히 틀린다</td></tr><tr class=""><td>Serializable</td><td class="good">막는다</td><td>던진다</td><td>재시도 코드가 반드시 필요하다</td></tr><tr class=""><td>RC + FOR UPDATE</td><td class="good">막는다</td><td>없음</td><td>대기 · 데드락 여지</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

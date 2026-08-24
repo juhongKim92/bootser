@@ -105,10 +105,12 @@ const memStore = () => {
    17편은 LAB_I18N 인라인 블록이 <script src> 앞에 있지만, gc·mvcc 는 거꾸로
    (실험대를 먼저 싣고 인라인에서 initGcLab(...) 을 호출한다). 순서를 뒤집으면
    "initGcLab is not defined" 로 헛되게 실패한다. */
-export function boot(page) {
+/* source 를 주면 파일 대신 그 HTML 로 돌린다. gen-prerender 가 "구운 것을 걷어낸
+   상태" 를 디스크에 쓰지 않고 돌려 보려고 쓴다 — 도중에 죽어도 파일이 안 망가진다. */
+export function boot(page, { source } = {}) {
     const file = join(PUB, page, 'index.html');
-    if (!existsSync(file)) throw new Error(`없는 페이지: ${page}`);
-    const html = readFileSync(file, 'utf8');
+    if (source === undefined && !existsSync(file)) throw new Error(`없는 페이지: ${page}`);
+    const html = source === undefined ? readFileSync(file, 'utf8') : source;
     const doc = makeDoc();
 
     const win = {};

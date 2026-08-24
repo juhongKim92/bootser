@@ -503,8 +503,13 @@
       `verify-<slug>.mjs`. `inject-beacon.mjs` **앞에서** 돌린다. 자세한 것은 `tools/README.md`
 - [ ] `sitemap.xml` 은 **손으로 고치지 않는다** — `node gen-sitemap.mjs` 가
       각 페이지의 실제 마지막 커밋 날짜로 다시 만든다
-- [ ] 배포는 이 순서로 — ① `gen-sitemap.mjs`(트리가 깨끗할 때) ② `inject-beacon.mjs`
-      ③ `wrangler deploy`. 거꾸로 하면 beacon 주입 탓에 lastmod 가 전부 오늘이 된다
+- [ ] **실험대 첫 화면을 굽는다** — `node tools/gen-prerender.mjs`. 실험대가 채우는
+      자리가 HTML 에 비어 있으면 첫 그림에서 높이 0 이었다가 스크립트가 돌 때
+      아래 내용이 전부 밀린다(CLS). 실험대 코드나 초기값을 고쳤으면 다시 돌린다.
+      `node tools/gen-prerender.mjs --check` 는 고치지 않고 최신인지만 본다
+- [ ] 배포는 이 순서로 — ① `gen-prerender.mjs` ② `gen-sitemap.mjs`(트리가 깨끗할 때)
+      ③ `inject-beacon.mjs` ④ `wrangler deploy`. 거꾸로 하면 beacon 주입 탓에
+      lastmod 가 전부 오늘이 된다
 - [ ] 배포 후 Search Console 에서 sitemap 재제출 + URL 검사
 
 ## SEO

@@ -90,14 +90,14 @@
           <div class="track"><div class="fill" id="gRows" style="width:0"></div></div>
         </div>
         <div class="dead" id="dead"></div>
-        <div class="meters" id="meters"></div>
+        <div class="meters" id="meters"><!--pr--><div class="good"><span class="k">burned</span><span class="n">0</span><span class="e">—× the rows</span></div><div class=""><span class="k">retry pool</span><span class="n">0.0</span><span class="e">files</span></div><div class=""><span class="k">elapsed</span><span class="n">0m</span><span class="e">0 cycles</span></div><div class=""><span class="k">runs out in</span><span class="n">46d</span><span class="e">&nbsp;</span></div><!--/pr--></div>
       </div>
       <p class="boardnote">The gap between the two bars is the whole page. The top bar is the numbers the sequence <strong>handed out</strong>; the bottom is the rows that <strong>actually remain</strong>. The difference is what rollbacks threw away. Time is accelerated — one step on screen is one batch cycle, one minute.</p>
     </section>
 
     <section>
       <span class="cap">when each setup runs out, at this failure rate</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>setup</th><th>runs out in</th><th>leak</th></tr><tr class="on"><td>validate after COPY · nothing</td><td class="num bad">18h 3m</td><td class="bad">rollbacks keep accumulating</td></tr><tr class=""><td>validate after COPY · attempt cap 5</td><td class="num ">29d 14h</td><td class="bad">rollbacks keep accumulating</td></tr><tr class=""><td>validate after COPY · terminal state</td><td class="num ">41d 10h</td><td class="bad">rollbacks keep accumulating</td></tr><tr class=""><td>validate before COPY · terminal state</td><td class="num ">46d</td><td class="good">none</td></tr><!--/pr--></table>
     </section>
 
     <section>

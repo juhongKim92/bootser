@@ -61,17 +61,17 @@
       <div class="lane">
         <div class="lane-head">
           <h3>G1GC</h3>
-          <div class="nums" id="nG1"></div>
+          <div class="nums" id="nG1"><!--pr--><span class="">young pause <b>95ms</b></span><span class="">mixed pause <b>161ms</b></span><span class="">GC count <b>0</b></span><span class="">total STW <b>0.00ms</b></span><span class="">throughput <b>100.0%</b></span><!--/pr--></div>
         </div>
-        <svg class="plot" id="pG1" viewBox="0 0 1000 96" preserveAspectRatio="none" role="img" aria-label="G1GC pause timeline"></svg>
+        <svg class="plot" id="pG1" viewBox="0 0 1000 96" preserveAspectRatio="none" role="img" aria-label="G1GC pause timeline"><!--pr--><line x1="0" y1="95.5" x2="1000" y2="95.5" stroke="var(--rule)"/><!--/pr--></svg>
       </div>
 
       <div class="lane">
         <div class="lane-head">
           <h3>ZGC</h3>
-          <div class="nums" id="nZ"></div>
+          <div class="nums" id="nZ"><!--pr--><span class="">max pause <b>0.28ms</b></span><span class="">GC count <b>6</b></span><span class="">total STW <b>1.68ms</b></span><span class="">throughput <b>100.0%</b></span><!--/pr--></div>
         </div>
-        <svg class="plot" id="pZ" viewBox="0 0 1000 96" preserveAspectRatio="none" role="img" aria-label="ZGC pause timeline"></svg>
+        <svg class="plot" id="pZ" viewBox="0 0 1000 96" preserveAspectRatio="none" role="img" aria-label="ZGC pause timeline"><!--pr--><line x1="0" y1="95.5" x2="1000" y2="95.5" stroke="var(--rule)"/><rect x="333.3" y="71.4" width="2.5" height="24.6" fill="var(--horizon)"/><rect x="393.3" y="71.4" width="2.5" height="24.6" fill="var(--horizon)"/><rect x="453.3" y="71.4" width="2.5" height="24.6" fill="var(--horizon)"/><rect x="666.7" y="71.4" width="2.5" height="24.6" fill="var(--horizon)"/><rect x="726.7" y="71.4" width="2.5" height="24.6" fill="var(--horizon)"/><rect x="786.7" y="71.4" width="2.5" height="24.6" fill="var(--horizon)"/><!--/pr--></svg>
         <div class="axis-note">
           <span>0s</span>
           <span id="scaleNote"></span>
@@ -88,11 +88,11 @@
       <span class="cap">Anatomy of one cycle</span>
       <div class="phase">
         <h4>G1GC — <span>stops the world while moving objects</span></h4>
-        <div class="strip" id="stripG1"></div>
+        <div class="strip" id="stripG1"><!--pr--><div class="stw" style="width:9.920634920634921%" title="Young Evacuation · 95ms">Young Evacuation</div><div class="conc" style="width:59.523809523809526%" title="Concurrent Mark · 569ms">Concurrent Mark</div><div class="stw" style="width:1.785714285714286%" title="Remark · 17ms"></div><div class="conc" style="width:11.904761904761905%" title="Concurrent Cleanup · 114ms">Concurrent Cleanup</div><div class="stw" style="width:16.865079365079367%" title="Mixed Evacuation · 161ms">Mixed Evacuation</div><!--/pr--></div>
       </div>
       <div class="phase">
         <h4>ZGC — <span>moves objects concurrently too</span></h4>
-        <div class="strip" id="stripZ"></div>
+        <div class="strip" id="stripZ"><!--pr--><div class="stw" style="width:0.53475935828877%" title="Mark Start · 0.28ms"></div><div class="conc" style="width:48.1283422459893%" title="Concurrent Mark · 25ms">Concurrent Mark</div><div class="stw" style="width:0.53475935828877%" title="Mark End · 0.28ms"></div><div class="conc" style="width:12.83422459893048%" title="Concurrent Prepare · 6.72ms">Concurrent Prepare</div><div class="stw" style="width:0.53475935828877%" title="Relocate Start · 0.28ms"></div><div class="conc" style="width:37.4331550802139%" title="Concurrent Relocate · 20ms">Concurrent Relocate</div><!--/pr--></div>
       </div>
       <div class="striplegend">
         <span class="s"><i></i><span>STW — application stopped</span></span>

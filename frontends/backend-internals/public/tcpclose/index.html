@@ -94,25 +94,25 @@
     <section>
       <span class="cap">선로에 나간 종료 신호</span>
       <div class="board">
-        <div class="wire" id="wire"></div>
+        <div class="wire" id="wire"><!--pr--><span class="lb">선로에 나간 종료 신호</span><span class="sigbox">FIN</span><span class="note">미독 데이터가 없다 — 정상적으로 FIN 이 나간다. 유실은 구조적으로 0 이다</span><!--/pr--></div>
 
         <div class="stream">
           <span class="cap">바이트 스트림 — 종료 신호는 언제나 맨 뒤에 있다</span>
-          <div class="bytes" id="bytes"></div>
-          <div class="streamx" id="streamX"></div>
+          <div class="bytes" id="bytes"><!--pr--><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><span class="tail">FIN</span><!--/pr--></div>
+          <div class="streamx" id="streamX"><!--pr--><span>첫 바이트</span><span>평문 — 잘리는 단위는 1 바이트</span><span>맨 뒤에 FIN</span><!--/pr--></div>
         </div>
 
-        <div class="hops" id="hops"></div>
+        <div class="hops" id="hops"><!--pr--><div class="hop"><span class="nm">커넥션 (1구간)</span><span class="ln">평문</span><span class="amt">0</span></div><!--/pr--></div>
 
-        <div class="verdicts" id="verdicts"></div>
-        <div class="meters" id="meters"></div>
-        <div class="verdict" id="verdict"></div>
+        <div class="verdicts" id="verdicts"><!--pr--><div class="vrow"><span class="who">애플리케이션</span><span class="tag ok">정상</span><span class="why">close() 를 불렀다. 이 판정은 언제나 정상이다</span></div><div class="vrow"><span class="who">TLS</span><span class="tag ok">정상</span><span class="why">TLS 를 쓰지 않는다</span></div><div class="vrow"><span class="who">TCP</span><span class="tag ok">정상</span><span class="why">FIN 이 나갔다. 모든 바이트가 전달된 뒤 EOF 가 뜬다</span></div><!--/pr--></div>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">종료 신호</span><span class="n">FIN</span></div><div class="m good"><span class="k">유실 상한</span><span class="n">0</span></div><div class="m good"><span class="k">유실 지점</span><span class="n">0</span></div><div class="m "><span class="k">잘리는 단위</span><span class="n">1 바이트</span></div><div class="m good"><span class="k">정상 종료 판정</span><span class="n">3 / 3</span></div><div class="m good"><span class="k">수신 측이 보는 것</span><span class="n">EOF</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>세 계층이 모두 "정상 종료" 라고 답한다.</b> FIN 이 나갔고 유실 상한은 0 이다.<br><span class="at">FIN 은 스트림 맨 끝에 놓이므로, EOF 는 모든 바이트가 전달된 뒤에만 뜬다</span><!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">종료 방식 네 가지 — 나머지 손잡이는 그대로</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>종료 방식</th><th>선로</th><th>유실 상한</th><th>클라이언트 코드</th></tr><tr class="on"><td>응답 읽고 close</td><td class="num good">FIN</td><td class="num good">0</td><td>close() 한 줄</td></tr><tr class=""><td>안 읽고 close</td><td class="num bad">RST</td><td class="num bad">16 KB</td><td>close() 한 줄 — 위와 동일하다</td></tr><tr class=""><td>SO_LINGER 0</td><td class="num bad">RST</td><td class="num bad">16 KB</td><td>옵션 한 줄 + close()</td></tr><tr class=""><td>shutdown(WR) 후 읽고 close</td><td class="num good">FIN</td><td class="num good">0</td><td>shutdown() 한 줄이 더 있다</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

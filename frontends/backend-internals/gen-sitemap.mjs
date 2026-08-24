@@ -2,9 +2,10 @@
    실행: node gen-sitemap.mjs   (frontends/backend-internals 에서)
 
    배포 순서가 중요하다 — 반드시 이 순서로 돌린다.
-     1. node gen-sitemap.mjs      (작업 트리가 깨끗한 상태에서)
-     2. node inject-beacon.mjs    (HTML 을 제자리에서 고친다)
-     3. wrangler deploy
+     1. node tools/gen-prerender.mjs  (실험대 첫 화면을 HTML 에 굽는다)
+     2. node gen-sitemap.mjs          (작업 트리가 깨끗한 상태에서)
+     3. node inject-beacon.mjs        (HTML 을 제자리에서 고친다)
+     4. wrangler deploy
    거꾸로 하면 beacon 주입으로 모든 HTML 이 수정본 상태가 되고,
    그러면 아래 커밋 안 된 수정본 판정에 전부 걸려 lastmod 가 죄다 오늘이 된다.
 

@@ -91,16 +91,16 @@
             <div class="track" id="strip"></div>
           </div>
         </div>
-        <div class="pend" id="pend"></div>
-        <div class="alert" id="verdict"></div>
-        <div class="meters" id="meters"></div>
+        <div class="pend" id="pend"><!--pr--><span class="k">awaiting a response</span><i style="border-color:var(--rule);color:var(--ink-3)">none</i><!--/pr--></div>
+        <div class="alert" id="verdict"><!--pr--><b>Under these conditions a mismatch is structurally possible.</b> Every red cell looked like a normal response to its caller — no exception, no log line.<!--/pr--></div>
+        <div class="meters" id="meters"><!--pr--><div class=""><span class="k">correct</span><span class="n">0.0%</span><span class="e">&nbsp;</span></div><div class="good"><span class="k">mismatched</span><span class="n">0.0%</span><span class="e">&nbsp;</span></div><div class=""><span class="k">lost</span><span class="n">0.0%</span><span class="e">&nbsp;</span></div><div class=""><span class="k">requests</span><span class="n">0</span><span class="e">4 in flight</span></div><!--/pr--></div>
       </div>
       <p class="boardnote">Each cell is one request's outcome. Green got <strong>its own response</strong>, red got <strong>someone else's</strong> (a mismatch), amber dashed timed out with nothing. The row below lists requests currently awaiting a response — with a single slot you can see it <strong>only ever holds one</strong>.</p>
     </section>
 
     <section>
       <span class="cap">is each approach structurally safe under this disturbance</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>matching</th><th>safe</th><th>why</th></tr><tr class="on"><td>single slot (put)</td><td class="bad">can mismatch</td><td>a new request overwrites the previous future. Safe only with one in flight</td></tr><tr class=""><td>FIFO queue</td><td class="good">safe</td><td>arrival order equals request order, so it lines up</td></tr><tr class=""><td>serialised</td><td class="good">safe</td><td>only one in flight, so there is nothing to interleave</td></tr><tr class=""><td>correlationId</td><td class="good">safe</td><td>looked up by id, so it never relies on order</td></tr><!--/pr--></table>
     </section>
 
     <section>

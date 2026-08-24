@@ -83,20 +83,20 @@
     <section>
       <span class="cap">같은 데이터, 두 경로</span>
       <div class="board">
-        <div class="two" id="two"></div>
+        <div class="two" id="two"><!--pr--><div class="num a"><span class="k">경로 A · 원천 재집계</span><span class="big">60.4167</span><span class="sub">전체 가중 평균 — 행 수를 센다</span></div><div class="gap"><span class="k">차이</span><span class="big">0</span><span class="sub">같다</span></div><div class="num b"><span class="k">경로 B · 저장값 재사용</span><span class="big">60.4167</span><span class="sub">일별 평균의 평균 — 행 수를 무시한다</span></div><!--/pr--></div>
 
-        <div class="days" id="days"></div>
-        <div class="daysx" id="daysX"></div>
+        <div class="days" id="days"><!--pr--><div class="day" style="flex:100"><span class="lab2">40.25</span><span class="bar" style="height:45.596148399886715%"></span></div><div class="day" style="flex:100"><span class="lab2">60.75</span><span class="bar" style="height:68.81903143585386%"></span></div><div class="day" style="flex:100"><span class="lab2">80.25</span><span class="bar" style="height:90.9090909090909%"></span></div><!--/pr--></div>
+        <div class="daysx" id="daysX"><!--pr--><span style="flex:100">1일 · 100행</span><span style="flex:100">2일 · 100행</span><span style="flex:100">3일 · 100행</span><!--/pr--></div>
 
-        <div class="steps" id="steps"></div>
-        <div class="meters" id="meters"></div>
-        <div class="verdict" id="verdict"></div>
+        <div class="steps" id="steps"><!--pr--><div class="step a"><span class="nm">경로 A</span><span class="ex">(100×40.25 + 100×60.75 + 100×80.25) / 300</span><span class="rs">60.4167</span></div><div class="step b"><span class="nm">경로 B · 저장</span><span class="ex">각 날 평균을 원값 로 저장 (trunc (버림))</span><span class="rs">40.25 · 60.75 · 80.25</span></div><div class="step b"><span class="nm">경로 B · 평균</span><span class="ex">(40.25 + 60.75 + 80.25) / 3</span><span class="rs">60.4167</span></div><!--/pr--></div>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">차이</span><span class="n">0</span></div><div class="m good"><span class="k">상대 차이</span><span class="n">0.000<small>%</small></span></div><div class="m good"><span class="k">일치하는 소수점</span><span class="n">6<small>자리</small></span></div><div class="m good"><span class="k">넘어간 행</span><span class="n">0<small>행</small></span></div><div class="m "><span class="k">날짜별 행 수</span><span class="n">100 / 100 / 100</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>두 경로가 같은 값을 낸다.</b> 행 수가 균등하고 저장 정밀도도 안 깎였다.<br><span class="at">실무에서 이 조건이 유지되는 경우는 드물다 — 손잡이를 하나만 움직여 보라</span><!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">반올림 방식만 바꾸면 — 같은 자리수인데도</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>반올림 방식</th><th>저장값</th><th>경로 B</th><th>차이</th></tr><tr class="on"><td>trunc (버림)</td><td class="num2">40.25 · 60.75 · 80.25</td><td class="num2">60.4167</td><td class="num2 good">0</td></tr><tr class=""><td>round · numeric</td><td class="num2">40.25 · 60.75 · 80.25</td><td class="num2">60.4167</td><td class="num2 good">0</td></tr><tr class=""><td>round · double</td><td class="num2">40.25 · 60.75 · 80.25</td><td class="num2">60.4167</td><td class="num2 good">0</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

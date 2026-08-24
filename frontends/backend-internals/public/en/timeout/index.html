@@ -90,14 +90,14 @@
           <button id="btnRun">pause</button>
         </div>
       </div>
-      <div class="hint" id="hint"></div>
+      <div class="hint" id="hint"><!--pr-->0ms &middot; The client sent the request — its deadline is 1000ms<!--/pr--></div>
     </section>
 
     <section>
       <span class="cap">One request where C is slow — timeline</span>
       <div class="board">
-        <div class="fall" id="fall"></div>
-        <div class="fallx" id="fallX"></div>
+        <div class="fall" id="fall"><!--pr--><div class="lane cl"><span class="ln">client</span><div class="tl"><div class="gone" style="left:76.14696363982486%;right:0"></div><div class="dl" style="left:76.14696363982486%"></div><div class="head" style="left:0%"></div><div class="tick" style="left:76.14696363982486%">gives up 1000ms</div><div class="win dead" style="left:0;width:76.14696363982486%">waiting</div></div></div><div class="lane "><span class="ln">A</span><div class="tl"><div class="gone" style="left:76.14696363982486%;right:0"></div><div class="dl" style="left:76.14696363982486%"></div><div class="head" style="left:0%"></div><div class="win dead" style="left:1.9036740909956213%;width:76.14696363982486%" title="A attempt 1 — sent 25ms · gives up 1025ms">try 1</div><div class="fire" style="left:78.05063773082048%"></div></div></div><div class="lane "><span class="ln">B</span><div class="tl"><div class="gone" style="left:76.14696363982486%;right:0"></div><div class="dl" style="left:76.14696363982486%"></div><div class="head" style="left:0%"></div><div class="win dead" style="left:3.8073481819912427%;width:76.14696363982486%" title="B→C — sent 50ms · budget given 1000ms"></div><div class="over" style="left:78.05063773082048%;width:1.9036740909956222%" title="a promise it cannot keep — past the point the caller is willing to wait"></div><div class="fire" style="left:79.9543118218161%"></div></div></div><div class="lane "><span class="ln">C works</span><div class="tl"><div class="gone" style="left:76.14696363982486%;right:0"></div><div class="dl" style="left:76.14696363982486%"></div><div class="head" style="left:0%"></div><div class="work slow" style="left:5.711022272986865%;width:91.37635636778984%" title="C works for 1200ms starting at 75ms"><div class="bey" style="width:22.916666666666664%"></div></div></div></div><!--/pr--></div>
+        <div class="fallx" id="fallX"><!--pr--><span>0</span><span>0.3s</span><span>0.7s</span><span>1.0s</span><span>1.3s</span><!--/pr--></div>
         <div class="legend">
           <span><i class="d"></i>client deadline</span>
           <span><i class="g"></i>nobody is waiting here</span>
@@ -106,15 +106,15 @@
           <span><i class="w"></i>C working, fast</span>
           <span><i class="o"></i>promise it cannot keep</span>
         </div>
-        <table class="fire-tbl" id="fireTbl"></table>
-        <div class="meters" id="meters"></div>
-        <div class="verdict" id="verdict"></div>
+        <table class="fire-tbl" id="fireTbl"><!--pr--><tr><th>Who set it</th><th>Value</th><th>Fires at</th><th>vs client deadline</th></tr><tr class="base"><td>client → A</td><td>1000ms</td><td>1000ms</td><td>baseline</td></tr><tr><td>A → B</td><td>1000ms</td><td>1025ms</td><td class="bad">25ms late — never gets to fire</td></tr><tr><td>B → C</td><td>1000ms</td><td>1050ms</td><td class="bad">50ms late — never gets to fire</td></tr><tr><td>time C can actually use</td><td>&mdash;</td><td>850ms</td><td class="same">six hops removed</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m bad"><span class="k">in-deadline success</span><span class="n">90.0<small>%</small></span></div><div class="m good"><span class="k">calls to C / req</span><span class="n">1.00</span></div><div class="m good"><span class="k">started after deadline</span><span class="n">0.00</span></div><div class="m bad"><span class="k">promises unkept</span><span class="n">1.00</span></div><div class="m good"><span class="k">orphaned answers</span><span class="n">0.000</span></div><div class="m "><span class="k">mean answer</span><span class="n">299<small>ms</small></span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>The inner timeout fires at 1050ms — the client left at 1000ms.</b><br>It is 50ms late, so the value makes no difference whatever you set it to <span class="at">— dead configuration</span><!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">Same configuration, propagation flipped</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>propagation</th><th>success</th><th>calls to C</th><th>after deadline</th><th>orphaned</th><th>mean answer</th></tr><tr class="on"><td>off</td><td class="num same">90.0%</td><td class="num same">1.00</td><td class="num same">0.00</td><td class="num same">0.000</td><td class="num bad">299ms</td></tr><tr class=""><td>on</td><td class="num same">90.0%</td><td class="num same">1.00</td><td class="num same">0.00</td><td class="num same">0.000</td><td class="num good">294ms</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

@@ -95,26 +95,26 @@
     <section>
       <span class="cap">부등식 — 위가 아래를 넘으면 매 배치마다 쫓겨난다</span>
       <div class="board">
-        <div class="ineq" id="ineq"></div>
+        <div class="ineq" id="ineq"><!--pr--><div class="bar2 batch over"><span class="nm">배치 처리시간 (500×700ms)</span><span class="tr"><span class="fl" style="width:98.0392156862745%"></span></span><span class="val">5.8분</span></div><div class="bar2 limit"><span class="nm">max.poll.interval.ms</span><span class="tr"><span class="fl" style="width:84.03361344537815%"></span></span><span class="val">5분</span></div><!--/pr--></div>
         <div class="verdictline" id="ineqVerdict"></div>
         <div class="cycle">
           <span class="cap">한 사이클에서 시간이 어디로 가나</span>
-          <div class="track" id="track"></div>
-          <div class="cyclex" id="cycleX"></div>
+          <div class="track" id="track"><!--pr--><span class="seg2 waste" style="width:98.22950819672131%">버려짐</span><span class="seg2 rebal" style="width:1.639344262295082%">리밸런싱</span><!--/pr--></div>
+          <div class="cyclex" id="cycleX"><!--pr--><span>0</span><span>5분 — 쫓겨남</span><span>5.1분</span><!--/pr--></div>
           <div class="legend">
             <span><i class="d"></i>커밋까지 간 처리</span>
             <span><i class="w"></i>처리했는데 커밋 안 됨</span>
             <span><i class="r"></i>리밸런싱 — 아무도 안 먹는다</span>
           </div>
         </div>
-        <div class="meters" id="meters"></div>
-        <div class="verdict" id="verdict"></div>
+        <div class="meters" id="meters"><!--pr--><div class="m bad"><span class="k">유효 처리량</span><span class="n">0.00<small>rec/s</small></span></div><div class="m bad"><span class="k">낭비</span><span class="n">4.21<small>rec/s</small></span></div><div class="m bad"><span class="k">커밋 비율</span><span class="n">0.0%</span></div><div class="m bad"><span class="k">리밸런싱</span><span class="n">0.20<small>회/분</small></span></div><div class="m "><span class="k">컨슈머 바쁨</span><span class="n">98.4%</span></div><div class="m "><span class="k">장애 감지 지연</span><span class="n">5분</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>유효 처리량이 정확히 0 이다.</b> 마감 전까지 <b>428건</b>을 처리하고 전부 버린다.<br>컨슈머는 <b>98.4%</b> 바쁘고 초당 <b>4.21건</b>이 낭비된다 <span class="at">— 오프셋은 한 칸도 안 움직인다</span><!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">같은 설정에서 배정 전략만 바꾸면</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>배정 전략</th><th>유효 처리량</th><th>컨슈머 바쁨</th></tr><tr class="on"><td>eager (전원 정지)</td><td class="num same">0.00</td><td class="num">98.4%</td></tr><tr class=""><td>cooperative-sticky</td><td class="num same">0.00</td><td class="num">98.4%</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

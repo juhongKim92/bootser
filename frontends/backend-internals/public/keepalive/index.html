@@ -84,22 +84,22 @@
     <section>
       <span class="cap">클라이언트가 죽은 순간부터</span>
       <div class="tl">
-        <div class="bar" id="bar"></div>
-        <div class="axis" id="axis"></div>
+        <div class="bar" id="bar"><!--pr--><div class="ghost" style="width:100%">서버는 살아있다고 믿는다 · 2시간 11분 15초</div><!--/pr--></div>
+        <div class="axis" id="axis"><!--pr--><span>클라이언트 사망</span><span>2시간 11분 15초</span><!--/pr--></div>
         <div class="marks" id="marks"></div>
-        <div class="verdict" id="verdict"></div>
-        <div class="meters" id="meters"></div>
+        <div class="verdict" id="verdict"><!--pr--><span class="lbl">Last Will</span><span class="val pub">발행됨</span><!--/pr--></div>
+        <div class="meters" id="meters"><!--pr--><div class="bad"><span class="k">유령 시간</span><span class="n">2시간 11분 15초</span></div><div class=""><span class="k">Will 발행까지</span><span class="n">2시간 11분 15초</span></div><!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">같은 조건에서 탐지 방식만 바꾸면</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>방식</th><th>계산</th><th>유령 시간</th></tr><tr class="on"><td>TCP 기본</td><td class="num">7200 + 75×9</td><td class="num bad">2시간 11분 15초</td></tr><tr class=""><td>TCP 튜닝</td><td class="num">60 + 10×6</td><td class="num ">2분</td></tr><tr class=""><td>앱 keep-alive</td><td class="num">60 × 1.5</td><td class="num ">1분 30초</td></tr><!--/pr--></table>
     </section>
 
     <section>
       <span class="cap">사건 순서</span>
-      <div class="events" id="events"></div>
+      <div class="events" id="events"><!--pr--><div class="down"><span class="t">00:00:00</span><span>클라이언트 전원 차단 — FIN 없음</span></div><div class="warn"><span class="t">00:00:00</span><span>서버: 소켓 ESTABLISHED — 접속자 목록에 그대로 남아 있다</span></div><div class="warn"><span class="t">02:00:00</span><span>첫 keepalive 프로브 발송 (7200초 유휴 후)</span></div><div class="down"><span class="t">02:11:15</span><span>프로브 9회 무응답 (75초 간격) → 커널이 연결 종료</span></div><div class="up"><span class="t">02:11:15</span><span>서버: 연결 종료, 오프라인으로 전환</span></div><div class="down"><span class="t">02:11:15</span><span>브로커가 Last Will 발행 (지연 즉시)</span></div><!--/pr--></div>
     </section>
 
     <section class="transport">

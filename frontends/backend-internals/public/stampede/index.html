@@ -81,23 +81,23 @@
     <section>
       <span class="cap">동시에 도는 재계산</span>
       <div class="board">
-        <div class="trace" id="trace"></div>
-        <div class="tracex" id="traceX"></div>
+        <div class="trace" id="trace"><!--pr--><div class="ref" style="bottom:0.9009009009009009%"><span>재계산 1개</span></div><i class="" style="height:0%"></i><!--/pr--></div>
+        <div class="tracex" id="traceX"><!--pr--><span>29초 전</span><span>세로 눈금 111개</span><span>지금</span><!--/pr--></div>
 
         <div class="ttl">
           <div class="ttlbar"><div class="fill" id="ttlFill"></div></div>
-          <div class="ttlmeta" id="ttlMeta"></div>
+          <div class="ttlmeta" id="ttlMeta"><!--pr--><span>만료까지 30.0초</span><span>TTL 30초</span><!--/pr--></div>
         </div>
 
-        <div class="works" id="works"></div>
-        <div class="meters" id="meters"></div>
-        <div class="verdict" id="verdict"></div>
+        <div class="works" id="works"><!--pr--><span class="none">도는 재계산 없음</span><!--/pr--></div>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">히트율</span><span class="n">100.0<small>%</small></span></div><div class="m good"><span class="k">만료당 중복 재계산</span><span class="n">0.0</span></div><div class="m good"><span class="k">동시 재계산 최대</span><span class="n">0</span></div><div class="m "><span class="k">평균 재계산</span><span class="n">0.00<small>/s</small></span></div><div class="m "><span class="k">대기한 요청</span><span class="n">0</span></div><div class="m "><span class="k">낡은 값 응답</span><span class="n">0</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>조용하다.</b> 만료까지 30초 남았다 — 지금은 네 방식이 구별되지 않는다<!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">네 방식이 각각 무엇을 주고 무엇을 받나</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>방식</th><th>만료당 재계산</th><th>대기</th><th>대가</th></tr><tr class="on"><td>무방비</td><td class="num bad">100 (= λ·T)</td><td class="num">없음</td><td>만료 순간 백엔드가 λ·T 배로 맞는다</td></tr><tr class=""><td>뮤텍스 / 싱글플라이트</td><td class="num good">1</td><td class="num bad">최대 200ms</td><td>λ·T − 1 건이 재계산을 기다린다</td></tr><tr class=""><td>확률적 조기 만료</td><td class="num good">1</td><td class="num">없음</td><td>값과 함께 재계산 시간을 저장해야 한다</td></tr><tr class=""><td>stale-while-revalidate</td><td class="num good">1</td><td class="num">없음</td><td>만료 직후 요청이 낡은 값을 받는다</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

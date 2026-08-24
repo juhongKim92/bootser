@@ -81,23 +81,23 @@
     <section>
       <span class="cap">recomputations running at once</span>
       <div class="board">
-        <div class="trace" id="trace"></div>
-        <div class="tracex" id="traceX"></div>
+        <div class="trace" id="trace"><!--pr--><div class="ref" style="bottom:0.9009009009009009%"><span>one recompute</span></div><i class="" style="height:0%"></i><!--/pr--></div>
+        <div class="tracex" id="traceX"><!--pr--><span>29s ago</span><span>scale 111</span><span>now</span><!--/pr--></div>
 
         <div class="ttl">
           <div class="ttlbar"><div class="fill" id="ttlFill"></div></div>
-          <div class="ttlmeta" id="ttlMeta"></div>
+          <div class="ttlmeta" id="ttlMeta"><!--pr--><span>30.0s to expiry</span><span>TTL 30s</span><!--/pr--></div>
         </div>
 
-        <div class="works" id="works"></div>
-        <div class="meters" id="meters"></div>
-        <div class="verdict" id="verdict"></div>
+        <div class="works" id="works"><!--pr--><span class="none">nothing recomputing</span><!--/pr--></div>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">hit rate</span><span class="n">100.0<small>%</small></span></div><div class="m good"><span class="k">duplicates per expiry</span><span class="n">0.0</span></div><div class="m good"><span class="k">peak concurrent</span><span class="n">0</span></div><div class="m "><span class="k">average recomputes</span><span class="n">0.00<small>/s</small></span></div><div class="m "><span class="k">requests that waited</span><span class="n">0</span></div><div class="m "><span class="k">stale responses</span><span class="n">0</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>Quiet.</b> 30s until expiry — the four approaches are indistinguishable right now<!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">what each of the four gives you, and what it charges</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>approach</th><th>recomputes per expiry</th><th>waiting</th><th>the charge</th></tr><tr class="on"><td>unprotected</td><td class="num bad">100 (= λ·T)</td><td class="num">none</td><td>the backend takes λ·T at once on every expiry</td></tr><tr class=""><td>mutex / singleflight</td><td class="num good">1</td><td class="num bad">up to 200ms</td><td>λ·T − 1 requests wait for the recomputation</td></tr><tr class=""><td>probabilistic early expiry</td><td class="num good">1</td><td class="num">none</td><td>you must store the recompute time with the value</td></tr><tr class=""><td>stale-while-revalidate</td><td class="num good">1</td><td class="num">none</td><td>requests just after expiry get a stale value</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

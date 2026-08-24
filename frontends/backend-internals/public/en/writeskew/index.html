@@ -76,17 +76,17 @@
     <section>
       <span class="cap">the on-call roster</span>
       <div class="board">
-        <div class="roster" id="roster"></div>
-        <div class="txs" id="txs"></div>
-        <div class="inv" id="inv"></div>
-        <div class="meters" id="meters"></div>
-        <div class="verdict" id="verdict"></div>
+        <div class="roster" id="roster"><!--pr--><div class="person on"><span class="nm">Ji-won</span><span class="st">on call</span></div><div class="person on"><span class="nm">Min-jae</span><span class="st">on call</span></div><div class="person on"><span class="nm">Se-hun</span><span class="st">on call</span></div><div class="person on"><span class="nm">Ha-neul</span><span class="st">on call</span></div><div class="person on"><span class="nm">Do-yun</span><span class="st">on call</span></div><!--/pr--></div>
+        <div class="txs" id="txs"><!--pr--><div class="empty">no transactions in flight</div><!--/pr--></div>
+        <div class="inv" id="inv"><!--pr--><span class="big">5</span><span>on call</span><span class="rule">rule: at least 1</span><!--/pr--></div>
+        <div class="meters" id="meters"><!--pr--><div class="m "><span class="k">commits</span><span class="n">0</span></div><div class="m "><span class="k">serialization failures 40001</span><span class="n">0</span></div><div class="m good"><span class="k">invariant-breaking commits</span><span class="n">0</span></div><div class="m good"><span class="k">minimum on call</span><span class="n">5<small> people</small></span></div><div class="m "><span class="k">overlapping transactions</span><span class="n">0</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>Read Committed.</b> Nothing has overlapped yet — the moment it does, it passes<!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">what each of the four gives you, and what it charges</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>approach</th><th>write skew</th><th>40001</th><th>the charge</th></tr><tr class="on"><td>Read Committed</td><td class="bad">does not stop it</td><td>none</td><td>none — which is why it fails quietly</td></tr><tr class=""><td>Repeatable Read</td><td class="bad">does not stop it</td><td>none</td><td>none — which is why it fails quietly</td></tr><tr class=""><td>Serializable</td><td class="good">stops it</td><td>raises it</td><td>retry code is mandatory</td></tr><tr class=""><td>RC + FOR UPDATE</td><td class="good">stops it</td><td>none</td><td>waiting · room for deadlock</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">

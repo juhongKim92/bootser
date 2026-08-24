@@ -86,16 +86,16 @@
         <span class="fan" id="fanNow"></span>
       </div>
 
-      <div class="servers" id="servers"></div>
-      <div class="offline" id="offline"></div>
-      <div class="meters" id="meters"></div>
+      <div class="servers" id="servers"><!--pr--><div class="srv  "><span class="nm">ws-0</span><div class="dots"><span class="st">이 방 사람 없음</span></div><span class="st">&nbsp;</span></div><div class="srv  "><span class="nm">ws-1</span><div class="dots"><span class="st">이 방 사람 없음</span></div><span class="st">&nbsp;</span></div><div class="srv  "><span class="nm">ws-2</span><div class="dots"><span class="st">이 방 사람 없음</span></div><span class="st">&nbsp;</span></div><div class="srv  "><span class="nm">ws-3</span><div class="dots"><span class="st">이 방 사람 없음</span></div><span class="st">&nbsp;</span></div><!--/pr--></div>
+      <div class="offline" id="offline"><!--pr--><i></i>재연결 중 0명 / 방 12명 — 어느 서버에도 붙어 있지 않다<!--/pr--></div>
+      <div class="meters" id="meters"><!--pr--><div class="bad"><span class="k">도달률</span><span class="n">0.0%</span><span class="e">기대 25.0</span></div><div class=""><span class="k">Redis 팬아웃</span><span class="n">0.00</span><span class="e">기대 0.00</span></div><div class=""><span class="k">헛일</span><span class="n">0.0%</span><span class="e">기대 0.0</span></div><div class=""><span class="k">누적 유실</span><span class="n">0</span><span class="e">대상 0</span></div><!--/pr--></div>
 
       <p class="boardnote">회색 점은 그 서버에 붙어 있는 방 구성원, 초록 점은 이번 메시지를 받은 사람입니다. 실선 초록 테두리는 메시지를 받은 서버, 빨간 점선은 <strong>받았지만 줄 사람이 없는 서버</strong>예요. 매 발행마다 구성원의 접속 분포를 새로 뽑습니다 — 실제로는 클라이언트가 한 서버에 붙어 있지만, 여러 방·여러 시점의 평균을 한 화면에서 보여주려고요. 계기의 회색 숫자는 이 조건에서의 기대값입니다.</p>
     </section>
 
     <section>
       <span class="cap">사건 기록</span>
-      <div class="events" id="events"></div>
+      <div class="events" id="events"><!--pr--><div class="warn">서버 4대 · 방 12명 · 재연결 0% · 로컬만 — 계기 초기화</div><!--/pr--></div>
     </section>
 
     <section class="transport">

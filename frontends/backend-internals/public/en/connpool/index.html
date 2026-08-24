@@ -76,27 +76,27 @@
     <section>
       <span class="cap">one request passing through</span>
       <div class="req">
-        <div class="bar" id="bar"></div>
-        <div class="hold" id="hold"></div>
+        <div class="bar" id="bar"><!--pr--><div class="free" style="width:1.4084507042253522%"></div><div class="db" style="width:4.788732394366197%"></div><div class="held" style="width:84.50704225352112%">external call — holding the connection</div><div class="db" style="width:2.2535211267605635%"></div><div class="held" style="width:7.042253521126761%"></div><!--/pr--></div>
+        <div class="hold" id="hold"><!--pr--><div class="off" style="width:1.4084507042253522%"></div><div class="on" style="width:98.59154929577464%">connection held 350ms</div><div class="off" style="width:0%"></div><!--/pr--></div>
         <div class="legend">
           <span><i class="db"></i>query — actually using the database</span>
           <span><i class="held"></i>holding the connection without using it</span>
           <span><i class="free"></i>not holding a connection</span>
         </div>
         <div class="leak" id="leak"></div>
-        <div class="meters" id="meters"></div>
+        <div class="meters" id="meters"><!--pr--><div class="bad"><span class="k">hold time</span><span class="n">350ms</span><span class="e">25ms of it database</span></div><div class="bad"><span class="k">connections needed</span><span class="n">17.5</span><span class="e">rps × hold</span></div><div class="bad"><span class="k">utilisation</span><span class="n">175.0%</span><span class="e">&nbsp;</span></div><div class="bad"><span class="k">capacity</span><span class="n">28.6 req/s</span><span class="e">at pool 10</span></div><!--/pr--></div>
       </div>
     </section>
 
     <section>
       <span class="cap">the pool — concurrent hold from Little's Law</span>
-      <div class="pool" id="pool"></div>
-      <div class="queued" id="queued"></div>
+      <div class="pool" id="pool"><!--pr--><i class="busy"></i><i class="busy"></i><i class="busy"></i><i class="busy"></i><i class="busy"></i><i class="busy"></i><i class="busy"></i><i class="busy"></i><i class="busy"></i><i class="busy"></i><!--/pr--></div>
+      <div class="queued" id="queued"><!--pr-->17.5 needed at once but the pool holds 10 — short by 7.5, threads queue up<!--/pr--></div>
     </section>
 
     <section>
       <span class="cap">same load, only the configuration changes</span>
-      <table class="cmp" id="cmp"></table>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>configuration</th><th>hold</th><th>of it db</th><th>needed</th><th>capacity (req/s)</th></tr><tr class="on"><td>OSIV on</td><td class="num bad">350ms</td><td class="num">25ms</td><td class="num bad">17.5</td><td class="num bad">28.6</td></tr><tr class=""><td>OSIV off</td><td class="num bad">325ms</td><td class="num">25ms</td><td class="num bad">16.3</td><td class="num bad">30.8</td></tr><tr class=""><td>OSIV off + I/O outside tx</td><td class="num ">25ms</td><td class="num">25ms</td><td class="num good">1.3</td><td class="num good">400.0</td></tr><!--/pr--></table>
     </section>
 
     <section class="transport">
