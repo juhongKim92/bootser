@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://dday.vermilion19.com/sitemap.xml
+Sitemap: https://this-is-the.day/sitemap.xml

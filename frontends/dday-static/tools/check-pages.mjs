@@ -79,6 +79,22 @@ check('favicon.svg', (file) => {
     if (w !== h) throw new Error(`정사각이 아니다 (${w}×${h})`);
 });
 
+/* ------------------------------------------------------------------ robots
+   손으로 쓰는 유일한 파일인데 도메인이 박혀 있다. config 의 BASE 를 바꾸면
+   나머지는 다 따라가는데 여기만 안 따라가서, 크롤러가 없는 sitemap 을 보게 된다. */
+{
+    const file = join(PUB, 'robots.txt');
+    if (!existsSync(file)) bad('/robots.txt', '없다');
+    else {
+        const txt = readFileSync(file, 'utf8');
+        const want = `Sitemap: ${BASE}/sitemap.xml`;
+        if (!txt.includes(want)) {
+            const has = (txt.match(/^Sitemap:.*$/m) || ['(줄 자체가 없다)'])[0];
+            bad('/robots.txt', `"${has}" — "${want}" 이어야 한다`);
+        }
+    }
+}
+
 /* ------------------------------------------------------------------ 스타일
    화면으로만 확인되는 것은 하니스가 못 본다. 그중 "있기로 하고 만든" 것 몇 개만
    계약으로 박아 둔다 — 나중에 CSS 를 손보다 조용히 사라지는 걸 막는다. */

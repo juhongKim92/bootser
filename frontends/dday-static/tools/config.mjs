@@ -3,7 +3,7 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-export const BASE = 'https://dday.vermilion19.com';
+export const BASE = 'https://this-is-the.day';
 
 export const HERE = dirname(fileURLToPath(import.meta.url));
 export const ROOT = join(HERE, '..');
