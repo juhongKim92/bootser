@@ -112,6 +112,7 @@ const L = {
         foot: (g) => `공휴일 자료 <a href="https://date.nager.at/" rel="noopener">Nager.Date</a> · <code>types</code> 가 <code>Public</code> 인 항목만 담았습니다. 갱신 ${g}.`,
         footTz: 'D-day 는 이 기기의 날짜로 계산합니다 — 다른 시간대의 국가를 볼 때는 하루 어긋날 수 있습니다.',
         crumbCountry: (c) => `${c.ko} 공휴일`,
+        contact: '문의',
         nfTitle: `없는 쪽입니다 — ${SITE}`,
         nfH1: '없는 쪽입니다',
         nfLede: '주소를 다시 확인해 주세요. 국가 페이지 주소는 두 글자 국가 코드입니다 — 대한민국은 <code>/kr/</code>, 미국은 <code>/us/</code>.',
@@ -153,6 +154,7 @@ const L = {
         foot: (g) => `Holiday data from <a href="https://date.nager.at/" rel="noopener">Nager.Date</a> · only entries whose <code>types</code> includes <code>Public</code>. Updated ${g}.`,
         footTz: 'The countdown uses this device’s date — it can be a day out when you view a country in another time zone.',
         crumbCountry: (c) => `${c.name} public holidays`,
+        contact: 'Contact',
         nfTitle: `Not here — ${SITE}`,
         nfH1: 'Not here',
         nfLede: 'Check the address. Country pages use the two-letter country code — <code>/en/kr/</code> for South Korea, <code>/en/us/</code> for the United States.',
@@ -222,9 +224,16 @@ function picker(t, label) {
     </details>`;
 }
 
+/* 연락처. 완성된 주소는 HTML 어디에도 없다 — 로컬 파트와 도메인을 뒤집어 담고
+   shared/contact.js 가 합친다. '@' 는 소스에 아예 등장하지 않는다.
+   backend-internals 와 같은 방식이고 같은 파일을 쓴다. */
+const CONTACT = '<span data-contact data-u="tcatnoc" data-d="moc.91noilimrev">'
+    + '<noscript>contact (at) vermilion19 (dot) com</noscript></span>';
+
 const foot = (t, generated) => `  <div class="foot">
     <p>${t.foot(generated)}</p>
     <p>${t.footTz}</p>
+    <p>${t.contact} ${CONTACT}</p>
   </div>`;
 
 /* ------------------------------------------------------------ 국가 페이지 */
@@ -330,6 +339,7 @@ ${foot(t, data.generated)}
 
 <script type="application/ld+json">${JSON.stringify(crumbs)}</script>
 <script src="/shared/dday.js"></script>
+<script src="/shared/contact.js"></script>
 </body>
 </html>
 `;
@@ -376,6 +386,7 @@ ${foot(t, generated)}
 </main>
 
 <script src="/shared/dday.js"></script>
+<script src="/shared/contact.js"></script>
 </body>
 </html>
 `;
@@ -415,8 +426,13 @@ function notFoundPage(t) {
   <h1>${esc(t.nfH1)}</h1>
   <p class="lede">${t.nfLede}</p>
   <p><a href="${t.dir}/#countries">${esc(t.nfBack)}</a></p>
+
+  <div class="foot">
+    <p>${t.contact} ${CONTACT}</p>
+  </div>
 </main>
 
+<script src="/shared/contact.js"></script>
 </body>
 </html>
 `;

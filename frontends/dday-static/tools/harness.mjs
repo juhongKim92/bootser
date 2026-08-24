@@ -52,6 +52,9 @@ export function makeEl(tag = 'div', { attrs: init = {}, kids = {} } = {}) {
         appendChild(c) { this.children.push(c); if (c) c.parentNode = this; return c; },
         removeChild(c) { this.children = this.children.filter((x) => x !== c); return c; },
         remove() { },
+        /* contact.js 가 조립한 <a> 로 자기를 갈아 끼운다. 스텁은 트리가 없으니
+           바꿔치기 대신 결과를 붙들어 둔다 — check-pages 가 그걸 읽는다. */
+        replaceWith(node) { this.replacedBy = node; },
         cloneNode() {
             const c = makeEl(tag, { attrs, kids });
             c.textContent = this.textContent;
@@ -78,7 +81,7 @@ export function makeEl(tag = 'div', { attrs: init = {}, kids = {} } = {}) {
 /* 같은 셀렉터는 같은 객체를 돌려준다 — 그래야 렌더 결과를 다시 읽을 수 있다.
    #picker 만은 안쪽 구조까지 미리 엮어 둔다. 선택기는 input · ul · .none 을 찾아
    서로 다른 갈림길로 가는데, 아무거나 돌려주면 그 갈림길이 사라진다. */
-function makeDoc(bodyAttrs, { rows, ids, lang }) {
+function makeDoc(bodyAttrs, { rows, ids, lang, contacts }) {
     const cache = new Map();
     const body = makeEl('body', { attrs: bodyAttrs });
     /* <html lang> 은 dday.js 가 말을 고르는 유일한 근거다. 안 옮기면 영어 페이지가
@@ -115,6 +118,7 @@ function makeDoc(bodyAttrs, { rows, ids, lang }) {
         },
         querySelectorAll(sel) {
             if (sel === 'tr[data-d]') return rows;
+            if (sel === '[data-contact]') return contacts;
             /* 선택기 항목은 dday.js 가 innerHTML 로 넣는다. 스텁은 트리를 만들지
                않으니 여기서 되읽을 수 없고, 채워진 결과는 check-pages.mjs 가
                pickerList.innerHTML 로 본다. */
@@ -124,7 +128,7 @@ function makeDoc(bodyAttrs, { rows, ids, lang }) {
         createElement: (t) => makeEl(t),
         createTextNode(t) { const e = makeEl('#text'); e.textContent = String(t); return e; },
         addEventListener() { }, removeEventListener() { },
-        cache, pickerList, rows,
+        cache, pickerList, rows, contacts,
     };
     return doc;
 }
@@ -165,6 +169,16 @@ function parseRows(html) {
         }));
     }
     return rows;
+}
+
+/* 연락처 조각. HTML 에는 뒤집힌 두 토막만 있고 완성된 주소가 없다 —
+   contact.js 가 합치는 결과가 맞는지 보려면 스텁에도 그 두 토막이 있어야 한다. */
+function parseContacts(html) {
+    const out = [];
+    for (const m of html.matchAll(/<span data-contact data-u="([^"]*)" data-d="([^"]*)"/g)) {
+        out.push(makeEl('span', { attrs: { 'data-u': m[1], 'data-d': m[2] } }));
+    }
+    return out;
 }
 
 const memStore = (seed = {}) => {
@@ -209,6 +223,7 @@ export function boot(page, { languages = ['ko-KR'], storage = {} } = {}) {
         rows: parseRows(html),
         ids: new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1])),
         lang: (html.match(/<html lang="([a-z]{2})">/) || [])[1] || 'ko',
+        contacts: parseContacts(html),
     });
     const fetched = [];
     const win = {};

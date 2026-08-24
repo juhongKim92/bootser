@@ -146,6 +146,9 @@ const WORDS = {
           asofYear: (y) => String(y) },
 };
 
+/* 푸터에 조립돼 나와야 하는 주소. 소스의 조각을 뒤집어 만들지 않고 여기 적는다. */
+const CONTACT_ADDR = 'contact' + String.fromCharCode(64) + 'vermilion19.com';
+
 const PROBE = '2026-06-15';                     /* 아무 날이나 — 재현 가능하기만 하면 된다 */
 function epochDayRef(iso) {
     const [y, m, d] = iso.split('-').map(Number);
@@ -192,6 +195,34 @@ for (const { page, lang, slug, label } of ALL) {
         const left = r.win.localStorage._dump();
         const keys = Object.keys(left);
         if (keys.length) bad(label, `localStorage 에 ${keys.join(', ')} 를 남겼다`);
+    }
+
+    /* 1.3. 연락처. HTML 에는 뒤집힌 두 토막만 있고 완성된 주소가 없어야 한다.
+       조각 하나만 틀려도 조용히 엉뚱한 주소가 나오므로 조립 결과까지 본다.
+       기대값은 여기 적어 둔다 — 같은 조각을 뒤집어 견주면 아무것도 검사하지 않는 것과 같다. */
+    {
+        const spans = (html.match(/<span data-contact /g) || []).length;
+        if (spans !== 1) bad(label, `연락처가 ${spans}개다 — 푸터에 하나여야 한다`);
+        if (!html.includes('src="/shared/contact.js"')) {
+            bad(label, 'contact.js 를 싣지 않는다 — 주소가 조립되지 않는다');
+        }
+        /* 수집 봇이 정규식으로 훑어 가져갈 만한 것이 남아 있으면 안 된다 */
+        if (/[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(html)) {
+            const hit = html.match(/[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/)[0];
+            bad(label, `완성된 메일 주소가 소스에 있다: ${hit}`);
+        }
+
+        const c = r.doc.contacts[0];
+        if (!c) bad(label, '연락처 조각을 찾지 못했다');
+        else if (!c.replacedBy) bad(label, 'contact.js 가 주소를 조립하지 않았다');
+        else {
+            const a = c.replacedBy;
+            if (a.textContent !== CONTACT_ADDR) {
+                bad(label, `조립된 주소가 ${a.textContent} 다 (기대 ${CONTACT_ADDR})`);
+            }
+            if (a.href !== 'mailto:' + CONTACT_ADDR) bad(label, `mailto 가 ${a.href} 다`);
+            if (a.rel !== 'nofollow') bad(label, `연락처 링크에 rel=nofollow 가 없다 (${a.rel})`);
+        }
     }
 
     /* 1.5. 언어 전환 단추 — 가는 곳과 적힌 글자가 같아야 한다.
@@ -614,6 +645,12 @@ for (const [file, lang, needle] of [
     if (!txt.includes('name="robots" content="noindex"')) bad('/' + file, 'noindex 가 없다');
     if (!txt.includes(needle)) bad('/' + file, `"${needle}" 가 없다 — 언어가 섞였다`);
     if (txt.includes('rel="canonical"')) bad('/' + file, 'canonical 이 있다 — 색인될 쪽이 아니다');
+    /* 404 는 pages() 순회에 안 들어가서 위 연락처 검사를 안 받는다 */
+    if (!txt.includes('<span data-contact ')) bad('/' + file, '연락처가 없다');
+    if (!txt.includes('src="/shared/contact.js"')) bad('/' + file, 'contact.js 를 싣지 않는다');
+    if (/[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(txt)) {
+        bad('/' + file, '완성된 메일 주소가 소스에 있다');
+    }
 }
 
 /* ------------------------------------------------- 10. ko / en 짝 맞추기 */
