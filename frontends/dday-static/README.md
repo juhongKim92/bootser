@@ -48,7 +48,7 @@ public/
 공휴일이 바뀌었는지 git diff 로 보이고, (3) `gen-sitemap.mjs` 가 `lastmod` 를
 커밋 날짜에서 뽑을 수 있다.
 
-## 배포
+## 자료 갱신
 
 **순서가 중요하다.**
 
@@ -59,8 +59,8 @@ node tools/gen-holidays.mjs    # 1. Nager 에서 자료를 새로 받는다 (유
 node tools/gen-pages.mjs       # 2. 자료로 HTML 을 다시 만든다
 git add -A && git commit       # 3. lastmod 가 여기서 정해진다
 node tools/gen-sitemap.mjs     # 4. sitemap.xml
-node tools/check-pages.mjs     # 5. 실패하면 배포하지 않는다 (종료 코드 1)
-npx wrangler deploy            # 6.
+node tools/check-pages.mjs     # 5. 실패하면 밀지 않는다 (종료 코드 1)
+git push                       # 6. 나머지는 Cloudflare 가 한다
 ```
 
 3번을 건너뛰면 모든 HTML 이 "커밋 안 된 수정본" 으로 판정돼 `lastmod` 가 죄다 오늘이
@@ -68,6 +68,26 @@ npx wrangler deploy            # 6.
 
 갱신 주기는 **월 1회면 충분하다**. 공휴일은 사실상 연 1회 바뀌고, 3년치(작년·올해·내년)를
 담고 있어 연말연시에도 "다음/지난" 이 비지 않는다.
+
+## Cloudflare 프로젝트 설정
+
+Workers Builds 가 push 를 받아 배포한다. 설정 네 칸이 전부인데, **backend-internals
+프로젝트 설정을 복사해 오면 둘 다 틀린다** — 실제로 그래서 두 번 깨졌다.
+
+| 칸 | 값 | 틀리면 |
+| --- | --- | --- |
+| Root directory | `frontends/dday-static` | 저장소 루트가 npm workspace 라 wrangler 가 "run in the root of a workspace" 로 멈춘다 |
+| Build command | `node tools/check-pages.mjs && node tools/inject-beacon.mjs` | backend-internals 는 `node inject-beacon.mjs` (루트, tools/ 아님) 라 `MODULE_NOT_FOUND` |
+| Deploy command | `npx wrangler deploy` | |
+| 환경 변수 | `CF_BEACON_TOKEN` | 없으면 비콘만 안 들어가고 배포는 된다 |
+
+빌드 명령에 검사를 물려 두었으므로 **깨진 페이지는 배포되지 않는다.**
+`inject-beacon.mjs` 는 검사 뒤에 와야 한다 — 커밋된 HTML 을 제자리에서 고치기 때문에
+먼저 돌리면 205개가 전부 수정본이 된다.
+
+빌드 단계에서는 `gen-holidays` · `gen-pages` 를 돌리지 않는다. 생성물이 이미 커밋돼
+있고, 빌드 때마다 Nager 를 204번 치면 자료가 조용히 바뀌어 배포될 수 있다.
+자료 갱신은 위 절차대로 손으로 하고 diff 를 보고 넘긴다.
 
 ## 검사
 
