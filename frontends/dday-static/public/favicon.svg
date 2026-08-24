@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" shape-rendering="crispEdges">
+  <!-- 오늘 뭐 쉬나 — 달력. 위쪽 고리 둘 · 꽉 찬 머리띠 · 빈칸으로 나뉜 날짜 격자 ·
+       오렌지 한 칸(오늘), 이 넷이 달력으로 읽히게 한다.
+       원화는 tools/favicon-art.mjs 의 16x16 픽셀맵이고 여기서 3배로 키웠다.
+       타일은 테마 무관 잉크 고정 — 종이색이면 밝은 탭 바에서 실루엣이 사라진다.
+       tools/gen-favicon.mjs 가 생성한다. 직접 고치지 말 것. -->
+  <rect width="48" height="48" fill="#17161a"/>
+  <rect x="12" y="6" width="3" height="6" fill="#ece7dd"/>
+  <rect x="30" y="6" width="3" height="6" fill="#ece7dd"/>
+  <rect x="6" y="12" width="36" height="6" fill="#ece7dd"/>
+  <rect x="6" y="18" width="3" height="3" fill="#ece7dd"/>
+  <rect x="39" y="18" width="3" height="3" fill="#ece7dd"/>
+  <rect x="6" y="21" width="3" height="3" fill="#ece7dd"/>
+  <rect x="12" y="21" width="6" height="3" fill="#ece7dd"/>
+  <rect x="21" y="21" width="6" height="3" fill="#ece7dd"/>
+  <rect x="30" y="21" width="6" height="3" fill="#ece7dd"/>
+  <rect x="39" y="21" width="3" height="3" fill="#ece7dd"/>
+  <rect x="6" y="24" width="3" height="3" fill="#ece7dd"/>
+  <rect x="39" y="24" width="3" height="3" fill="#ece7dd"/>
+  <rect x="6" y="27" width="3" height="3" fill="#ece7dd"/>
+  <rect x="12" y="27" width="6" height="3" fill="#ece7dd"/>
+  <rect x="21" y="27" width="6" height="3" fill="#ff7a18"/>
+  <rect x="30" y="27" width="6" height="3" fill="#ece7dd"/>
+  <rect x="39" y="27" width="3" height="3" fill="#ece7dd"/>
+  <rect x="6" y="30" width="3" height="3" fill="#ece7dd"/>
+  <rect x="21" y="30" width="6" height="3" fill="#ff7a18"/>
+  <rect x="39" y="30" width="3" height="3" fill="#ece7dd"/>
+  <rect x="6" y="33" width="3" height="3" fill="#ece7dd"/>
+  <rect x="12" y="33" width="6" height="3" fill="#ece7dd"/>
+  <rect x="21" y="33" width="6" height="3" fill="#ece7dd"/>
+  <rect x="30" y="33" width="6" height="3" fill="#ece7dd"/>
+  <rect x="39" y="33" width="3" height="3" fill="#ece7dd"/>
+  <rect x="6" y="36" width="3" height="3" fill="#ece7dd"/>
+  <rect x="39" y="36" width="3" height="3" fill="#ece7dd"/>
+  <rect x="6" y="39" width="36" height="3" fill="#ece7dd"/>
+</svg>

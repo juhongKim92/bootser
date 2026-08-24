@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <title>오늘 뭐 쉬나 — 204개국 공휴일과 다음 공휴일까지 D-day</title>
+  <meta name="description" content="오늘이 공휴일인지, 다음 공휴일까지 며칠 남았는지. 대한민국을 비롯한 204개국의 법정 공휴일을 날짜순으로 봅니다.">
+  <link rel="canonical" href="https://dday.vermilion19.com/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ko_KR">
+  <meta property="og:title" content="오늘 뭐 쉬나 — 204개국 공휴일과 다음 공휴일까지 D-day">
+  <meta property="og:description" content="오늘이 공휴일인지, 다음 공휴일까지 며칠 남았는지. 대한민국을 비롯한 204개국의 법정 공휴일을 날짜순으로 봅니다.">
+  <meta property="og:url" content="https://dday.vermilion19.com/">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+  <link rel="stylesheet" href="/shared/base.css">
+  <link rel="stylesheet" href="/shared/dday.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">오늘 뭐 쉬나</a>
+  <details class="picker" id="picker">
+    <summary>국가 선택</summary>
+    <div class="panel">
+      <input type="search" placeholder="국가 검색 — 한글·영어·코드" aria-label="국가 검색" autocomplete="off">
+      <ul>
+      <li data-cc="GH" data-ko="가나" data-en="Ghana" data-key="가나 ghana gh"><a href="/gh/" data-cc="GH"><span class="flag">🇬🇭</span>가나<span class="cc">GH</span></a></li>
+      <li data-cc="GA" data-ko="가봉" data-en="Gabon" data-key="가봉 gabon ga"><a href="/ga/" data-cc="GA"><span class="flag">🇬🇦</span>가봉<span class="cc">GA</span></a></li>
+      <li data-cc="GY" data-ko="가이아나" data-en="Guyana" data-key="가이아나 guyana gy"><a href="/gy/" data-cc="GY"><span class="flag">🇬🇾</span>가이아나<span class="cc">GY</span></a></li>
+      <li data-cc="GM" data-ko="감비아" data-en="Gambia" data-key="감비아 gambia gm"><a href="/gm/" data-cc="GM"><span class="flag">🇬🇲</span>감비아<span class="cc">GM</span></a></li>
+      <li data-cc="GG" data-ko="건지" data-en="Guernsey" data-key="건지 guernsey gg"><a href="/gg/" data-cc="GG"><span class="flag">🇬🇬</span>건지<span class="cc">GG</span></a></li>
+      <li data-cc="GP" data-ko="과들루프" data-en="Guadeloupe" data-key="과들루프 guadeloupe gp"><a href="/gp/" data-cc="GP"><span class="flag">🇬🇵</span>과들루프<span class="cc">GP</span></a></li>
+      <li data-cc="GT" data-ko="과테말라" data-en="Guatemala" data-key="과테말라 guatemala gt"><a href="/gt/" data-cc="GT"><span class="flag">🇬🇹</span>과테말라<span class="cc">GT</span></a></li>
+      <li data-cc="GD" data-ko="그레나다" data-en="Grenada" data-key="그레나다 grenada gd"><a href="/gd/" data-cc="GD"><span class="flag">🇬🇩</span>그레나다<span class="cc">GD</span></a></li>
+      <li data-cc="GR" data-ko="그리스" data-en="Greece" data-key="그리스 greece gr"><a href="/gr/" data-cc="GR"><span class="flag">🇬🇷</span>그리스<span class="cc">GR</span></a></li>
+      <li data-cc="GL" data-ko="그린란드" data-en="Greenland" data-key="그린란드 greenland gl"><a href="/gl/" data-cc="GL"><span class="flag">🇬🇱</span>그린란드<span class="cc">GL</span></a></li>
+      <li data-cc="GN" data-ko="기니" data-en="Guinea" data-key="기니 guinea gn"><a href="/gn/" data-cc="GN"><span class="flag">🇬🇳</span>기니<span class="cc">GN</span></a></li>
+      <li data-cc="GW" data-ko="기니비사우" data-en="Guinea-Bissau" data-key="기니비사우 guinea-bissau gw"><a href="/gw/" data-cc="GW"><span class="flag">🇬🇼</span>기니비사우<span class="cc">GW</span></a></li>
+      <li data-cc="NA" data-ko="나미비아" data-en="Namibia" data-key="나미비아 namibia na"><a href="/na/" data-cc="NA"><span class="flag">🇳🇦</span>나미비아<span class="cc">NA</span></a></li>
+      <li data-cc="NR" data-ko="나우루" data-en="Nauru" data-key="나우루 nauru nr"><a href="/nr/" data-cc="NR"><span class="flag">🇳🇷</span>나우루<span class="cc">NR</span></a></li>
+      <li data-cc="NG" data-ko="나이지리아" data-en="Nigeria" data-key="나이지리아 nigeria ng"><a href="/ng/" data-cc="NG"><span class="flag">🇳🇬</span>나이지리아<span class="cc">NG</span></a></li>
+      <li data-cc="SS" data-ko="남수단" data-en="South Sudan" data-key="남수단 south sudan ss"><a href="/ss/" data-cc="SS"><span class="flag">🇸🇸</span>남수단<span class="cc">SS</span></a></li>
+      <li data-cc="ZA" data-ko="남아프리카" data-en="South Africa" data-key="남아프리카 south africa za"><a href="/za/" data-cc="ZA"><span class="flag">🇿🇦</span>남아프리카<span class="cc">ZA</span></a></li>
+      <li data-cc="NL" data-ko="네덜란드" data-en="Netherlands" data-key="네덜란드 netherlands nl"><a href="/nl/" data-cc="NL"><span class="flag">🇳🇱</span>네덜란드<span class="cc">NL</span></a></li>
+      <li data-cc="BQ" data-ko="네덜란드령 카리브" data-en="Caribbean Netherlands" data-key="네덜란드령 카리브 caribbean netherlands bq"><a href="/bq/" data-cc="BQ"><span class="flag">🇧🇶</span>네덜란드령 카리브<span class="cc">BQ</span></a></li>
+      <li data-cc="NO" data-ko="노르웨이" data-en="Norway" data-key="노르웨이 norway no"><a href="/no/" data-cc="NO"><span class="flag">🇳🇴</span>노르웨이<span class="cc">NO</span></a></li>
+      <li data-cc="NF" data-ko="노퍽섬" data-en="Norfolk Island" data-key="노퍽섬 norfolk island nf"><a href="/nf/" data-cc="NF"><span class="flag">🇳🇫</span>노퍽섬<span class="cc">NF</span></a></li>
+      <li data-cc="NZ" data-ko="뉴질랜드" data-en="New Zealand" data-key="뉴질랜드 new zealand nz"><a href="/nz/" data-cc="NZ"><span class="flag">🇳🇿</span>뉴질랜드<span class="cc">NZ</span></a></li>
+      <li data-cc="NC" data-ko="뉴칼레도니아" data-en="New Caledonia" data-key="뉴칼레도니아 new caledonia nc"><a href="/nc/" data-cc="NC"><span class="flag">🇳🇨</span>뉴칼레도니아<span class="cc">NC</span></a></li>
+      <li data-cc="NU" data-ko="니우에" data-en="Niue" data-key="니우에 niue nu"><a href="/nu/" data-cc="NU"><span class="flag">🇳🇺</span>니우에<span class="cc">NU</span></a></li>
+      <li data-cc="NE" data-ko="니제르" data-en="Niger" data-key="니제르 niger ne"><a href="/ne/" data-cc="NE"><span class="flag">🇳🇪</span>니제르<span class="cc">NE</span></a></li>
+      <li data-cc="NI" data-ko="니카라과" data-en="Nicaragua" data-key="니카라과 nicaragua ni"><a href="/ni/" data-cc="NI"><span class="flag">🇳🇮</span>니카라과<span class="cc">NI</span></a></li>
+      <li data-cc="KR" data-ko="대한민국" data-en="South Korea" data-key="대한민국 south korea kr"><a href="/kr/" data-cc="KR"><span class="flag">🇰🇷</span>대한민국<span class="cc">KR</span></a></li>
+      <li data-cc="DK" data-ko="덴마크" data-en="Denmark" data-key="덴마크 denmark dk"><a href="/dk/" data-cc="DK"><span class="flag">🇩🇰</span>덴마크<span class="cc">DK</span></a></li>
+      <li data-cc="DM" data-ko="도미니카" data-en="Dominica" data-key="도미니카 dominica dm"><a href="/dm/" data-cc="DM"><span class="flag">🇩🇲</span>도미니카<span class="cc">DM</span></a></li>
+      <li data-cc="DO" data-ko="도미니카 공화국" data-en="Dominican Republic" data-key="도미니카 공화국 dominican republic do"><a href="/do/" data-cc="DO"><span class="flag">🇩🇴</span>도미니카 공화국<span class="cc">DO</span></a></li>
+      <li data-cc="DE" data-ko="독일" data-en="Germany" data-key="독일 germany de"><a href="/de/" data-cc="DE"><span class="flag">🇩🇪</span>독일<span class="cc">DE</span></a></li>
+      <li data-cc="LR" data-ko="라이베리아" data-en="Liberia" data-key="라이베리아 liberia lr"><a href="/lr/" data-cc="LR"><span class="flag">🇱🇷</span>라이베리아<span class="cc">LR</span></a></li>
+      <li data-cc="LV" data-ko="라트비아" data-en="Latvia" data-key="라트비아 latvia lv"><a href="/lv/" data-cc="LV"><span class="flag">🇱🇻</span>라트비아<span class="cc">LV</span></a></li>
+      <li data-cc="RU" data-ko="러시아" data-en="Russia" data-key="러시아 russia ru"><a href="/ru/" data-cc="RU"><span class="flag">🇷🇺</span>러시아<span class="cc">RU</span></a></li>
+      <li data-cc="LS" data-ko="레소토" data-en="Lesotho" data-key="레소토 lesotho ls"><a href="/ls/" data-cc="LS"><span class="flag">🇱🇸</span>레소토<span class="cc">LS</span></a></li>
+      <li data-cc="RO" data-ko="루마니아" data-en="Romania" data-key="루마니아 romania ro"><a href="/ro/" data-cc="RO"><span class="flag">🇷🇴</span>루마니아<span class="cc">RO</span></a></li>
+      <li data-cc="LU" data-ko="룩셈부르크" data-en="Luxembourg" data-key="룩셈부르크 luxembourg lu"><a href="/lu/" data-cc="LU"><span class="flag">🇱🇺</span>룩셈부르크<span class="cc">LU</span></a></li>
+      <li data-cc="RW" data-ko="르완다" data-en="Rwanda" data-key="르완다 rwanda rw"><a href="/rw/" data-cc="RW"><span class="flag">🇷🇼</span>르완다<span class="cc">RW</span></a></li>
+      <li data-cc="LY" data-ko="리비아" data-en="Libya" data-key="리비아 libya ly"><a href="/ly/" data-cc="LY"><span class="flag">🇱🇾</span>리비아<span class="cc">LY</span></a></li>
+      <li data-cc="LT" data-ko="리투아니아" data-en="Lithuania" data-key="리투아니아 lithuania lt"><a href="/lt/" data-cc="LT"><span class="flag">🇱🇹</span>리투아니아<span class="cc">LT</span></a></li>
+      <li data-cc="LI" data-ko="리히텐슈타인" data-en="Liechtenstein" data-key="리히텐슈타인 liechtenstein li"><a href="/li/" data-cc="LI"><span class="flag">🇱🇮</span>리히텐슈타인<span class="cc">LI</span></a></li>
+      <li data-cc="MG" data-ko="마다가스카르" data-en="Madagascar" data-key="마다가스카르 madagascar mg"><a href="/mg/" data-cc="MG"><span class="flag">🇲🇬</span>마다가스카르<span class="cc">MG</span></a></li>
+      <li data-cc="MQ" data-ko="마르티니크" data-en="Martinique" data-key="마르티니크 martinique mq"><a href="/mq/" data-cc="MQ"><span class="flag">🇲🇶</span>마르티니크<span class="cc">MQ</span></a></li>
+      <li data-cc="MH" data-ko="마셜 제도" data-en="Marshall Islands" data-key="마셜 제도 marshall islands mh"><a href="/mh/" data-cc="MH"><span class="flag">🇲🇭</span>마셜 제도<span class="cc">MH</span></a></li>
+      <li data-cc="MW" data-ko="말라위" data-en="Malawi" data-key="말라위 malawi mw"><a href="/mw/" data-cc="MW"><span class="flag">🇲🇼</span>말라위<span class="cc">MW</span></a></li>
+      <li data-cc="ML" data-ko="말리" data-en="Mali" data-key="말리 mali ml"><a href="/ml/" data-cc="ML"><span class="flag">🇲🇱</span>말리<span class="cc">ML</span></a></li>
+      <li data-cc="IM" data-ko="맨섬" data-en="Isle of Man" data-key="맨섬 isle of man im"><a href="/im/" data-cc="IM"><span class="flag">🇮🇲</span>맨섬<span class="cc">IM</span></a></li>
+      <li data-cc="MX" data-ko="멕시코" data-en="Mexico" data-key="멕시코 mexico mx"><a href="/mx/" data-cc="MX"><span class="flag">🇲🇽</span>멕시코<span class="cc">MX</span></a></li>
+      <li data-cc="MC" data-ko="모나코" data-en="Monaco" data-key="모나코 monaco mc"><a href="/mc/" data-cc="MC"><span class="flag">🇲🇨</span>모나코<span class="cc">MC</span></a></li>
+      <li data-cc="MA" data-ko="모로코" data-en="Morocco" data-key="모로코 morocco ma"><a href="/ma/" data-cc="MA"><span class="flag">🇲🇦</span>모로코<span class="cc">MA</span></a></li>
+      <li data-cc="MR" data-ko="모리타니" data-en="Mauritania" data-key="모리타니 mauritania mr"><a href="/mr/" data-cc="MR"><span class="flag">🇲🇷</span>모리타니<span class="cc">MR</span></a></li>
+      <li data-cc="MZ" data-ko="모잠비크" data-en="Mozambique" data-key="모잠비크 mozambique mz"><a href="/mz/" data-cc="MZ"><span class="flag">🇲🇿</span>모잠비크<span class="cc">MZ</span></a></li>
+      <li data-cc="ME" data-ko="몬테네그로" data-en="Montenegro" data-key="몬테네그로 montenegro me"><a href="/me/" data-cc="ME"><span class="flag">🇲🇪</span>몬테네그로<span class="cc">ME</span></a></li>
+      <li data-cc="MS" data-ko="몬트세라트" data-en="Montserrat" data-key="몬트세라트 montserrat ms"><a href="/ms/" data-cc="MS"><span class="flag">🇲🇸</span>몬트세라트<span class="cc">MS</span></a></li>
+      <li data-cc="MD" data-ko="몰도바" data-en="Moldova" data-key="몰도바 moldova md"><a href="/md/" data-cc="MD"><span class="flag">🇲🇩</span>몰도바<span class="cc">MD</span></a></li>
+      <li data-cc="MT" data-ko="몰타" data-en="Malta" data-key="몰타 malta mt"><a href="/mt/" data-cc="MT"><span class="flag">🇲🇹</span>몰타<span class="cc">MT</span></a></li>
+      <li data-cc="MN" data-ko="몽골" data-en="Mongolia" data-key="몽골 mongolia mn"><a href="/mn/" data-cc="MN"><span class="flag">🇲🇳</span>몽골<span class="cc">MN</span></a></li>
+      <li data-cc="US" data-ko="미국" data-en="United States" data-key="미국 united states us"><a href="/us/" data-cc="US"><span class="flag">🇺🇸</span>미국<span class="cc">US</span></a></li>
+      <li data-cc="VI" data-ko="미국령 버진아일랜드" data-en="United States Virgin Islands" data-key="미국령 버진아일랜드 united states virgin islands vi"><a href="/vi/" data-cc="VI"><span class="flag">🇻🇮</span>미국령 버진아일랜드<span class="cc">VI</span></a></li>
+      <li data-cc="FM" data-ko="미크로네시아" data-en="Micronesia" data-key="미크로네시아 micronesia fm"><a href="/fm/" data-cc="FM"><span class="flag">🇫🇲</span>미크로네시아<span class="cc">FM</span></a></li>
+      <li data-cc="VU" data-ko="바누아투" data-en="Vanuatu" data-key="바누아투 vanuatu vu"><a href="/vu/" data-cc="VU"><span class="flag">🇻🇺</span>바누아투<span class="cc">VU</span></a></li>
+      <li data-cc="BH" data-ko="바레인" data-en="Bahrain" data-key="바레인 bahrain bh"><a href="/bh/" data-cc="BH"><span class="flag">🇧🇭</span>바레인<span class="cc">BH</span></a></li>
+      <li data-cc="BB" data-ko="바베이도스" data-en="Barbados" data-key="바베이도스 barbados bb"><a href="/bb/" data-cc="BB"><span class="flag">🇧🇧</span>바베이도스<span class="cc">BB</span></a></li>
+      <li data-cc="VA" data-ko="바티칸 시국" data-en="Vatican City" data-key="바티칸 시국 vatican city va"><a href="/va/" data-cc="VA"><span class="flag">🇻🇦</span>바티칸 시국<span class="cc">VA</span></a></li>
+      <li data-cc="BS" data-ko="바하마" data-en="Bahamas" data-key="바하마 bahamas bs"><a href="/bs/" data-cc="BS"><span class="flag">🇧🇸</span>바하마<span class="cc">BS</span></a></li>
+      <li data-cc="BD" data-ko="방글라데시" data-en="Bangladesh" data-key="방글라데시 bangladesh bd"><a href="/bd/" data-cc="BD"><span class="flag">🇧🇩</span>방글라데시<span class="cc">BD</span></a></li>
+      <li data-cc="BM" data-ko="버뮤다" data-en="Bermuda" data-key="버뮤다 bermuda bm"><a href="/bm/" data-cc="BM"><span class="flag">🇧🇲</span>버뮤다<span class="cc">BM</span></a></li>
+      <li data-cc="BJ" data-ko="베냉" data-en="Benin" data-key="베냉 benin bj"><a href="/bj/" data-cc="BJ"><span class="flag">🇧🇯</span>베냉<span class="cc">BJ</span></a></li>
+      <li data-cc="VE" data-ko="베네수엘라" data-en="Venezuela" data-key="베네수엘라 venezuela ve"><a href="/ve/" data-cc="VE"><span class="flag">🇻🇪</span>베네수엘라<span class="cc">VE</span></a></li>
+      <li data-cc="VN" data-ko="베트남" data-en="Vietnam" data-key="베트남 vietnam vn"><a href="/vn/" data-cc="VN"><span class="flag">🇻🇳</span>베트남<span class="cc">VN</span></a></li>
+      <li data-cc="BE" data-ko="벨기에" data-en="Belgium" data-key="벨기에 belgium be"><a href="/be/" data-cc="BE"><span class="flag">🇧🇪</span>벨기에<span class="cc">BE</span></a></li>
+      <li data-cc="BY" data-ko="벨라루스" data-en="Belarus" data-key="벨라루스 belarus by"><a href="/by/" data-cc="BY"><span class="flag">🇧🇾</span>벨라루스<span class="cc">BY</span></a></li>
+      <li data-cc="BZ" data-ko="벨리즈" data-en="Belize" data-key="벨리즈 belize bz"><a href="/bz/" data-cc="BZ"><span class="flag">🇧🇿</span>벨리즈<span class="cc">BZ</span></a></li>
+      <li data-cc="BA" data-ko="보스니아 헤르체고비나" data-en="Bosnia and Herzegovina" data-key="보스니아 헤르체고비나 bosnia and herzegovina ba"><a href="/ba/" data-cc="BA"><span class="flag">🇧🇦</span>보스니아 헤르체고비나<span class="cc">BA</span></a></li>
+      <li data-cc="BW" data-ko="보츠와나" data-en="Botswana" data-key="보츠와나 botswana bw"><a href="/bw/" data-cc="BW"><span class="flag">🇧🇼</span>보츠와나<span class="cc">BW</span></a></li>
+      <li data-cc="BO" data-ko="볼리비아" data-en="Bolivia" data-key="볼리비아 bolivia bo"><a href="/bo/" data-cc="BO"><span class="flag">🇧🇴</span>볼리비아<span class="cc">BO</span></a></li>
+      <li data-cc="BI" data-ko="부룬디" data-en="Burundi" data-key="부룬디 burundi bi"><a href="/bi/" data-cc="BI"><span class="flag">🇧🇮</span>부룬디<span class="cc">BI</span></a></li>
+      <li data-cc="BF" data-ko="부르키나파소" data-en="Burkina Faso" data-key="부르키나파소 burkina faso bf"><a href="/bf/" data-cc="BF"><span class="flag">🇧🇫</span>부르키나파소<span class="cc">BF</span></a></li>
+      <li data-cc="MP" data-ko="북마리아나제도" data-en="Northern Mariana Islands" data-key="북마리아나제도 northern mariana islands mp"><a href="/mp/" data-cc="MP"><span class="flag">🇲🇵</span>북마리아나제도<span class="cc">MP</span></a></li>
+      <li data-cc="MK" data-ko="북마케도니아" data-en="North Macedonia" data-key="북마케도니아 north macedonia mk"><a href="/mk/" data-cc="MK"><span class="flag">🇲🇰</span>북마케도니아<span class="cc">MK</span></a></li>
+      <li data-cc="BG" data-ko="불가리아" data-en="Bulgaria" data-key="불가리아 bulgaria bg"><a href="/bg/" data-cc="BG"><span class="flag">🇧🇬</span>불가리아<span class="cc">BG</span></a></li>
+      <li data-cc="BR" data-ko="브라질" data-en="Brazil" data-key="브라질 brazil br"><a href="/br/" data-cc="BR"><span class="flag">🇧🇷</span>브라질<span class="cc">BR</span></a></li>
+      <li data-cc="WS" data-ko="사모아" data-en="Samoa" data-key="사모아 samoa ws"><a href="/ws/" data-cc="WS"><span class="flag">🇼🇸</span>사모아<span class="cc">WS</span></a></li>
+      <li data-cc="SM" data-ko="산마리노" data-en="San Marino" data-key="산마리노 san marino sm"><a href="/sm/" data-cc="SM"><span class="flag">🇸🇲</span>산마리노<span class="cc">SM</span></a></li>
+      <li data-cc="ST" data-ko="상투메 프린시페" data-en="São Tomé and Príncipe" data-key="상투메 프린시페 são tomé and príncipe st"><a href="/st/" data-cc="ST"><span class="flag">🇸🇹</span>상투메 프린시페<span class="cc">ST</span></a></li>
+      <li data-cc="MF" data-ko="생마르탱" data-en="Saint Martin" data-key="생마르탱 saint martin mf"><a href="/mf/" data-cc="MF"><span class="flag">🇲🇫</span>생마르탱<span class="cc">MF</span></a></li>
+      <li data-cc="BL" data-ko="생바르텔레미" data-en="Saint Barthélemy" data-key="생바르텔레미 saint barthélemy bl"><a href="/bl/" data-cc="BL"><span class="flag">🇧🇱</span>생바르텔레미<span class="cc">BL</span></a></li>
+      <li data-cc="PM" data-ko="생피에르 미클롱" data-en="Saint Pierre and Miquelon" data-key="생피에르 미클롱 saint pierre and miquelon pm"><a href="/pm/" data-cc="PM"><span class="flag">🇵🇲</span>생피에르 미클롱<span class="cc">PM</span></a></li>
+      <li data-cc="SN" data-ko="세네갈" data-en="Senegal" data-key="세네갈 senegal sn"><a href="/sn/" data-cc="SN"><span class="flag">🇸🇳</span>세네갈<span class="cc">SN</span></a></li>
+      <li data-cc="RS" data-ko="세르비아" data-en="Serbia" data-key="세르비아 serbia rs"><a href="/rs/" data-cc="RS"><span class="flag">🇷🇸</span>세르비아<span class="cc">RS</span></a></li>
+      <li data-cc="SC" data-ko="세이셸" data-en="Seychelles" data-key="세이셸 seychelles sc"><a href="/sc/" data-cc="SC"><span class="flag">🇸🇨</span>세이셸<span class="cc">SC</span></a></li>
+      <li data-cc="LC" data-ko="세인트루시아" data-en="Saint Lucia" data-key="세인트루시아 saint lucia lc"><a href="/lc/" data-cc="LC"><span class="flag">🇱🇨</span>세인트루시아<span class="cc">LC</span></a></li>
+      <li data-cc="VC" data-ko="세인트빈센트그레나딘" data-en="Saint Vincent and the Grenadines" data-key="세인트빈센트그레나딘 saint vincent and the grenadines vc"><a href="/vc/" data-cc="VC"><span class="flag">🇻🇨</span>세인트빈센트그레나딘<span class="cc">VC</span></a></li>
+      <li data-cc="KN" data-ko="세인트키츠 네비스" data-en="Saint Kitts and Nevis" data-key="세인트키츠 네비스 saint kitts and nevis kn"><a href="/kn/" data-cc="KN"><span class="flag">🇰🇳</span>세인트키츠 네비스<span class="cc">KN</span></a></li>
+      <li data-cc="SH" data-ko="세인트헬레나" data-en="Saint Helena, Ascension and Tristan da Cunha" data-key="세인트헬레나 saint helena, ascension and tristan da cunha sh"><a href="/sh/" data-cc="SH"><span class="flag">🇸🇭</span>세인트헬레나<span class="cc">SH</span></a></li>
+      <li data-cc="SO" data-ko="소말리아" data-en="Somalia" data-key="소말리아 somalia so"><a href="/so/" data-cc="SO"><span class="flag">🇸🇴</span>소말리아<span class="cc">SO</span></a></li>
+      <li data-cc="SB" data-ko="솔로몬 제도" data-en="Solomon Islands" data-key="솔로몬 제도 solomon islands sb"><a href="/sb/" data-cc="SB"><span class="flag">🇸🇧</span>솔로몬 제도<span class="cc">SB</span></a></li>
+      <li data-cc="SD" data-ko="수단" data-en="Sudan" data-key="수단 sudan sd"><a href="/sd/" data-cc="SD"><span class="flag">🇸🇩</span>수단<span class="cc">SD</span></a></li>
+      <li data-cc="SR" data-ko="수리남" data-en="Suriname" data-key="수리남 suriname sr"><a href="/sr/" data-cc="SR"><span class="flag">🇸🇷</span>수리남<span class="cc">SR</span></a></li>
+      <li data-cc="SJ" data-ko="스발바르제도-얀마웬섬" data-en="Svalbard and Jan Mayen" data-key="스발바르제도-얀마웬섬 svalbard and jan mayen sj"><a href="/sj/" data-cc="SJ"><span class="flag">🇸🇯</span>스발바르제도-얀마웬섬<span class="cc">SJ</span></a></li>
+      <li data-cc="SE" data-ko="스웨덴" data-en="Sweden" data-key="스웨덴 sweden se"><a href="/se/" data-cc="SE"><span class="flag">🇸🇪</span>스웨덴<span class="cc">SE</span></a></li>
+      <li data-cc="CH" data-ko="스위스" data-en="Switzerland" data-key="스위스 switzerland ch"><a href="/ch/" data-cc="CH"><span class="flag">🇨🇭</span>스위스<span class="cc">CH</span></a></li>
+      <li data-cc="ES" data-ko="스페인" data-en="Spain" data-key="스페인 spain es"><a href="/es/" data-cc="ES"><span class="flag">🇪🇸</span>스페인<span class="cc">ES</span></a></li>
+      <li data-cc="SK" data-ko="슬로바키아" data-en="Slovakia" data-key="슬로바키아 slovakia sk"><a href="/sk/" data-cc="SK"><span class="flag">🇸🇰</span>슬로바키아<span class="cc">SK</span></a></li>
+      <li data-cc="SI" data-ko="슬로베니아" data-en="Slovenia" data-key="슬로베니아 slovenia si"><a href="/si/" data-cc="SI"><span class="flag">🇸🇮</span>슬로베니아<span class="cc">SI</span></a></li>
+      <li data-cc="SY" data-ko="시리아" data-en="Syria" data-key="시리아 syria sy"><a href="/sy/" data-cc="SY"><span class="flag">🇸🇾</span>시리아<span class="cc">SY</span></a></li>
+      <li data-cc="SL" data-ko="시에라리온" data-en="Sierra Leone" data-key="시에라리온 sierra leone sl"><a href="/sl/" data-cc="SL"><span class="flag">🇸🇱</span>시에라리온<span class="cc">SL</span></a></li>
+      <li data-cc="SX" data-ko="신트마르턴" data-en="Sint Maarten" data-key="신트마르턴 sint maarten sx"><a href="/sx/" data-cc="SX"><span class="flag">🇸🇽</span>신트마르턴<span class="cc">SX</span></a></li>
+      <li data-cc="SG" data-ko="싱가포르" data-en="Singapore" data-key="싱가포르 singapore sg"><a href="/sg/" data-cc="SG"><span class="flag">🇸🇬</span>싱가포르<span class="cc">SG</span></a></li>
+      <li data-cc="AW" data-ko="아루바" data-en="Aruba" data-key="아루바 aruba aw"><a href="/aw/" data-cc="AW"><span class="flag">🇦🇼</span>아루바<span class="cc">AW</span></a></li>
+      <li data-cc="AM" data-ko="아르메니아" data-en="Armenia" data-key="아르메니아 armenia am"><a href="/am/" data-cc="AM"><span class="flag">🇦🇲</span>아르메니아<span class="cc">AM</span></a></li>
+      <li data-cc="AR" data-ko="아르헨티나" data-en="Argentina" data-key="아르헨티나 argentina ar"><a href="/ar/" data-cc="AR"><span class="flag">🇦🇷</span>아르헨티나<span class="cc">AR</span></a></li>
+      <li data-cc="IS" data-ko="아이슬란드" data-en="Iceland" data-key="아이슬란드 iceland is"><a href="/is/" data-cc="IS"><span class="flag">🇮🇸</span>아이슬란드<span class="cc">IS</span></a></li>
+      <li data-cc="HT" data-ko="아이티" data-en="Haiti" data-key="아이티 haiti ht"><a href="/ht/" data-cc="HT"><span class="flag">🇭🇹</span>아이티<span class="cc">HT</span></a></li>
+      <li data-cc="IE" data-ko="아일랜드" data-en="Ireland" data-key="아일랜드 ireland ie"><a href="/ie/" data-cc="IE"><span class="flag">🇮🇪</span>아일랜드<span class="cc">IE</span></a></li>
+      <li data-cc="AD" data-ko="안도라" data-en="Andorra" data-key="안도라 andorra ad"><a href="/ad/" data-cc="AD"><span class="flag">🇦🇩</span>안도라<span class="cc">AD</span></a></li>
+      <li data-cc="AL" data-ko="알바니아" data-en="Albania" data-key="알바니아 albania al"><a href="/al/" data-cc="AL"><span class="flag">🇦🇱</span>알바니아<span class="cc">AL</span></a></li>
+      <li data-cc="DZ" data-ko="알제리" data-en="Algeria" data-key="알제리 algeria dz"><a href="/dz/" data-cc="DZ"><span class="flag">🇩🇿</span>알제리<span class="cc">DZ</span></a></li>
+      <li data-cc="AO" data-ko="앙골라" data-en="Angola" data-key="앙골라 angola ao"><a href="/ao/" data-cc="AO"><span class="flag">🇦🇴</span>앙골라<span class="cc">AO</span></a></li>
+      <li data-cc="AG" data-ko="앤티가 바부다" data-en="Antigua and Barbuda" data-key="앤티가 바부다 antigua and barbuda ag"><a href="/ag/" data-cc="AG"><span class="flag">🇦🇬</span>앤티가 바부다<span class="cc">AG</span></a></li>
+      <li data-cc="AI" data-ko="앵귈라" data-en="Anguilla" data-key="앵귈라 anguilla ai"><a href="/ai/" data-cc="AI"><span class="flag">🇦🇮</span>앵귈라<span class="cc">AI</span></a></li>
+      <li data-cc="ER" data-ko="에리트리아" data-en="Eritrea" data-key="에리트리아 eritrea er"><a href="/er/" data-cc="ER"><span class="flag">🇪🇷</span>에리트리아<span class="cc">ER</span></a></li>
+      <li data-cc="SZ" data-ko="에스와티니" data-en="Eswatini" data-key="에스와티니 eswatini sz"><a href="/sz/" data-cc="SZ"><span class="flag">🇸🇿</span>에스와티니<span class="cc">SZ</span></a></li>
+      <li data-cc="EE" data-ko="에스토니아" data-en="Estonia" data-key="에스토니아 estonia ee"><a href="/ee/" data-cc="EE"><span class="flag">🇪🇪</span>에스토니아<span class="cc">EE</span></a></li>
+      <li data-cc="EC" data-ko="에콰도르" data-en="Ecuador" data-key="에콰도르 ecuador ec"><a href="/ec/" data-cc="EC"><span class="flag">🇪🇨</span>에콰도르<span class="cc">EC</span></a></li>
+      <li data-cc="ET" data-ko="에티오피아" data-en="Ethiopia" data-key="에티오피아 ethiopia et"><a href="/et/" data-cc="ET"><span class="flag">🇪🇹</span>에티오피아<span class="cc">ET</span></a></li>
+      <li data-cc="SV" data-ko="엘살바도르" data-en="El Salvador" data-key="엘살바도르 el salvador sv"><a href="/sv/" data-cc="SV"><span class="flag">🇸🇻</span>엘살바도르<span class="cc">SV</span></a></li>
+      <li data-cc="GB" data-ko="영국" data-en="United Kingdom" data-key="영국 united kingdom gb"><a href="/gb/" data-cc="GB"><span class="flag">🇬🇧</span>영국<span class="cc">GB</span></a></li>
+      <li data-cc="VG" data-ko="영국령 버진아일랜드" data-en="British Virgin Islands" data-key="영국령 버진아일랜드 british virgin islands vg"><a href="/vg/" data-cc="VG"><span class="flag">🇻🇬</span>영국령 버진아일랜드<span class="cc">VG</span></a></li>
+      <li data-cc="YE" data-ko="예멘" data-en="Yemen" data-key="예멘 yemen ye"><a href="/ye/" data-cc="YE"><span class="flag">🇾🇪</span>예멘<span class="cc">YE</span></a></li>
+      <li data-cc="AU" data-ko="오스트레일리아" data-en="Australia" data-key="오스트레일리아 australia au"><a href="/au/" data-cc="AU"><span class="flag">🇦🇺</span>오스트레일리아<span class="cc">AU</span></a></li>
+      <li data-cc="AT" data-ko="오스트리아" data-en="Austria" data-key="오스트리아 austria at"><a href="/at/" data-cc="AT"><span class="flag">🇦🇹</span>오스트리아<span class="cc">AT</span></a></li>
+      <li data-cc="HN" data-ko="온두라스" data-en="Honduras" data-key="온두라스 honduras hn"><a href="/hn/" data-cc="HN"><span class="flag">🇭🇳</span>온두라스<span class="cc">HN</span></a></li>
+      <li data-cc="AX" data-ko="올란드 제도" data-en="Åland Islands" data-key="올란드 제도 åland islands ax"><a href="/ax/" data-cc="AX"><span class="flag">🇦🇽</span>올란드 제도<span class="cc">AX</span></a></li>
+      <li data-cc="WF" data-ko="왈리스-푸투나 제도" data-en="Wallis and Futuna" data-key="왈리스-푸투나 제도 wallis and futuna wf"><a href="/wf/" data-cc="WF"><span class="flag">🇼🇫</span>왈리스-푸투나 제도<span class="cc">WF</span></a></li>
+      <li data-cc="UG" data-ko="우간다" data-en="Uganda" data-key="우간다 uganda ug"><a href="/ug/" data-cc="UG"><span class="flag">🇺🇬</span>우간다<span class="cc">UG</span></a></li>
+      <li data-cc="UY" data-ko="우루과이" data-en="Uruguay" data-key="우루과이 uruguay uy"><a href="/uy/" data-cc="UY"><span class="flag">🇺🇾</span>우루과이<span class="cc">UY</span></a></li>
+      <li data-cc="UA" data-ko="우크라이나" data-en="Ukraine" data-key="우크라이나 ukraine ua"><a href="/ua/" data-cc="UA"><span class="flag">🇺🇦</span>우크라이나<span class="cc">UA</span></a></li>
+      <li data-cc="IQ" data-ko="이라크" data-en="Iraq" data-key="이라크 iraq iq"><a href="/iq/" data-cc="IQ"><span class="flag">🇮🇶</span>이라크<span class="cc">IQ</span></a></li>
+      <li data-cc="EG" data-ko="이집트" data-en="Egypt" data-key="이집트 egypt eg"><a href="/eg/" data-cc="EG"><span class="flag">🇪🇬</span>이집트<span class="cc">EG</span></a></li>
+      <li data-cc="IT" data-ko="이탈리아" data-en="Italy" data-key="이탈리아 italy it"><a href="/it/" data-cc="IT"><span class="flag">🇮🇹</span>이탈리아<span class="cc">IT</span></a></li>
+      <li data-cc="ID" data-ko="인도네시아" data-en="Indonesia" data-key="인도네시아 indonesia id"><a href="/id/" data-cc="ID"><span class="flag">🇮🇩</span>인도네시아<span class="cc">ID</span></a></li>
+      <li data-cc="JP" data-ko="일본" data-en="Japan" data-key="일본 japan jp"><a href="/jp/" data-cc="JP"><span class="flag">🇯🇵</span>일본<span class="cc">JP</span></a></li>
+      <li data-cc="JM" data-ko="자메이카" data-en="Jamaica" data-key="자메이카 jamaica jm"><a href="/jm/" data-cc="JM"><span class="flag">🇯🇲</span>자메이카<span class="cc">JM</span></a></li>
+      <li data-cc="ZM" data-ko="잠비아" data-en="Zambia" data-key="잠비아 zambia zm"><a href="/zm/" data-cc="ZM"><span class="flag">🇿🇲</span>잠비아<span class="cc">ZM</span></a></li>
+      <li data-cc="JE" data-ko="저지" data-en="Jersey" data-key="저지 jersey je"><a href="/je/" data-cc="JE"><span class="flag">🇯🇪</span>저지<span class="cc">JE</span></a></li>
+      <li data-cc="GQ" data-ko="적도 기니" data-en="Equatorial Guinea" data-key="적도 기니 equatorial guinea gq"><a href="/gq/" data-cc="GQ"><span class="flag">🇬🇶</span>적도 기니<span class="cc">GQ</span></a></li>
+      <li data-cc="GE" data-ko="조지아" data-en="Georgia" data-key="조지아 georgia ge"><a href="/ge/" data-cc="GE"><span class="flag">🇬🇪</span>조지아<span class="cc">GE</span></a></li>
+      <li data-cc="CN" data-ko="중국" data-en="China" data-key="중국 china cn"><a href="/cn/" data-cc="CN"><span class="flag">🇨🇳</span>중국<span class="cc">CN</span></a></li>
+      <li data-cc="CF" data-ko="중앙 아프리카 공화국" data-en="Central African Republic" data-key="중앙 아프리카 공화국 central african republic cf"><a href="/cf/" data-cc="CF"><span class="flag">🇨🇫</span>중앙 아프리카 공화국<span class="cc">CF</span></a></li>
+      <li data-cc="DJ" data-ko="지부티" data-en="Djibouti" data-key="지부티 djibouti dj"><a href="/dj/" data-cc="DJ"><span class="flag">🇩🇯</span>지부티<span class="cc">DJ</span></a></li>
+      <li data-cc="GI" data-ko="지브롤터" data-en="Gibraltar" data-key="지브롤터 gibraltar gi"><a href="/gi/" data-cc="GI"><span class="flag">🇬🇮</span>지브롤터<span class="cc">GI</span></a></li>
+      <li data-cc="ZW" data-ko="짐바브웨" data-en="Zimbabwe" data-key="짐바브웨 zimbabwe zw"><a href="/zw/" data-cc="ZW"><span class="flag">🇿🇼</span>짐바브웨<span class="cc">ZW</span></a></li>
+      <li data-cc="TD" data-ko="차드" data-en="Chad" data-key="차드 chad td"><a href="/td/" data-cc="TD"><span class="flag">🇹🇩</span>차드<span class="cc">TD</span></a></li>
+      <li data-cc="CZ" data-ko="체코" data-en="Czechia" data-key="체코 czechia cz"><a href="/cz/" data-cc="CZ"><span class="flag">🇨🇿</span>체코<span class="cc">CZ</span></a></li>
+      <li data-cc="CL" data-ko="칠레" data-en="Chile" data-key="칠레 chile cl"><a href="/cl/" data-cc="CL"><span class="flag">🇨🇱</span>칠레<span class="cc">CL</span></a></li>
+      <li data-cc="CM" data-ko="카메룬" data-en="Cameroon" data-key="카메룬 cameroon cm"><a href="/cm/" data-cc="CM"><span class="flag">🇨🇲</span>카메룬<span class="cc">CM</span></a></li>
+      <li data-cc="CV" data-ko="카보베르데" data-en="Cape Verde" data-key="카보베르데 cape verde cv"><a href="/cv/" data-cc="CV"><span class="flag">🇨🇻</span>카보베르데<span class="cc">CV</span></a></li>
+      <li data-cc="KZ" data-ko="카자흐스탄" data-en="Kazakhstan" data-key="카자흐스탄 kazakhstan kz"><a href="/kz/" data-cc="KZ"><span class="flag">🇰🇿</span>카자흐스탄<span class="cc">KZ</span></a></li>
+      <li data-cc="KH" data-ko="캄보디아" data-en="Cambodia" data-key="캄보디아 cambodia kh"><a href="/kh/" data-cc="KH"><span class="flag">🇰🇭</span>캄보디아<span class="cc">KH</span></a></li>
+      <li data-cc="CA" data-ko="캐나다" data-en="Canada" data-key="캐나다 canada ca"><a href="/ca/" data-cc="CA"><span class="flag">🇨🇦</span>캐나다<span class="cc">CA</span></a></li>
+      <li data-cc="KE" data-ko="케냐" data-en="Kenya" data-key="케냐 kenya ke"><a href="/ke/" data-cc="KE"><span class="flag">🇰🇪</span>케냐<span class="cc">KE</span></a></li>
+      <li data-cc="KY" data-ko="케이맨 제도" data-en="Cayman Islands" data-key="케이맨 제도 cayman islands ky"><a href="/ky/" data-cc="KY"><span class="flag">🇰🇾</span>케이맨 제도<span class="cc">KY</span></a></li>
+      <li data-cc="KM" data-ko="코모로" data-en="Comoros" data-key="코모로 comoros km"><a href="/km/" data-cc="KM"><span class="flag">🇰🇲</span>코모로<span class="cc">KM</span></a></li>
+      <li data-cc="CR" data-ko="코스타리카" data-en="Costa Rica" data-key="코스타리카 costa rica cr"><a href="/cr/" data-cc="CR"><span class="flag">🇨🇷</span>코스타리카<span class="cc">CR</span></a></li>
+      <li data-cc="CC" data-ko="코코스 제도" data-en="Cocos (Keeling) Islands" data-key="코코스 제도 cocos (keeling) islands cc"><a href="/cc/" data-cc="CC"><span class="flag">🇨🇨</span>코코스 제도<span class="cc">CC</span></a></li>
+      <li data-cc="CI" data-ko="코트디부아르" data-en="Ivory Coast" data-key="코트디부아르 ivory coast ci"><a href="/ci/" data-cc="CI"><span class="flag">🇨🇮</span>코트디부아르<span class="cc">CI</span></a></li>
+      <li data-cc="CO" data-ko="콜롬비아" data-en="Colombia" data-key="콜롬비아 colombia co"><a href="/co/" data-cc="CO"><span class="flag">🇨🇴</span>콜롬비아<span class="cc">CO</span></a></li>
+      <li data-cc="CG" data-ko="콩고-브라자빌" data-en="Congo" data-key="콩고-브라자빌 congo cg"><a href="/cg/" data-cc="CG"><span class="flag">🇨🇬</span>콩고-브라자빌<span class="cc">CG</span></a></li>
+      <li data-cc="CD" data-ko="콩고-킨샤사" data-en="DR Congo" data-key="콩고-킨샤사 dr congo cd"><a href="/cd/" data-cc="CD"><span class="flag">🇨🇩</span>콩고-킨샤사<span class="cc">CD</span></a></li>
+      <li data-cc="CU" data-ko="쿠바" data-en="Cuba" data-key="쿠바 cuba cu"><a href="/cu/" data-cc="CU"><span class="flag">🇨🇺</span>쿠바<span class="cc">CU</span></a></li>
+      <li data-cc="CK" data-ko="쿡 제도" data-en="Cook Islands" data-key="쿡 제도 cook islands ck"><a href="/ck/" data-cc="CK"><span class="flag">🇨🇰</span>쿡 제도<span class="cc">CK</span></a></li>
+      <li data-cc="CW" data-ko="퀴라소" data-en="Curaçao" data-key="퀴라소 curaçao cw"><a href="/cw/" data-cc="CW"><span class="flag">🇨🇼</span>퀴라소<span class="cc">CW</span></a></li>
+      <li data-cc="HR" data-ko="크로아티아" data-en="Croatia" data-key="크로아티아 croatia hr"><a href="/hr/" data-cc="HR"><span class="flag">🇭🇷</span>크로아티아<span class="cc">HR</span></a></li>
+      <li data-cc="CX" data-ko="크리스마스섬" data-en="Christmas Island" data-key="크리스마스섬 christmas island cx"><a href="/cx/" data-cc="CX"><span class="flag">🇨🇽</span>크리스마스섬<span class="cc">CX</span></a></li>
+      <li data-cc="KI" data-ko="키리바시" data-en="Kiribati" data-key="키리바시 kiribati ki"><a href="/ki/" data-cc="KI"><span class="flag">🇰🇮</span>키리바시<span class="cc">KI</span></a></li>
+      <li data-cc="CY" data-ko="키프로스" data-en="Cyprus" data-key="키프로스 cyprus cy"><a href="/cy/" data-cc="CY"><span class="flag">🇨🇾</span>키프로스<span class="cc">CY</span></a></li>
+      <li data-cc="TZ" data-ko="탄자니아" data-en="Tanzania" data-key="탄자니아 tanzania tz"><a href="/tz/" data-cc="TZ"><span class="flag">🇹🇿</span>탄자니아<span class="cc">TZ</span></a></li>
+      <li data-cc="TC" data-ko="터크스 케이커스 제도" data-en="Turks and Caicos Islands" data-key="터크스 케이커스 제도 turks and caicos islands tc"><a href="/tc/" data-cc="TC"><span class="flag">🇹🇨</span>터크스 케이커스 제도<span class="cc">TC</span></a></li>
+      <li data-cc="TG" data-ko="토고" data-en="Togo" data-key="토고 togo tg"><a href="/tg/" data-cc="TG"><span class="flag">🇹🇬</span>토고<span class="cc">TG</span></a></li>
+      <li data-cc="TK" data-ko="토켈라우" data-en="Tokelau" data-key="토켈라우 tokelau tk"><a href="/tk/" data-cc="TK"><span class="flag">🇹🇰</span>토켈라우<span class="cc">TK</span></a></li>
+      <li data-cc="TO" data-ko="통가" data-en="Tonga" data-key="통가 tonga to"><a href="/to/" data-cc="TO"><span class="flag">🇹🇴</span>통가<span class="cc">TO</span></a></li>
+      <li data-cc="TV" data-ko="투발루" data-en="Tuvalu" data-key="투발루 tuvalu tv"><a href="/tv/" data-cc="TV"><span class="flag">🇹🇻</span>투발루<span class="cc">TV</span></a></li>
+      <li data-cc="TN" data-ko="튀니지" data-en="Tunisia" data-key="튀니지 tunisia tn"><a href="/tn/" data-cc="TN"><span class="flag">🇹🇳</span>튀니지<span class="cc">TN</span></a></li>
+      <li data-cc="TR" data-ko="튀르키예" data-en="Türkiye" data-key="튀르키예 türkiye tr"><a href="/tr/" data-cc="TR"><span class="flag">🇹🇷</span>튀르키예<span class="cc">TR</span></a></li>
+      <li data-cc="TT" data-ko="트리니다드 토바고" data-en="Trinidad and Tobago" data-key="트리니다드 토바고 trinidad and tobago tt"><a href="/tt/" data-cc="TT"><span class="flag">🇹🇹</span>트리니다드 토바고<span class="cc">TT</span></a></li>
+      <li data-cc="PA" data-ko="파나마" data-en="Panama" data-key="파나마 panama pa"><a href="/pa/" data-cc="PA"><span class="flag">🇵🇦</span>파나마<span class="cc">PA</span></a></li>
+      <li data-cc="PY" data-ko="파라과이" data-en="Paraguay" data-key="파라과이 paraguay py"><a href="/py/" data-cc="PY"><span class="flag">🇵🇾</span>파라과이<span class="cc">PY</span></a></li>
+      <li data-cc="PG" data-ko="파푸아뉴기니" data-en="Papua New Guinea" data-key="파푸아뉴기니 papua new guinea pg"><a href="/pg/" data-cc="PG"><span class="flag">🇵🇬</span>파푸아뉴기니<span class="cc">PG</span></a></li>
+      <li data-cc="PW" data-ko="팔라우" data-en="Palau" data-key="팔라우 palau pw"><a href="/pw/" data-cc="PW"><span class="flag">🇵🇼</span>팔라우<span class="cc">PW</span></a></li>
+      <li data-cc="FO" data-ko="페로 제도" data-en="Faroe Islands" data-key="페로 제도 faroe islands fo"><a href="/fo/" data-cc="FO"><span class="flag">🇫🇴</span>페로 제도<span class="cc">FO</span></a></li>
+      <li data-cc="PE" data-ko="페루" data-en="Peru" data-key="페루 peru pe"><a href="/pe/" data-cc="PE"><span class="flag">🇵🇪</span>페루<span class="cc">PE</span></a></li>
+      <li data-cc="PT" data-ko="포르투갈" data-en="Portugal" data-key="포르투갈 portugal pt"><a href="/pt/" data-cc="PT"><span class="flag">🇵🇹</span>포르투갈<span class="cc">PT</span></a></li>
+      <li data-cc="FK" data-ko="포클랜드 제도" data-en="Falkland Islands" data-key="포클랜드 제도 falkland islands fk"><a href="/fk/" data-cc="FK"><span class="flag">🇫🇰</span>포클랜드 제도<span class="cc">FK</span></a></li>
+      <li data-cc="PL" data-ko="폴란드" data-en="Poland" data-key="폴란드 poland pl"><a href="/pl/" data-cc="PL"><span class="flag">🇵🇱</span>폴란드<span class="cc">PL</span></a></li>
+      <li data-cc="PR" data-ko="푸에르토리코" data-en="Puerto Rico" data-key="푸에르토리코 puerto rico pr"><a href="/pr/" data-cc="PR"><span class="flag">🇵🇷</span>푸에르토리코<span class="cc">PR</span></a></li>
+      <li data-cc="FR" data-ko="프랑스" data-en="France" data-key="프랑스 france fr"><a href="/fr/" data-cc="FR"><span class="flag">🇫🇷</span>프랑스<span class="cc">FR</span></a></li>
+      <li data-cc="GF" data-ko="프랑스령 기아나" data-en="French Guiana" data-key="프랑스령 기아나 french guiana gf"><a href="/gf/" data-cc="GF"><span class="flag">🇬🇫</span>프랑스령 기아나<span class="cc">GF</span></a></li>
+      <li data-cc="PF" data-ko="프랑스령 폴리네시아" data-en="French Polynesia" data-key="프랑스령 폴리네시아 french polynesia pf"><a href="/pf/" data-cc="PF"><span class="flag">🇵🇫</span>프랑스령 폴리네시아<span class="cc">PF</span></a></li>
+      <li data-cc="FI" data-ko="핀란드" data-en="Finland" data-key="핀란드 finland fi"><a href="/fi/" data-cc="FI"><span class="flag">🇫🇮</span>핀란드<span class="cc">FI</span></a></li>
+      <li data-cc="PH" data-ko="필리핀" data-en="Philippines" data-key="필리핀 philippines ph"><a href="/ph/" data-cc="PH"><span class="flag">🇵🇭</span>필리핀<span class="cc">PH</span></a></li>
+      <li data-cc="PN" data-ko="핏케언 제도" data-en="Pitcairn Islands" data-key="핏케언 제도 pitcairn islands pn"><a href="/pn/" data-cc="PN"><span class="flag">🇵🇳</span>핏케언 제도<span class="cc">PN</span></a></li>
+      <li data-cc="HU" data-ko="헝가리" data-en="Hungary" data-key="헝가리 hungary hu"><a href="/hu/" data-cc="HU"><span class="flag">🇭🇺</span>헝가리<span class="cc">HU</span></a></li>
+      <li data-cc="HK" data-ko="홍콩(중국 특별행정구)" data-en="Hong Kong" data-key="홍콩(중국 특별행정구) hong kong hk"><a href="/hk/" data-cc="HK"><span class="flag">🇭🇰</span>홍콩(중국 특별행정구)<span class="cc">HK</span></a></li>
+      </ul>
+      <div class="none" hidden>찾는 국가가 없습니다.</div>
+    </div>
+  </details>
+</div></div>
+
+<main class="wrap">
+
+  <h1>오늘 뭐 쉬나</h1>
+  <p class="lede">오늘이 공휴일인지, 다음 공휴일까지 며칠 남았는지 봅니다. 브라우저의 지역 설정으로 국가를 먼저 맞춰 두고, 위쪽 선택기에서 204개국 아무 곳으로나 바꿀 수 있습니다.</p>
+
+  <div class="now" id="home" hidden></div>
+
+  <section id="countries">
+    <span class="cap">국가 204개</span>
+    <h2>국가별 공휴일</h2>
+    <ul class="countries">
+    <li><a href="/gh/">🇬🇭 가나<span class="cc">GH</span></a></li>
+    <li><a href="/ga/">🇬🇦 가봉<span class="cc">GA</span></a></li>
+    <li><a href="/gy/">🇬🇾 가이아나<span class="cc">GY</span></a></li>
+    <li><a href="/gm/">🇬🇲 감비아<span class="cc">GM</span></a></li>
+    <li><a href="/gg/">🇬🇬 건지<span class="cc">GG</span></a></li>
+    <li><a href="/gp/">🇬🇵 과들루프<span class="cc">GP</span></a></li>
+    <li><a href="/gt/">🇬🇹 과테말라<span class="cc">GT</span></a></li>
+    <li><a href="/gd/">🇬🇩 그레나다<span class="cc">GD</span></a></li>
+    <li><a href="/gr/">🇬🇷 그리스<span class="cc">GR</span></a></li>
+    <li><a href="/gl/">🇬🇱 그린란드<span class="cc">GL</span></a></li>
+    <li><a href="/gn/">🇬🇳 기니<span class="cc">GN</span></a></li>
+    <li><a href="/gw/">🇬🇼 기니비사우<span class="cc">GW</span></a></li>
+    <li><a href="/na/">🇳🇦 나미비아<span class="cc">NA</span></a></li>
+    <li><a href="/nr/">🇳🇷 나우루<span class="cc">NR</span></a></li>
+    <li><a href="/ng/">🇳🇬 나이지리아<span class="cc">NG</span></a></li>
+    <li><a href="/ss/">🇸🇸 남수단<span class="cc">SS</span></a></li>
+    <li><a href="/za/">🇿🇦 남아프리카<span class="cc">ZA</span></a></li>
+    <li><a href="/nl/">🇳🇱 네덜란드<span class="cc">NL</span></a></li>
+    <li><a href="/bq/">🇧🇶 네덜란드령 카리브<span class="cc">BQ</span></a></li>
+    <li><a href="/no/">🇳🇴 노르웨이<span class="cc">NO</span></a></li>
+    <li><a href="/nf/">🇳🇫 노퍽섬<span class="cc">NF</span></a></li>
+    <li><a href="/nz/">🇳🇿 뉴질랜드<span class="cc">NZ</span></a></li>
+    <li><a href="/nc/">🇳🇨 뉴칼레도니아<span class="cc">NC</span></a></li>
+    <li><a href="/nu/">🇳🇺 니우에<span class="cc">NU</span></a></li>
+    <li><a href="/ne/">🇳🇪 니제르<span class="cc">NE</span></a></li>
+    <li><a href="/ni/">🇳🇮 니카라과<span class="cc">NI</span></a></li>
+    <li><a href="/kr/">🇰🇷 대한민국<span class="cc">KR</span></a></li>
+    <li><a href="/dk/">🇩🇰 덴마크<span class="cc">DK</span></a></li>
+    <li><a href="/dm/">🇩🇲 도미니카<span class="cc">DM</span></a></li>
+    <li><a href="/do/">🇩🇴 도미니카 공화국<span class="cc">DO</span></a></li>
+    <li><a href="/de/">🇩🇪 독일<span class="cc">DE</span></a></li>
+    <li><a href="/lr/">🇱🇷 라이베리아<span class="cc">LR</span></a></li>
+    <li><a href="/lv/">🇱🇻 라트비아<span class="cc">LV</span></a></li>
+    <li><a href="/ru/">🇷🇺 러시아<span class="cc">RU</span></a></li>
+    <li><a href="/ls/">🇱🇸 레소토<span class="cc">LS</span></a></li>
+    <li><a href="/ro/">🇷🇴 루마니아<span class="cc">RO</span></a></li>
+    <li><a href="/lu/">🇱🇺 룩셈부르크<span class="cc">LU</span></a></li>
+    <li><a href="/rw/">🇷🇼 르완다<span class="cc">RW</span></a></li>
+    <li><a href="/ly/">🇱🇾 리비아<span class="cc">LY</span></a></li>
+    <li><a href="/lt/">🇱🇹 리투아니아<span class="cc">LT</span></a></li>
+    <li><a href="/li/">🇱🇮 리히텐슈타인<span class="cc">LI</span></a></li>
+    <li><a href="/mg/">🇲🇬 마다가스카르<span class="cc">MG</span></a></li>
+    <li><a href="/mq/">🇲🇶 마르티니크<span class="cc">MQ</span></a></li>
+    <li><a href="/mh/">🇲🇭 마셜 제도<span class="cc">MH</span></a></li>
+    <li><a href="/mw/">🇲🇼 말라위<span class="cc">MW</span></a></li>
+    <li><a href="/ml/">🇲🇱 말리<span class="cc">ML</span></a></li>
+    <li><a href="/im/">🇮🇲 맨섬<span class="cc">IM</span></a></li>
+    <li><a href="/mx/">🇲🇽 멕시코<span class="cc">MX</span></a></li>
+    <li><a href="/mc/">🇲🇨 모나코<span class="cc">MC</span></a></li>
+    <li><a href="/ma/">🇲🇦 모로코<span class="cc">MA</span></a></li>
+    <li><a href="/mr/">🇲🇷 모리타니<span class="cc">MR</span></a></li>
+    <li><a href="/mz/">🇲🇿 모잠비크<span class="cc">MZ</span></a></li>
+    <li><a href="/me/">🇲🇪 몬테네그로<span class="cc">ME</span></a></li>
+    <li><a href="/ms/">🇲🇸 몬트세라트<span class="cc">MS</span></a></li>
+    <li><a href="/md/">🇲🇩 몰도바<span class="cc">MD</span></a></li>
+    <li><a href="/mt/">🇲🇹 몰타<span class="cc">MT</span></a></li>
+    <li><a href="/mn/">🇲🇳 몽골<span class="cc">MN</span></a></li>
+    <li><a href="/us/">🇺🇸 미국<span class="cc">US</span></a></li>
+    <li><a href="/vi/">🇻🇮 미국령 버진아일랜드<span class="cc">VI</span></a></li>
+    <li><a href="/fm/">🇫🇲 미크로네시아<span class="cc">FM</span></a></li>
+    <li><a href="/vu/">🇻🇺 바누아투<span class="cc">VU</span></a></li>
+    <li><a href="/bh/">🇧🇭 바레인<span class="cc">BH</span></a></li>
+    <li><a href="/bb/">🇧🇧 바베이도스<span class="cc">BB</span></a></li>
+    <li><a href="/va/">🇻🇦 바티칸 시국<span class="cc">VA</span></a></li>
+    <li><a href="/bs/">🇧🇸 바하마<span class="cc">BS</span></a></li>
+    <li><a href="/bd/">🇧🇩 방글라데시<span class="cc">BD</span></a></li>
+    <li><a href="/bm/">🇧🇲 버뮤다<span class="cc">BM</span></a></li>
+    <li><a href="/bj/">🇧🇯 베냉<span class="cc">BJ</span></a></li>
+    <li><a href="/ve/">🇻🇪 베네수엘라<span class="cc">VE</span></a></li>
+    <li><a href="/vn/">🇻🇳 베트남<span class="cc">VN</span></a></li>
+    <li><a href="/be/">🇧🇪 벨기에<span class="cc">BE</span></a></li>
+    <li><a href="/by/">🇧🇾 벨라루스<span class="cc">BY</span></a></li>
+    <li><a href="/bz/">🇧🇿 벨리즈<span class="cc">BZ</span></a></li>
+    <li><a href="/ba/">🇧🇦 보스니아 헤르체고비나<span class="cc">BA</span></a></li>
+    <li><a href="/bw/">🇧🇼 보츠와나<span class="cc">BW</span></a></li>
+    <li><a href="/bo/">🇧🇴 볼리비아<span class="cc">BO</span></a></li>
+    <li><a href="/bi/">🇧🇮 부룬디<span class="cc">BI</span></a></li>
+    <li><a href="/bf/">🇧🇫 부르키나파소<span class="cc">BF</span></a></li>
+    <li><a href="/mp/">🇲🇵 북마리아나제도<span class="cc">MP</span></a></li>
+    <li><a href="/mk/">🇲🇰 북마케도니아<span class="cc">MK</span></a></li>
+    <li><a href="/bg/">🇧🇬 불가리아<span class="cc">BG</span></a></li>
+    <li><a href="/br/">🇧🇷 브라질<span class="cc">BR</span></a></li>
+    <li><a href="/ws/">🇼🇸 사모아<span class="cc">WS</span></a></li>
+    <li><a href="/sm/">🇸🇲 산마리노<span class="cc">SM</span></a></li>
+    <li><a href="/st/">🇸🇹 상투메 프린시페<span class="cc">ST</span></a></li>
+    <li><a href="/mf/">🇲🇫 생마르탱<span class="cc">MF</span></a></li>
+    <li><a href="/bl/">🇧🇱 생바르텔레미<span class="cc">BL</span></a></li>
+    <li><a href="/pm/">🇵🇲 생피에르 미클롱<span class="cc">PM</span></a></li>
+    <li><a href="/sn/">🇸🇳 세네갈<span class="cc">SN</span></a></li>
+    <li><a href="/rs/">🇷🇸 세르비아<span class="cc">RS</span></a></li>
+    <li><a href="/sc/">🇸🇨 세이셸<span class="cc">SC</span></a></li>
+    <li><a href="/lc/">🇱🇨 세인트루시아<span class="cc">LC</span></a></li>
+    <li><a href="/vc/">🇻🇨 세인트빈센트그레나딘<span class="cc">VC</span></a></li>
+    <li><a href="/kn/">🇰🇳 세인트키츠 네비스<span class="cc">KN</span></a></li>
+    <li><a href="/sh/">🇸🇭 세인트헬레나<span class="cc">SH</span></a></li>
+    <li><a href="/so/">🇸🇴 소말리아<span class="cc">SO</span></a></li>
+    <li><a href="/sb/">🇸🇧 솔로몬 제도<span class="cc">SB</span></a></li>
+    <li><a href="/sd/">🇸🇩 수단<span class="cc">SD</span></a></li>
+    <li><a href="/sr/">🇸🇷 수리남<span class="cc">SR</span></a></li>
+    <li><a href="/sj/">🇸🇯 스발바르제도-얀마웬섬<span class="cc">SJ</span></a></li>
+    <li><a href="/se/">🇸🇪 스웨덴<span class="cc">SE</span></a></li>
+    <li><a href="/ch/">🇨🇭 스위스<span class="cc">CH</span></a></li>
+    <li><a href="/es/">🇪🇸 스페인<span class="cc">ES</span></a></li>
+    <li><a href="/sk/">🇸🇰 슬로바키아<span class="cc">SK</span></a></li>
+    <li><a href="/si/">🇸🇮 슬로베니아<span class="cc">SI</span></a></li>
+    <li><a href="/sy/">🇸🇾 시리아<span class="cc">SY</span></a></li>
+    <li><a href="/sl/">🇸🇱 시에라리온<span class="cc">SL</span></a></li>
+    <li><a href="/sx/">🇸🇽 신트마르턴<span class="cc">SX</span></a></li>
+    <li><a href="/sg/">🇸🇬 싱가포르<span class="cc">SG</span></a></li>
+    <li><a href="/aw/">🇦🇼 아루바<span class="cc">AW</span></a></li>
+    <li><a href="/am/">🇦🇲 아르메니아<span class="cc">AM</span></a></li>
+    <li><a href="/ar/">🇦🇷 아르헨티나<span class="cc">AR</span></a></li>
+    <li><a href="/is/">🇮🇸 아이슬란드<span class="cc">IS</span></a></li>
+    <li><a href="/ht/">🇭🇹 아이티<span class="cc">HT</span></a></li>
+    <li><a href="/ie/">🇮🇪 아일랜드<span class="cc">IE</span></a></li>
+    <li><a href="/ad/">🇦🇩 안도라<span class="cc">AD</span></a></li>
+    <li><a href="/al/">🇦🇱 알바니아<span class="cc">AL</span></a></li>
+    <li><a href="/dz/">🇩🇿 알제리<span class="cc">DZ</span></a></li>
+    <li><a href="/ao/">🇦🇴 앙골라<span class="cc">AO</span></a></li>
+    <li><a href="/ag/">🇦🇬 앤티가 바부다<span class="cc">AG</span></a></li>
+    <li><a href="/ai/">🇦🇮 앵귈라<span class="cc">AI</span></a></li>
+    <li><a href="/er/">🇪🇷 에리트리아<span class="cc">ER</span></a></li>
+    <li><a href="/sz/">🇸🇿 에스와티니<span class="cc">SZ</span></a></li>
+    <li><a href="/ee/">🇪🇪 에스토니아<span class="cc">EE</span></a></li>
+    <li><a href="/ec/">🇪🇨 에콰도르<span class="cc">EC</span></a></li>
+    <li><a href="/et/">🇪🇹 에티오피아<span class="cc">ET</span></a></li>
+    <li><a href="/sv/">🇸🇻 엘살바도르<span class="cc">SV</span></a></li>
+    <li><a href="/gb/">🇬🇧 영국<span class="cc">GB</span></a></li>
+    <li><a href="/vg/">🇻🇬 영국령 버진아일랜드<span class="cc">VG</span></a></li>
+    <li><a href="/ye/">🇾🇪 예멘<span class="cc">YE</span></a></li>
+    <li><a href="/au/">🇦🇺 오스트레일리아<span class="cc">AU</span></a></li>
+    <li><a href="/at/">🇦🇹 오스트리아<span class="cc">AT</span></a></li>
+    <li><a href="/hn/">🇭🇳 온두라스<span class="cc">HN</span></a></li>
+    <li><a href="/ax/">🇦🇽 올란드 제도<span class="cc">AX</span></a></li>
+    <li><a href="/wf/">🇼🇫 왈리스-푸투나 제도<span class="cc">WF</span></a></li>
+    <li><a href="/ug/">🇺🇬 우간다<span class="cc">UG</span></a></li>
+    <li><a href="/uy/">🇺🇾 우루과이<span class="cc">UY</span></a></li>
+    <li><a href="/ua/">🇺🇦 우크라이나<span class="cc">UA</span></a></li>
+    <li><a href="/iq/">🇮🇶 이라크<span class="cc">IQ</span></a></li>
+    <li><a href="/eg/">🇪🇬 이집트<span class="cc">EG</span></a></li>
+    <li><a href="/it/">🇮🇹 이탈리아<span class="cc">IT</span></a></li>
+    <li><a href="/id/">🇮🇩 인도네시아<span class="cc">ID</span></a></li>
+    <li><a href="/jp/">🇯🇵 일본<span class="cc">JP</span></a></li>
+    <li><a href="/jm/">🇯🇲 자메이카<span class="cc">JM</span></a></li>
+    <li><a href="/zm/">🇿🇲 잠비아<span class="cc">ZM</span></a></li>
+    <li><a href="/je/">🇯🇪 저지<span class="cc">JE</span></a></li>
+    <li><a href="/gq/">🇬🇶 적도 기니<span class="cc">GQ</span></a></li>
+    <li><a href="/ge/">🇬🇪 조지아<span class="cc">GE</span></a></li>
+    <li><a href="/cn/">🇨🇳 중국<span class="cc">CN</span></a></li>
+    <li><a href="/cf/">🇨🇫 중앙 아프리카 공화국<span class="cc">CF</span></a></li>
+    <li><a href="/dj/">🇩🇯 지부티<span class="cc">DJ</span></a></li>
+    <li><a href="/gi/">🇬🇮 지브롤터<span class="cc">GI</span></a></li>
+    <li><a href="/zw/">🇿🇼 짐바브웨<span class="cc">ZW</span></a></li>
+    <li><a href="/td/">🇹🇩 차드<span class="cc">TD</span></a></li>
+    <li><a href="/cz/">🇨🇿 체코<span class="cc">CZ</span></a></li>
+    <li><a href="/cl/">🇨🇱 칠레<span class="cc">CL</span></a></li>
+    <li><a href="/cm/">🇨🇲 카메룬<span class="cc">CM</span></a></li>
+    <li><a href="/cv/">🇨🇻 카보베르데<span class="cc">CV</span></a></li>
+    <li><a href="/kz/">🇰🇿 카자흐스탄<span class="cc">KZ</span></a></li>
+    <li><a href="/kh/">🇰🇭 캄보디아<span class="cc">KH</span></a></li>
+    <li><a href="/ca/">🇨🇦 캐나다<span class="cc">CA</span></a></li>
+    <li><a href="/ke/">🇰🇪 케냐<span class="cc">KE</span></a></li>
+    <li><a href="/ky/">🇰🇾 케이맨 제도<span class="cc">KY</span></a></li>
+    <li><a href="/km/">🇰🇲 코모로<span class="cc">KM</span></a></li>
+    <li><a href="/cr/">🇨🇷 코스타리카<span class="cc">CR</span></a></li>
+    <li><a href="/cc/">🇨🇨 코코스 제도<span class="cc">CC</span></a></li>
+    <li><a href="/ci/">🇨🇮 코트디부아르<span class="cc">CI</span></a></li>
+    <li><a href="/co/">🇨🇴 콜롬비아<span class="cc">CO</span></a></li>
+    <li><a href="/cg/">🇨🇬 콩고-브라자빌<span class="cc">CG</span></a></li>
+    <li><a href="/cd/">🇨🇩 콩고-킨샤사<span class="cc">CD</span></a></li>
+    <li><a href="/cu/">🇨🇺 쿠바<span class="cc">CU</span></a></li>
+    <li><a href="/ck/">🇨🇰 쿡 제도<span class="cc">CK</span></a></li>
+    <li><a href="/cw/">🇨🇼 퀴라소<span class="cc">CW</span></a></li>
+    <li><a href="/hr/">🇭🇷 크로아티아<span class="cc">HR</span></a></li>
+    <li><a href="/cx/">🇨🇽 크리스마스섬<span class="cc">CX</span></a></li>
+    <li><a href="/ki/">🇰🇮 키리바시<span class="cc">KI</span></a></li>
+    <li><a href="/cy/">🇨🇾 키프로스<span class="cc">CY</span></a></li>
+    <li><a href="/tz/">🇹🇿 탄자니아<span class="cc">TZ</span></a></li>
+    <li><a href="/tc/">🇹🇨 터크스 케이커스 제도<span class="cc">TC</span></a></li>
+    <li><a href="/tg/">🇹🇬 토고<span class="cc">TG</span></a></li>
+    <li><a href="/tk/">🇹🇰 토켈라우<span class="cc">TK</span></a></li>
+    <li><a href="/to/">🇹🇴 통가<span class="cc">TO</span></a></li>
+    <li><a href="/tv/">🇹🇻 투발루<span class="cc">TV</span></a></li>
+    <li><a href="/tn/">🇹🇳 튀니지<span class="cc">TN</span></a></li>
+    <li><a href="/tr/">🇹🇷 튀르키예<span class="cc">TR</span></a></li>
+    <li><a href="/tt/">🇹🇹 트리니다드 토바고<span class="cc">TT</span></a></li>
+    <li><a href="/pa/">🇵🇦 파나마<span class="cc">PA</span></a></li>
+    <li><a href="/py/">🇵🇾 파라과이<span class="cc">PY</span></a></li>
+    <li><a href="/pg/">🇵🇬 파푸아뉴기니<span class="cc">PG</span></a></li>
+    <li><a href="/pw/">🇵🇼 팔라우<span class="cc">PW</span></a></li>
+    <li><a href="/fo/">🇫🇴 페로 제도<span class="cc">FO</span></a></li>
+    <li><a href="/pe/">🇵🇪 페루<span class="cc">PE</span></a></li>
+    <li><a href="/pt/">🇵🇹 포르투갈<span class="cc">PT</span></a></li>
+    <li><a href="/fk/">🇫🇰 포클랜드 제도<span class="cc">FK</span></a></li>
+    <li><a href="/pl/">🇵🇱 폴란드<span class="cc">PL</span></a></li>
+    <li><a href="/pr/">🇵🇷 푸에르토리코<span class="cc">PR</span></a></li>
+    <li><a href="/fr/">🇫🇷 프랑스<span class="cc">FR</span></a></li>
+    <li><a href="/gf/">🇬🇫 프랑스령 기아나<span class="cc">GF</span></a></li>
+    <li><a href="/pf/">🇵🇫 프랑스령 폴리네시아<span class="cc">PF</span></a></li>
+    <li><a href="/fi/">🇫🇮 핀란드<span class="cc">FI</span></a></li>
+    <li><a href="/ph/">🇵🇭 필리핀<span class="cc">PH</span></a></li>
+    <li><a href="/pn/">🇵🇳 핏케언 제도<span class="cc">PN</span></a></li>
+    <li><a href="/hu/">🇭🇺 헝가리<span class="cc">HU</span></a></li>
+    <li><a href="/hk/">🇭🇰 홍콩(중국 특별행정구)<span class="cc">HK</span></a></li>
+    </ul>
+  </section>
+
+  <div class="foot">
+    <p>공휴일 자료 <a href="https://date.nager.at/" rel="noopener">Nager.Date</a> · <code>types</code> 가 <code>Public</code> 인 항목만 담았습니다. 갱신 2026-08-24.</p>
+    <p>D-day 는 이 기기의 날짜로 계산합니다 — 다른 시간대의 국가를 볼 때는 하루 어긋날 수 있습니다.</p>
+  </div>
+</main>
+
+<script src="/shared/dday.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+# 이 디렉터리는 생성물(HTML·JSON·sitemap)을 커밋한다. 저장소는 core.autocrlf=true 라
+# 작업 트리가 CRLF 로 풀리는데, 생성기는 LF 로 다시 쓴다 — 그러면 자료가 하나도
+# 안 바뀌었는데 205개 파일이 전부 수정된 것으로 보인다. 여기만 LF 로 못박는다.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary

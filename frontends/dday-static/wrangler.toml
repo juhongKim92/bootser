@@ -1,0 +1,7 @@
+name = "dday-static"
+compatibility_date = "2026-08-24"
+
+# 백엔드가 없다. Worker 스크립트도 없이 public/ 을 그대로 얹는다.
+[assets]
+directory = "./public"
+not_found_handling = "404-page"
