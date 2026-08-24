@@ -15,9 +15,13 @@
         여기서 따로 계산한 값과 같나
      7. 첫 화면 국가 링크 · countries.json · 실제 페이지 디렉터리가 1:1 인가
      8. sitemap.xml 의 URL 집합이 페이지 집합과 같나
-     9. 브라우저 지역 감지(DDAY.detect)가 기대대로 갈리나
+     9. 브라우저 지역 감지(DDAY.detect)가 기대대로 갈리나, 그리고 저장된 값이
+        그 감지를 바꾸지 못하나 — 홈은 늘 내 지역이어야 한다
     10. ko / en 이 짝으로 있고, 두 벌이 같은 국가 집합을 덮나
     11. 영어 페이지가 한국어 말을 흘리지 않나
+    12. 어느 페이지도 localStorage 에 아무것도 남기지 않나
+    13. data/month/*.json 이 국가별 파일과 한 건도 어긋나지 않나
+    14. robots.txt · CSS 계약 · 404 가 언어 칸마다 있고 noindex 인가
 
    실패가 하나라도 있으면 종료 코드 1 이다.
    ============================================================ */
@@ -180,6 +184,15 @@ for (const { page, lang, slug, label } of ALL) {
     const declared = (html.match(/<html lang="([a-z]{2})">/) || [])[1];
     if (declared !== lang) bad(label, `<html lang="${declared}"> 가 경로와 다르다 (기대 ${lang})`);
     if (r.dday.lang !== lang) bad(label, `dday.js 가 ${r.dday.lang} 로 잡았다 (기대 ${lang})`);
+
+    /* 1.2. 아무것도 저장하지 않는다.
+       홈이 이라크로 굳던 원인은 국가 페이지를 여는 것만으로 값을 써 두었기
+       때문이다. 읽는 쪽(detect)만 고치면 다음에 또 읽는 코드가 생긴다. */
+    {
+        const left = r.win.localStorage._dump();
+        const keys = Object.keys(left);
+        if (keys.length) bad(label, `localStorage 에 ${keys.join(', ')} 를 남겼다`);
+    }
 
     /* 1.5. 언어 전환 단추 — 가는 곳과 적힌 글자가 같아야 한다.
        href 는 반대 언어인데 글자는 현재 언어면 눌러 보기 전엔 아무도 모른다. */
@@ -400,6 +413,21 @@ if (!existsSync(smFile)) {
         if (got !== want) bad('/', `지역 감지: ${langs.join(',')} → ${got} (기대 ${want})`);
     }
 
+    /* 홈은 늘 내 지역이어야 한다.
+       이라크 공휴일을 한 번 구경했다고 홈이 계속 이라크가 되면 안 된다 —
+       예전에는 국가 페이지를 여는 것만으로 localStorage 에 기억해서 그랬다.
+       무엇이 담겨 있든 화면이 흔들리지 않는지 본다. */
+    for (const junk of [
+        { 'dday.country': 'IQ' },
+        { 'dday.country': 'US' },
+        { 'dday.lastCountry': 'IQ', anything: 'else' },
+    ]) {
+        const home = boot('', { languages: ['ko-KR'], storage: junk });
+        const got = home.dday.detect(known);
+        if (got !== 'KR') {
+            bad('/', `저장된 값(${JSON.stringify(junk)})이 지역 감지를 바꿨다 → ${got}`);
+        }
+    }
 }
 
 /* --------------------------------------- 첫 화면이 실제로 그리는 것

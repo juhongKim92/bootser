@@ -6,8 +6,12 @@
    날짜 계산을 직접 흔들어 볼 수 있다.
 
    jsdom 을 쓰지 않는다. 이 사이트가 건드리는 브라우저 API 는 아래뿐이라
-   (querySelector · querySelectorAll · classList · localStorage · matchMedia ·
-    fetch · Intl.Locale) 최소 스텁으로 충분하고, 저장소에 의존성을 늘리지 않는 게 낫다.
+   (querySelector · querySelectorAll · classList · matchMedia · fetch · Intl.Locale)
+   최소 스텁으로 충분하고, 저장소에 의존성을 늘리지 않는 게 낫다.
+
+   localStorage 스텁은 지금 아무도 안 쓴다. 그래도 두는 이유는 "쓰지 않는다" 를
+   검사할 수 있어야 하기 때문이다 — boot(page, { storage }) 로 값을 심어 두고
+   그것이 화면을 바꾸지 못하는지 본다.
 
    DOM 스텁은 요소를 만들어 주기만 하고 HTML 을 파싱하지는 않는다 —
    그래서 querySelectorAll('tr[data-d]') 은 빈 배열이다. 표의 내용은
@@ -157,12 +161,15 @@ function parseRows(html) {
     return rows;
 }
 
-const memStore = () => {
-    const m = new Map();
+const memStore = (seed = {}) => {
+    const m = new Map(Object.entries(seed));
     return {
         getItem: (k) => (m.has(k) ? m.get(k) : null),
         setItem: (k, v) => m.set(k, String(v)),
         removeItem: (k) => m.delete(k), clear: () => m.clear(), key: () => null, length: 0,
+        /* 검사용 — 무엇이 담겼는지 들여다본다. 진짜 Storage 에는 없는 것이라
+           이름 앞에 밑줄을 둔다. */
+        _dump: () => Object.fromEntries(m),
     };
 };
 
@@ -182,7 +189,7 @@ function makeFetch(seen) {
 }
 
 /** 페이지 하나를 구동한다. page 는 '' (첫 화면) 또는 'kr' 같은 슬러그. */
-export function boot(page, { languages = ['ko-KR'] } = {}) {
+export function boot(page, { languages = ['ko-KR'], storage = {} } = {}) {
     const file = join(PUB, page, 'index.html');
     if (!existsSync(file)) throw new Error(`없는 페이지: ${page}`);
     const html = readFileSync(file, 'utf8');
@@ -206,7 +213,7 @@ export function boot(page, { languages = ['ko-KR'] } = {}) {
             href: `${BASE}/${page ? page + '/' : ''}`,
             pathname: '/' + (page ? page + '/' : ''),
         },
-        localStorage: memStore(), sessionStorage: memStore(),
+        localStorage: memStore(storage), sessionStorage: memStore(),
         setTimeout: () => 1, clearTimeout() { },
         matchMedia: (q) => ({
             matches: false, media: q, addEventListener() { }, removeEventListener() { },

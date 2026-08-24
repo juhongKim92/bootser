@@ -19,8 +19,6 @@
 (function () {
     'use strict';
 
-    var STORE = 'dday.country';
-
     /* --------------------------------------------------------------- 말
        <html lang> 하나로 갈린다. 페이지마다 인라인 사전을 심지 않는 이유는
        두 언어가 같은 파일을 쓰기 때문이다 — 한쪽만 고쳐지는 일이 없다.
@@ -308,11 +306,6 @@
             if (e.key === 'Escape' && picker.open) picker.open = false;
         });
 
-        /* 고른 국가를 기억한다. 다음에 / 로 들어오면 이걸 먼저 쓴다. */
-        list.addEventListener('click', function (e) {
-            var a = e.target && e.target.closest ? e.target.closest('a[data-cc]') : null;
-            if (a) remember(a.getAttribute('data-cc'));
-        });
     }
 
     /* 한글 이름 · 영어 이름 · 코드 아무거나로 찾히게 한다 ("대한", "korea", "kr") */
@@ -320,19 +313,13 @@
         return [c.ko, c.name, c.code].filter(Boolean).join(' ').toLowerCase();
     }
 
-    function remember(cc) {
-        try { localStorage.setItem(STORE, cc); } catch (_) { /* 사생활 보호 모드 */ }
-    }
-    function recall() {
-        try { return localStorage.getItem(STORE); } catch (_) { return null; }
-    }
-
     /* --------------------------------------------------------- 첫 화면(/) */
-    /* 기억해 둔 국가 > 브라우저 지역 설정 순. 둘 다 없으면 카드를 접어 둔다. */
-    function detect(known) {
-        var saved = recall();
-        if (saved && known.indexOf(saved) >= 0) return saved;
+    /* 오로지 브라우저 지역 설정만 본다. 자료가 없는 지역이면 카드를 접어 둔다.
 
+       한때 고른 국가를 localStorage 에 기억하고 그걸 먼저 썼는데, 국가 페이지를
+       "열어 본 것" 만으로도 기억되는 바람에 이라크 공휴일을 한 번 구경하면
+       홈이 계속 이라크가 되었다. 홈은 늘 내 지역이어야 한다. */
+    function detect(known) {
         var tags = [];
         if (navigator.languages) tags = tags.concat(navigator.languages);
         if (navigator.language) tags.push(navigator.language);
@@ -497,7 +484,6 @@
 
         var page = document.body.getAttribute('data-cc');
         if (page) {
-            remember(page);                           /* 직접 링크로 들어와도 기억한다 */
             var today = todayIso();
             paintNow(today, paintTables(today));
         }
