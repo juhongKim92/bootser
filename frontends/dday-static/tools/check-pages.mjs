@@ -321,19 +321,27 @@ for (const { page, lang, slug, label } of ALL) {
         prev: r.doc.querySelector('#prev').innerHTML,
     };
     const want2 = expectRef(jsonDates, TODAY);
-    /* 영어 페이지는 영어 이름을 앞세운다 — 생성기·클라이언트와 같은 규칙이어야 한다 */
+    /* 영어 페이지는 영어 이름을 앞세운다 — 생성기·클라이언트와 같은 규칙이어야 한다.
+       두 번째 이름(다른 언어)도 카드에 붙어야 한다. 敬老の日 만 있으면 무슨 날인지
+       알 수 없어서 넣은 것이라, 붙는지까지 본다. */
+    const dayAt = (d) => data.days.find((x) => x.d === d) || {};
     const nameAt = (d) => {
-        const day = data.days.find((x) => x.d === d) || {};
+        const day = dayAt(d);
         return lang === 'en' ? (day.e || day.n) : day.n;
+    };
+    const subAt = (d) => {
+        const day = dayAt(d);
+        return lang === 'en' ? (day.e ? day.n : '') : (day.e || '');
     };
 
     if (!drawn.asof.includes(String(new Date().getFullYear()))) {
         bad(label, `기준 날짜 문안이 이상하다: "${drawn.asof}"`);
     }
     const w = WORDS[lang];
+    const full = (d) => nameAt(d) + (subAt(d) ? ` (${subAt(d)})` : '');
     const wantVerdict = want2.todays.length
-        ? want2.todays.map(nameAt).join(' · ') +
-            (want2.todays.every((d) => data.days.find((x) => x.d === d).r) ? w.partial : w.off)
+        ? want2.todays.map(full).join(' · ') +
+            (want2.todays.every((d) => dayAt(d).r) ? w.partial : w.off)
         : w.noHoliday;
     if (drawn.verdict !== wantVerdict) {
         bad(label, `오늘 카드 문안 "${drawn.verdict}" / 기대 "${wantVerdict}"`);
@@ -352,6 +360,10 @@ for (const { page, lang, slug, label } of ALL) {
         const wantName = esc(nameAt(e.d) || '');
         if (wantName && !html2.includes(wantName)) {
             bad(label, `${key}: 공휴일 이름 "${wantName}" 이 카드에 없다 — "${html2}"`);
+        }
+        const wantSub = esc(subAt(e.d) || '');
+        if (wantSub && !html2.includes(`<span class="sub">${wantSub}</span>`)) {
+            bad(label, `${key}: 다른 언어 이름 "${wantSub}" 이 카드에 없다 — "${html2}"`);
         }
     }
     for (const smell of ['undefined', 'NaN', '[object Object]']) {
@@ -531,6 +543,23 @@ for (const [page, lang, langs, wantCc] of [
             if (!drawn.includes(need)) bad(label, `요약 카드에 빠짐: ${need}`);
         }
         if (!/D[-+]\d+/.test(drawn)) bad(label, '요약 카드에 D-day 숫자가 없다');
+
+        /* 다음·지난 공휴일의 이름과 다른 언어 이름까지. 국가 페이지 카드와 같은
+           내용을 그려야 하는데, 예전에 첫 화면만 조용히 빠뜨린 적이 있다. */
+        const src = JSON.parse(readFileSync(join(DATA, `${wantCc}.json`), 'utf8'));
+        const got2 = expectRef(src.days.map((d) => d.d), TODAY);
+        for (const e of [got2.next, got2.prev]) {
+            if (!e) continue;
+            const day = src.days.find((x) => x.d === e.d) || {};
+            const primary = lang === 'en' ? (day.e || day.n) : day.n;
+            const sub = lang === 'en' ? (day.e ? day.n : '') : (day.e || '');
+            if (primary && !drawn.includes(esc(primary))) {
+                bad(label, `요약 카드에 "${primary}" 가 없다`);
+            }
+            if (sub && !drawn.includes(`<span class="sub">${esc(sub)}</span>`)) {
+                bad(label, `요약 카드에 다른 언어 이름 "${sub}" 이 없다`);
+            }
+        }
     }
 }
 

@@ -149,11 +149,17 @@ function parseRows(html) {
         const name = makeEl('td');
         name.textContent = clean;
 
+        /* 다른 언어로 적힌 이름. 카드가 이걸 가져다 쓰므로 스텁에도 있어야 한다. */
+        const subText = (m[2].match(/<span class="en">([\s\S]*?)<\/span>/) || [])[1];
+        let sub = null;
+        if (subText !== undefined) { sub = makeEl('span'); sub.textContent = unesc(subText).trim(); }
+
         rows.push(makeEl('tr', {
             attrs: { 'data-d': m[1] },
             kids: {
                 '.mark': makeEl('td'),
                 '.name': name,
+                '.en': sub,
                 '.local': /class="local"/.test(m[2]) ? makeEl('span') : null,
             },
         }));

@@ -174,7 +174,10 @@
     function paintTables(today) {
         var rows = $$('tr[data-d]');
         var got = classify(rows.map(function (tr) {
-            return { d: tr.getAttribute('data-d'), tr: tr, local: !!$('.local', tr) };
+            return {
+                d: tr.getAttribute('data-d'), tr: tr, local: !!$('.local', tr),
+                n: nameOf(tr), sub: subOf(tr)
+            };
         }), today);
 
         got.marked.forEach(function (m) {
@@ -204,13 +207,29 @@
         return clone.textContent.trim();
     }
 
+    /* 다른 언어로 적힌 이름. 한국어 화면에서는 영어 이름이고, 영어 화면에서는
+       현지어 이름이다. 카드에 이것까지 옮기지 않으면 "敬老の日" 만 덩그러니
+       남아 무슨 날인지 알 수 없다 — 아래 표에는 붙어 있는데 카드에만 없었다. */
+    function subOf(tr) {
+        var el = $('.en', tr);
+        return el ? el.textContent.trim() : '';
+    }
+
+    /* 이름 조립. 표에서 왔든 JSON 에서 왔든 { n, sub } 한 모양이라 여기 하나로 끝난다. */
+    function nameHtml(it) {
+        return esc(it.n) + (it.sub ? '<span class="sub">' + esc(it.sub) + '</span>' : '');
+    }
+    function nameText(it) {
+        return it.n + (it.sub ? ' (' + it.sub + ')' : '');
+    }
+
     /* --------------------------------------------------------- 오늘 카드 문안
        국가 페이지와 첫 화면이 같은 문장을 쓰도록 여기서만 만든다. */
-    function verdictOf(todays, nameFn) {
+    function verdictOf(todays) {
         if (!todays.length) return { text: T.noHoliday, rest: false };
         var partial = todays.every(function (m) { return m.item.local; });
         return {
-            text: todays.map(function (m) { return nameFn(m.item); }).join(' · ') +
+            text: todays.map(function (m) { return nameText(m.item); }).join(' · ') +
                 (partial ? T.partial : T.off),
             rest: !partial
         };
@@ -225,7 +244,7 @@
 
         var verdict = $('.verdict', card);
         if (verdict) {
-            var v = verdictOf(found.todays, function (it) { return nameOf(it.tr); });
+            var v = verdictOf(found.todays);
             verdict.textContent = v.text;
             verdict.className = 'verdict' + (v.rest ? ' rest' : '');
         }
@@ -237,7 +256,7 @@
         if (!dd) return;
         dd.innerHTML = entry
             ? '<span class="dd">D' + sign + Math.abs(entry.diff) + '</span>' +
-              esc(nameOf(entry.item.tr)) + '<em>' + shortHuman(entry.item.d) + '</em>'
+              nameHtml(entry.item) + '<em>' + shortHuman(entry.item.d) + '</em>'
             : '<em>' + T.outOfRange + '</em>';
     }
 
@@ -354,14 +373,14 @@
     function renderHomeCard(home, data) {
         var today = todayIso();
         var got = classify(data.days.map(function (day) {
-            return { d: day.d, n: (LANG === 'en' ? (day.e || day.n) : day.n), local: !!day.r };
+            return { d: day.d, n: T.holiday(day), sub: T.holidaySub(day), local: !!day.r };
         }), today);
 
-        var v = verdictOf(got.todays, function (it) { return it.n; });
+        var v = verdictOf(got.todays);
 
         var line = function (label, e, sign) {
             return '<dt>' + label + '</dt><dd>' + (e
-                ? '<span class="dd">D' + sign + Math.abs(e.diff) + '</span>' + esc(e.item.n) +
+                ? '<span class="dd">D' + sign + Math.abs(e.diff) + '</span>' + nameHtml(e.item) +
                   '<em>' + shortHuman(e.item.d) + '</em>'
                 : '<em>' + T.outOfRange + '</em>') + '</dd>';
         };
