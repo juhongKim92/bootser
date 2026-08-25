@@ -224,7 +224,7 @@
       <summary>
         <span class="arw" aria-hidden="true"></span>
         <h2>How capacity collapses <em>the queries are fast and the system stalls anyway</em></h2>
-        <span class="count">6</span>
+        <span class="count">7</span>
       </summary>
       <div class="glist">
 
@@ -278,6 +278,15 @@
         <span>
           <h2>The consumers never stop and the lag never falls</h2>
           <p>The Kafka rebalance loop. Effective throughput is exactly zero while the CPU is 98% busy. The cause is one inequality.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
+
+      <a class="card" href="/en/fanout/">
+        <span class="no">24</span>
+        <span>
+          <h2>The servers did not get slower. The users did</h2>
+          <p>Fan-out and tail latency. A 1% event on one server becomes a 63.4% event for users — nothing about the server changed.</p>
         </span>
         <span class="tag live">live</span>
       </a>
@@ -366,7 +375,7 @@
   "description": "Twenty-three interactive labs you drive yourself: MVCC and VACUUM, G1 versus ZGC, consistent hashing, Raft, MQTT QoS, connection pool exhaustion, backpressure, cache stampede, deadline propagation, distributed lock expiry, BDP, Kafka rebalancing, TCP close semantics, aggregation paths, alignment and padding.",
   "url": "https://lab.vermilion19.com/en/",
   "inLanguage": "en",
-  "dateModified": "2026-08-13",
+  "dateModified": "2026-08-25",
   "publisher": {
     "@type": "Organization",
     "name": "Backend Internals",

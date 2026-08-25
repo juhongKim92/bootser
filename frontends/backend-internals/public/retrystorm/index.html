@@ -238,6 +238,7 @@
       <li><a href="/timeout/"><span class="no">17</span><span><span class="t">각자 1초씩 줬는데 왜 아무도 1초를 못 쓰나</span><span class="why">아무도 안 기다리는 그 일이 애초에 왜 시작되는가.</span></span></a></li>
       <li><a href="/connpool/"><span class="no">08</span><span><span class="t">17밀리초 쿼리가 커넥션 풀을 말린다</span><span class="why">용량이 왜 그렇게 작은지 — 리틀의 법칙.</span></span></a></li>
       <li><a href="/rebalance/"><span class="no">20</span><span><span class="t">컨슈머는 쉬지 않고 도는데 lag 는 줄지 않는다</span><span class="why">부하를 걷어도 안 나오는 루프 — 나가는 문이 설정값에만 있는 경우.</span></span></a></li>
+      <li><a href="/fanout/"><span class="no">24</span><span><span class="t">서버는 안 느려졌는데 사용자는 느려졌다</span><span class="why">같은 요청을 겹쳐 보내는 것이 언제 꼬리를 자르고 언제 부하 자체가 되는가.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->
@@ -290,7 +291,7 @@ window.LAB_I18N = {
   "url": "https://lab.vermilion19.com/retrystorm/",
   "inLanguage": "ko",
   "datePublished": "2026-08-12",
-  "dateModified": "2026-08-13",
+  "dateModified": "2026-08-25",
   "author": {
     "@type": "Organization",
     "name": "Backend Internals",

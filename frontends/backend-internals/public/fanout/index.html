@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>서버는 안 느려졌는데 사용자는 느려졌다 — 팬아웃과 꼬리 지연</title>
+<meta name="description" content="서버 하나가 100번에 한 번 1초 걸립니다. 그 서버 100대에 병렬로 물으면 사용자의 63.4% 가 1초를 기다립니다. 서버를 10배 좋게 만들면 9.52%, 사본을 하나 더 보내면 0.995% 입니다 — 추가 부하 1% 로요.">
+<link rel="canonical" href="https://lab.vermilion19.com/fanout/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/fanout/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/fanout/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/fanout/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="서버는 안 느려졌는데 사용자는 느려졌다">
+<meta property="og:description" content="개별 서버의 1% 사건이 사용자의 63.4% 가 됩니다. 서버는 아무것도 안 변했습니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/fanout/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="서버는 안 느려졌는데 사용자는 느려졌다">
+<meta name="twitter:description" content="서버를 10배 좋게 만드는 것보다 같은 요청을 한 번 더 보내는 쪽이 6배 낫습니다. 추가 부하는 1% 입니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/fanout-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/fanout/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>서버는 안 느려졌는데 사용자는 느려졌다</h1>
+  <p class="lede">서버 하나는 보통 10ms 에 답하고, 100번에 한 번 1초가 걸립니다. 나쁘지 않은 서버예요. 그런데 화면 하나가 <strong>그런 서버 100대에 병렬로 묻는 순간 사용자의 63.4% 가 1초를 기다립니다.</strong> 서버는 아무것도 안 변했습니다. 늘어난 것은 개수뿐입니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sN">팬아웃 폭</label>
+          <span class="v" id="vN">1<small>대</small></span>
+          <input type="range" id="sN" min="1" max="200" step="1" value="1" aria-label="한 라운드가 병렬로 부르는 서버 수">
+        </div>
+        <div class="dial">
+          <label for="sP">서버 하나가 느릴 확률</label>
+          <span class="v" id="vP">1<small>%</small></span>
+          <input type="range" id="sP" min="0" max="6" step="1" value="4" aria-label="서버 하나의 응답이 꼬리로 나올 확률">
+        </div>
+        <div class="dial">
+          <label for="sS">화면당 라운드</label>
+          <span class="v" id="vS">1<small>회</small></span>
+          <input type="range" id="sS" min="1" max="5" step="1" value="1" aria-label="한 화면이 이 팬아웃을 순차로 몇 번 하는가">
+        </div>
+        <div class="dial">
+          <label>사본 한 번 더</label>
+          <div class="seg hedge" id="segHedge" role="group" aria-label="hedged request">
+            <button data-hedge="0" aria-pressed="true">끔</button>
+            <button data-hedge="1">켬</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sH">사본을 쏘는 시점</label>
+          <span class="v" id="vH">30<small>ms</small></span>
+          <input type="range" id="sH" min="0" max="200" step="5" value="30" aria-label="첫 응답을 이만큼 기다린 뒤 사본을 보낸다">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->서버 1대 · 각 1% · 라운드 1 — 닿는 서버 1대, 사용자 1.00% 가 꼬리를 맞는다 (평균 20ms)<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">사용자 100명 — 누가 꼬리를 맞나</span>
+      <div class="board">
+        <div class="grid" id="grid"><!--pr--><i class="hit"></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><!--/pr--></div>
+        <div class="gridcap" id="gridCap"><!--pr-->채워진 칸 <b>1</b> — 서버 하나는 1% 인데 사용자는 1.00% 가 꼬리를 맞는다. 기대값을 반올림한 것이지 100명을 뽑아 센 것이 아니다.<!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="hit"></i>꼬리를 맞은 사용자</span>
+          <span><i class="saved"></i>사본이 건진 사용자</span>
+          <span><i class="ok"></i>몸통 안에 든 사용자</span>
+          <span><i class="hedge"></i>사본을 켠 뒤 남는 몫</span>
+        </div>
+
+        <div class="curvey" id="curveY"><!--pr-->세로 = 꼬리를 맞는 요청 비율 (0 → 100%) · 바깥 막대는 사본 끔, 안쪽은 켬<!--/pr--></div>
+        <div class="curve" id="curve"><!--pr--><div class="col" title="폭 10대 — 사본 끔 9.56% · 켬 0.100%"><div class="off" style="height:9.56%"><div class="on" style="height:1.05%"></div></div></div><div class="col" title="폭 20대 — 사본 끔 18.2% · 켬 0.200%"><div class="off" style="height:18.21%"><div class="on" style="height:1.10%"></div></div></div><div class="col" title="폭 30대 — 사본 끔 26.0% · 켬 0.300%"><div class="off" style="height:26.03%"><div class="on" style="height:1.15%"></div></div></div><div class="col" title="폭 40대 — 사본 끔 33.1% · 켬 0.399%"><div class="off" style="height:33.10%"><div class="on" style="height:1.21%"></div></div></div><div class="col" title="폭 50대 — 사본 끔 39.5% · 켬 0.499%"><div class="off" style="height:39.50%"><div class="on" style="height:1.26%"></div></div></div><div class="col" title="폭 60대 — 사본 끔 45.3% · 켬 0.598%"><div class="off" style="height:45.28%"><div class="on" style="height:1.32%"></div></div></div><div class="col" title="폭 70대 — 사본 끔 50.5% · 켬 0.698%"><div class="off" style="height:50.52%"><div class="on" style="height:1.38%"></div></div></div><div class="col" title="폭 80대 — 사본 끔 55.2% · 켬 0.797%"><div class="off" style="height:55.25%"><div class="on" style="height:1.44%"></div></div></div><div class="col" title="폭 90대 — 사본 끔 59.5% · 켬 0.896%"><div class="off" style="height:59.53%"><div class="on" style="height:1.51%"></div></div></div><div class="col" title="폭 100대 — 사본 끔 63.4% · 켬 0.995%"><div class="off" style="height:63.40%"><div class="on" style="height:1.57%"></div></div></div><div class="col" title="폭 110대 — 사본 끔 66.9% · 켬 1.09%"><div class="off" style="height:66.90%"><div class="on" style="height:1.64%"></div></div></div><div class="col" title="폭 120대 — 사본 끔 70.1% · 켬 1.19%"><div class="off" style="height:70.06%"><div class="on" style="height:1.70%"></div></div></div><div class="col" title="폭 130대 — 사본 끔 72.9% · 켬 1.29%"><div class="off" style="height:72.92%"><div class="on" style="height:1.77%"></div></div></div><div class="col" title="폭 140대 — 사본 끔 75.5% · 켬 1.39%"><div class="off" style="height:75.51%"><div class="on" style="height:1.84%"></div></div></div><div class="col" title="폭 150대 — 사본 끔 77.9% · 켬 1.49%"><div class="off" style="height:77.85%"><div class="on" style="height:1.91%"></div></div></div><div class="col" title="폭 160대 — 사본 끔 80.0% · 켬 1.59%"><div class="off" style="height:79.97%"><div class="on" style="height:1.98%"></div></div></div><div class="col" title="폭 170대 — 사본 끔 81.9% · 켬 1.69%"><div class="off" style="height:81.89%"><div class="on" style="height:2.06%"></div></div></div><div class="col" title="폭 180대 — 사본 끔 83.6% · 켬 1.78%"><div class="off" style="height:83.62%"><div class="on" style="height:2.13%"></div></div></div><div class="col" title="폭 190대 — 사본 끔 85.2% · 켬 1.88%"><div class="off" style="height:85.19%"><div class="on" style="height:2.21%"></div></div></div><div class="col" title="폭 200대 — 사본 끔 86.6% · 켬 1.98%"><div class="off" style="height:86.60%"><div class="on" style="height:2.29%"></div></div></div><!--/pr--></div>
+        <div class="curvex" id="curveX"><!--pr--><span>10</span><span>100</span><span>200</span><!--/pr--></div>
+
+        <table class="split" id="split"><!--pr--><tr><th>라운드 하나의 결과</th><th>언제 끝나나</th><th>확률</th><th></th></tr><tr><td>전부 몸통 안에 들었다</td><td>10ms</td><td>99.0%</td><td><span class="bar f" style="width:99.00%"></span></td></tr><tr><td>사본이 건졌다 (30ms 에 쐈다)</td><td>40ms</td><td>0%</td><td><span class="bar m" style="width:0.00%"></span></td></tr><tr class="tail"><td>꼬리를 맞았다</td><td>1000ms</td><td>1.00%</td><td><span class="bar s" style="width:1.00%"></span></td></tr><tr><td>가중 평균</td><td>20ms</td><td>&mdash;</td><td></td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">꼬리를 맞는 요청</span><span class="n">1.00<small>%</small></span></div><div class="m good"><span class="k">개별 서버 대비</span><span class="n">×1.00</span></div><div class="m "><span class="k">닿는 서버</span><span class="n">1</span></div><div class="m good"><span class="k">평균 응답</span><span class="n">20<small>ms</small></span></div><div class="m good"><span class="k">추가 요청</span><span class="n">0<small>%</small></span></div><div class="m "><span class="k">절반을 넘는 폭</span><span class="n">69</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>꼬리를 맞는 요청 1.00% — 서버 하나 1% 의 1.00배.</b><br>폭이 69 를 넘으면 중앙값 사용자가 꼬리를 맞는다 <span class="at">— 아직은 아니다</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">같은 설정에서 사본만 뒤집으면</span>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>사본</th><th>꼬리</th><th>개별 대비</th><th>평균 응답</th><th>추가 요청</th></tr><tr class="on"><td>끔</td><td class="num bad">1.00%</td><td class="num bad">×1.00</td><td class="num bad">20ms</td><td class="num good">0%</td></tr><tr class=""><td>켬</td><td class="num good">0.010%</td><td class="num good">×0.010</td><td class="num good">10ms</td><td class="num bad">1.00%</td></tr><!--/pr--></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>팬아웃 폭</td><td>한 라운드가 <strong>병렬로</strong> 부르는 서버 수입니다. 화면 하나를 그리는 데 필요한 조각의 개수라고 보면 됩니다 — 샤드, 파티션, 마이크로서비스, 캐시 노드.</td></tr>
+    <tr><td>서버 하나가 느릴 확률</td><td>서버 하나가 <strong>1000ms</strong> 쪽으로 답하는 비율. 나머지는 <strong>10ms</strong> 입니다. 이 값은 손잡이를 돌려도 <em>서버 자체는 전혀 안 변한다</em>는 뜻이에요.</td></tr>
+    <tr><td>화면당 라운드</td><td>그 팬아웃을 <strong>순차로</strong> 몇 번 하는가. 목록을 받고 상세를 받고 권한을 확인하는 식입니다. 닿는 서버 수는 폭 × 라운드입니다.</td></tr>
+    <tr><td>사본 한 번 더</td><td>첫 응답이 안 오면 <strong>같은 요청을 다른 복제본에 한 번 더</strong> 보내고 먼저 온 것을 씁니다(hedged request). 재시도가 아닙니다 — 첫 요청을 취소하지 않고 <em>겹쳐서</em> 보냅니다.</td></tr>
+    <tr><td>사본을 쏘는 시점</td><td>첫 응답을 몇 ms 기다린 뒤 사본을 보내는가. <strong>10ms 를 경계로 추가 부하가 절벽처럼 바뀝니다</strong> — 빠른 응답보다 이르게 쏘면 모든 요청이 두 번 나갑니다.</td></tr>
+  </table>
+
+  <p>미터의 수치는 표본이 아닙니다. 서버 하나의 응답을 두 점(10ms · 1000ms)으로 줄였기 때문에 전부 <strong>닫힌 식으로 계산</strong>됩니다. 난수가 없고, 같은 손잡이 조합이면 언제나 같은 숫자가 나옵니다.</p>
+
+  <p>격자의 칸 하나가 사용자 한 명입니다. 채워진 칸 수는 <strong>기대값을 반올림한 것</strong>이지 어떤 100명을 뽑아 세어본 결과가 아닙니다.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 서버 하나 → 100대. 서버는 그대로다</h4>
+    <div class="seq">팬아웃 폭 1 → 100 (서버 하나가 느릴 확률 1% 그대로)
+꼬리를 맞는 요청 <em>1.00% → 63.4%</em>
+개별 서버 대비 <em>×1.00 → ×63.4</em> · 평균 응답 20 → <em>638ms</em></div>
+    <p class="why">손잡이 중 <strong>서버의 성질을 건드린 것은 하나도 없습니다.</strong> 1% 는 1% 그대로예요. 늘어난 것은 개수뿐인데 사용자가 겪는 비율은 63배가 됐습니다. 100대 중 <em>적어도 하나</em>가 느리면 화면은 느린 것이고, 그 확률이 <code>1 − 0.99<sup>100</sup></code> 이니까요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 절반이 넘는 지점 — 폭 69</h4>
+    <div class="seq">팬아웃 폭 68 → 69
+꼬리를 맞는 요청 <em>49.5% → 50.0%</em>
+미터 "절반을 넘는 폭" 이 계속 <em>69</em> 를 가리키고 있었다</div>
+    <p class="why">여기서부터 <strong>중앙값 사용자가 꼬리를 맞습니다.</strong> p99 이야기가 아니라 p50 이야기예요. 서버의 1% 짜리 사건이 폭 69 를 넘는 순간 <em>보통 사용자의 경험</em>이 됩니다. 이 지점은 <code>0.99<sup>N</sup> &lt; 0.5</code> 를 푼 값이라 폭과 무관하게 미터에 항상 떠 있습니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 서버를 10배 좋게 만든다 — 그래도 10명 중 1명</h4>
+    <div class="seq">서버 하나가 느릴 확률 1% → 0.10% (폭 100 그대로)
+꼬리를 맞는 요청 <em>63.4% → 9.52%</em>
+개별 서버 대비 ×63.4 → <em>×95.2</em> · 평균 638 → <em>104ms</em></div>
+    <p class="why">꼬리를 열 배 줄이는 일은 보통 분기 하나짜리 과제입니다. 그런데 결과는 <strong>여전히 열 명 중 한 명</strong>이에요. 게다가 <em>증폭 배수는 오히려 커졌습니다</em>(×63.4 → ×95.2) — 개별 서버를 좋게 만들수록 팬아웃이 그 이득을 더 크게 깎아먹습니다. 개선은 선형인데 곱해지는 쪽은 지수라서요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. 사본을 켠다 — 추가 부하 1% 로 63.4% → 0.995%</h4>
+    <div class="seq">사본 한 번 더 <em>켬</em> (쏘는 시점 30ms · 서버는 1% 그대로)
+꼬리를 맞는 요청 <em>63.4% → 0.995%</em>
+개별 서버 대비 ×63.4 → <em>×0.995</em> · 평균 638 → <em>39ms</em>
+추가 요청 <em>1.00%</em></div>
+    <p class="why">3번의 개선(9.52%)보다 <strong>여섯 배 좋은 결과</strong>를, 서버를 손대지 않고 냈습니다. 두 번 다 느려야 느린 것이니 잎의 꼬리 확률이 <code>p</code> 에서 <code>p²</code> 로 <em>제곱</em>되거든요. 증폭 배수가 <strong>×1.00</strong> 이 됐다는 게 핵심입니다 — 사용자가 겪는 꼬리가 서버 하나가 겪는 꼬리와 같아졌어요. 팬아웃이 사라진 것처럼 보입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 사본을 5ms 에 쏜다 — 꼬리는 그대로인데 부하가 100배</h4>
+    <div class="seq">쏘는 시점 30ms → <em>5ms</em>
+꼬리를 맞는 요청 0.995% → <em>0.995%</em> (한 자리도 안 움직인다)
+평균 응답 39 → <em>23ms</em>
+추가 요청 1.00% → <em>100.0%</em></div>
+    <p class="why">빠른 응답이 10ms 에 오는데 5ms 에 사본을 쏘면 <strong>모든 요청이 두 번 나갑니다.</strong> 평균은 더 좋아져요(39 → 23ms) — 공짜가 아니라 <em>산 것</em>입니다. 트래픽을 두 배로 내고 16ms 를 샀어요. 그리고 <strong>정작 꼬리는 한 자리도 안 줄었습니다.</strong> 사본이 꼬리를 자르는 일은 이미 30ms 에서 끝나 있었으니까요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. 라운드를 2로 — 폭 200 과 꼬리는 같고 평균은 다르다</h4>
+    <div class="seq">화면당 라운드 1 → 2 (폭 100)   꼬리 63.4% → <em>86.6%</em> · 평균 <em>1275ms</em>
+폭 200 · 라운드 1              꼬리 <em>86.6%</em> · 평균 <em>867ms</em></div>
+    <p class="why">두 설정의 꼬리 확률이 <strong>소수점까지 정확히 같습니다.</strong> 식이 닿는 서버 수만 보거든요(<code>100×2 = 200×1</code>). <strong>꼬리 확률은 "쪼갰는가"와 "넓혔는가"를 구별하지 못합니다.</strong> 그런데 평균은 1275ms 와 867ms 로 다릅니다 — 직렬 라운드는 느린 구간을 <em>더하고</em>, 병렬 폭은 <em>겹치니까요.</em> 서비스를 쪼개서 각각을 가볍게 만들어도 화면이 그대로인 이유가 여기 있습니다.</p>
+  </div>
+
+  <h2>1% 가 어떻게 63% 가 되는가</h2>
+
+  <p>화면이 느린 조건은 <em>모든</em> 서버가 느린 것이 아니라 <strong>적어도 하나</strong>가 느린 것입니다. 그래서 반대쪽을 세는 게 쉬워요 — 전부 빠를 확률은 <code>(1−p)<sup>N</sup></code> 이고, 나머지가 전부 꼬리입니다.</p>
+
+  <div class="callout"><code>사용자가 꼬리를 맞을 확률 = 1 − (1 − p)<sup>N</sup></code><br>서버 하나의 성질 <code>p</code> 는 그대로 두고 <code>N</code> 만 키우면 이 값은 <strong>1 을 향해 지수로 붙습니다.</strong></div>
+
+  <table class="keytable">
+    <tr><th>팬아웃 폭</th><th>꼬리를 맞는 요청 (p = 1%)</th></tr>
+    <tr><td>1</td><td>1.00% — 서버 하나의 성질 그대로</td></tr>
+    <tr><td>10</td><td>9.56%</td></tr>
+    <tr><td>50</td><td>39.5%</td></tr>
+    <tr><td>69</td><td><strong>50.0% — 여기서부터 중앙값 사용자가 꼬리를 맞는다</strong></td></tr>
+    <tr><td>100</td><td>63.4%</td></tr>
+    <tr><td>200</td><td>86.6%</td></tr>
+  </table>
+
+  <p>이 식이 불편한 이유는 <strong>대시보드가 전부 초록인 채로 이 일이 벌어지기 때문</strong>입니다. 서버의 평균도, p50 도, p99 도 안 움직였어요. 움직인 것은 <em>화면 하나가 몇 대를 부르는가</em> 하나뿐인데, 그건 보통 성능 지표로 관리하지 않는 숫자입니다.</p>
+
+  <h2>이 식은 논문 안에서 두 번 확인된다</h2>
+
+  <p>이 페이지의 축은 제가 만든 모델이 아니라 <strong>Dean 과 Barroso 의 <em>The Tail at Scale</em></strong>(CACM 2013)에서 왔습니다. 논문의 문장은 이렇습니다 — <em>“서버가 보통 10ms 에 응답하지만 99 퍼센타일 지연이 1초라면 … 사용자 요청이 그런 서버 100대에서 병렬로 응답을 모아야 할 때, 사용자 요청의 63% 가 1초를 넘긴다.”</em></p>
+
+  <p>그런데 더 값진 것은 <strong>논문이 같은 식 위의 두 번째 점을 준다</strong>는 것입니다 — <em>“단일 서버에서 1초를 넘기는 요청이 10,000번에 한 번뿐인 서비스라도, 그런 서버 2,000대짜리 서비스에서는 사용자 요청의 거의 다섯 중 하나가 1초를 넘긴다.”</em> 이 모델에 <code>p = 0.01%</code>, <code>N = 2000</code> 을 넣으면 <strong>18.1%</strong> 가 나옵니다. “거의 다섯 중 하나”와 맞습니다.</p>
+
+  <div class="callout">점 하나는 우연히 맞을 수 있지만 <strong>두 점은 식이 맞다는 뜻입니다.</strong> 이 페이지가 물려받은 설명을 그대로 구현하지 않았다는 근거예요 — 모델을 짜기 전에 원문에서 확인한 것이 이것입니다.</div>
+
+  <h2>사본이 서버 개선을 이기는 이유</h2>
+
+  <p>사본을 하나 더 보내면(hedged request) 잎이 느린 조건이 <em>“느리다”</em>에서 <em>“두 번 다 느리다”</em>로 바뀝니다. 확률이 <code>p</code> 에서 <code>p²</code> 가 되는 거예요. 서버를 개선하는 것은 <code>p</code> 를 나누는 일이라 선형이고, 사본은 <strong>지수</strong>입니다.</p>
+
+  <table class="keytable">
+    <tr><th>무엇을 하나</th><th>폭 100 에서 결과</th></tr>
+    <tr><td>아무것도 안 함</td><td>63.4% · 평균 638ms</td></tr>
+    <tr><td>서버를 10배 개선</td><td>9.52% · 평균 104ms — 분기 하나짜리 과제</td></tr>
+    <tr><td>사본 한 번 더</td><td><strong>0.995% · 평균 39ms — 추가 부하 1%</strong></td></tr>
+  </table>
+
+  <p>추가 부하가 1% 인 이유는 <strong>사본이 느린 요청에만 나가기 때문</strong>입니다. 빠른 응답이 10ms 에 오는데 30ms 를 기다렸다 쏘니, 실제로 사본이 나가는 건 느린 1% 뿐이에요. 논문은 실제 시스템에서 이 임계를 95 퍼센타일에 두어 <em>추가 부하를 약 5% 로 제한</em>했다고 적고 있고, BigTable 벤치마크에서는 서버 100대에 흩어진 1,000개 키를 읽으며 <em>10ms 뒤 사본을 보내 99.9 퍼센타일을 1,800ms 에서 74ms 로 줄이고 요청은 2% 만 더 보냈다</em>고 보고합니다.</p>
+
+  <div class="callout">위 문단의 5% · 1,800ms · 74ms · 2% 는 <strong>구글의 실측치이지 이 실험대의 출력이 아닙니다.</strong> 실험대가 계산하는 것은 확률과 두 점의 가중 평균뿐입니다.</div>
+
+  <p>대신 실험대가 보여주는 것은 <strong>임계를 잘못 잡았을 때의 절벽</strong>입니다. 쏘는 시점을 10ms 아래로 내리면 사본이 <em>모든</em> 요청에 나가서 추가 부하가 100% 가 됩니다. 꼬리는 그대로예요. <strong>같은 기법이 같은 결과를 내면서 비용만 100배가 되는 구간이 바로 옆에 있습니다.</strong></p>
+
+  <h2>이 모델이 가정하는 것</h2>
+
+  <table class="keytable">
+    <tr><th>가정</th><th>깨지면 어떻게 되나</th></tr>
+    <tr><td>독립</td><td><code>1 − (1−p)<sup>N</sup></code> 은 <strong>서버들의 느림이 서로 무관할 때</strong> 성립합니다. 공유 스위치, 같은 호스트의 GC 정지, 뜨거운 샤드처럼 원인이 공유되면 상관이 생겨 <strong>이 식은 과대평가</strong>가 됩니다. 대신 사본도 같이 안 듣습니다 — 원인이 공유되면 사본도 같은 원인을 맞으니까요</td></tr>
+    <tr><td>두 점</td><td>서버 응답을 10ms · 1000ms 두 점으로 줄였습니다. 그래서 <strong>퍼센타일이 계단</strong>이고, 이 페이지는 퍼센타일 대신 <em>확률</em>로 말합니다. 실제 분포에서는 꼬리가 하나의 값이 아니라 넓게 퍼져 있어요</td></tr>
+    <tr><td>취소가 공짜</td><td>사본을 켜면 진 쪽 요청을 취소해야 합니다. 취소가 전파되지 않으면 진 요청도 끝까지 일해서 <strong>추가 부하가 계산보다 큽니다</strong> — <a href="/timeout/">17번</a>이 다루는 자리입니다</td></tr>
+    <tr><td>용량이 남는다</td><td>사본은 여유 용량을 지연으로 바꾸는 거래입니다. 이미 포화라면 <a href="/retrystorm/">14번</a>처럼 <strong>사본이 부하 자체가 됩니다</strong></td></tr>
+  </table>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>먼저 셀 숫자</td><td>서버의 p99 가 아니라 <strong>화면 하나가 부르는 서버 수</strong>입니다. 이 숫자를 관리하는 팀이 드물어요. <a href="/correlation/">correlationId</a> 로 요청 하나에 붙은 하위 호출을 세면 바로 나옵니다</td></tr>
+    <tr><td>사본과 재시도</td><td>다릅니다. 재시도는 <strong>실패를 확인한 뒤</strong> 보내고, 사본은 <strong>아직 안 끝난 것 옆에</strong> 겹쳐 보냅니다. 재시도로 꼬리를 자르려면 타임아웃을 짧게 잡아야 하고, 그러면 <a href="/timeout/">17번</a>의 예산 쪼개기가 시작됩니다</td></tr>
+    <tr><td>임계값</td><td>고정 ms 가 아니라 <strong>그 호출의 최근 퍼센타일</strong>로 잡습니다. 고정값은 서비스가 느려지는 날 모든 요청을 두 번 보내게 만듭니다 — 하필 가장 나쁜 날에요</td></tr>
+    <tr><td>취소</td><td>사본을 켰다면 진 쪽을 반드시 끊어야 합니다. gRPC 는 <code>ClientCall.cancel()</code> 이 서버 <code>Context</code> 까지 전파되지만, HTTP 클라이언트는 <strong>연결만 끊고 서버는 계속 일하는</strong> 경우가 흔합니다</td></tr>
+    <tr><td>멱등성</td><td>같은 요청이 두 번 실행됩니다. <strong>읽기에만 쓰거나</strong>, 쓰기라면 멱등 키가 있어야 합니다 — <a href="/jobclaim/">9번</a>과 같은 조건입니다</td></tr>
+    <tr><td>폭을 줄이는 쪽</td><td>가장 확실한 처방입니다. 배치 조회로 묶기, 화면에 안 보이는 조각은 나중에 부르기, 캐시로 잎을 없애기. 폭이 절반이면 꼬리도 절반 근처로 내려옵니다 — <a href="/stampede/">16번</a>은 그 캐시가 동시에 만료될 때의 이야기입니다</td></tr>
+    <tr><td>부분 응답</td><td>느린 잎을 기다리지 않고 <strong>있는 것만으로 그리는</strong> 방법. 검색 결과 몇 개가 빠져도 되는 화면이면 이게 가장 싸요. 논문의 표현으로는 “good enough” 응답입니다</td></tr>
+    <tr><td>측정</td><td>서버 p99 와 화면 p99 를 <strong>같은 대시보드에 나란히</strong> 두세요. 둘이 벌어지는 폭이 곧 팬아웃 증폭입니다. 이 페이지의 “개별 서버 대비” 미터가 그 값이에요</td></tr>
+  </table>
+
+  <p><a href="/timeout/">17번</a>이 <em>주어진 예산을 계층들이 어떻게 나눠 쓰는가</em>였다면, 이 페이지는 <em>그 예산 안에서 분포들이 어떻게 합쳐지는가</em>입니다. 17번에서는 값 세 개가 곱해져 모순이 됐고, 여기서는 <strong>멀쩡한 확률 하나가 개수만큼 곱해져 다른 숫자가 됩니다.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/timeout/"><span class="no">17</span><span><span class="t">각자 1초씩 줬는데 왜 아무도 1초를 못 쓰나</span><span class="why">취소가 전파되지 않으면 사본의 추가 부하가 계산보다 커집니다 — 아무도 안 기다리는 일이 남습니다.</span></span></a></li>
+      <li><a href="/retrystorm/"><span class="no">14</span><span><span class="t">부하는 걷혔는데 돌아오지 않는다</span><span class="why">여유 용량이 없을 때 겹쳐 보낸 사본이 부하 자체가 되는 자리.</span></span></a></li>
+      <li><a href="/backpressure/"><span class="no">11</span><span><span class="t">거부는 버그가 아니라 신호다</span><span class="why">폭을 못 줄인다면 남는 선택은 무엇을 버릴지 정하는 것입니다.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/fanout/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uMs:'ms', uSec:'초', uServers:'대', uRounds:'회',
+  hint:'서버 $1대 · 각 $2% · 라운드 $3 — 닿는 서버 $4대, 사용자 $5% 가 꼬리를 맞는다 (평균 $6)',
+  gcPlain:'채워진 칸 $1 — 서버 하나는 $2% 인데 사용자는 $3% 가 꼬리를 맞는다. 기대값을 반올림한 것이지 100명을 뽑아 센 것이 아니다.',
+  gcHedge:'진한 칸 $1 · 사본이 건진 칸 $2 — 사본을 켜고 남는 것은 $3% 다.',
+  cvY:'세로 = 꼬리를 맞는 요청 비율 (0 → 100%) · 바깥 막대는 사본 끔, 안쪽은 켬',
+  cvTip:'폭 $1대 — 사본 끔 $2% · 켬 $3%',
+  spWhat:'라운드 하나의 결과', spWhen:'언제 끝나나', spHow:'확률',
+  spFast:'전부 몸통 안에 들었다', spSaved:'사본이 건졌다 ($1ms 에 쐈다)', spTail:'꼬리를 맞았다',
+  spMean:'가중 평균',
+  mTail:'꼬리를 맞는 요청', mAmp:'개별 서버 대비', mK:'닿는 서버',
+  mMean:'평균 응답', mExtra:'추가 요청', mFlip:'절반을 넘는 폭',
+  cHedge:'사본', cTail:'꼬리', cAmp:'개별 대비', cMean:'평균 응답', cExtra:'추가 요청',
+  cOff:'끔', cOn:'켬',
+  vHalf:'<b>사용자의 절반이 넘게 — $1% 가 꼬리를 맞는다.</b><br>서버 하나는 $2% 그대로다 <span class="at">— $3배로 커졌다. 폭 $4 부터 이렇게 된다</span>',
+  vAmp:'<b>$1% 가 꼬리를 맞는다 — 서버 하나 $2% 의 $3배.</b><br>폭이 $4 를 넘으면 절반이 넘어간다 <span class="at">— 지금은 $5</span>',
+  vHedge:'<b>사본이 $2% 를 $1% 로 잘랐다.</b> 추가 요청 <b>$3%</b> · 평균 <b>$4ms</b><br><span class="at">서버는 아무것도 안 고쳤다 — 겹쳐 보냈을 뿐이다</span>',
+  vOk:'<b>꼬리를 맞는 요청 $1% — 서버 하나 $2% 의 $3배.</b><br>폭이 $4 를 넘으면 중앙값 사용자가 꼬리를 맞는다 <span class="at">— 아직은 아니다</span>',
+  scene:[
+    '서버 한 대만 부릅니다. 사용자가 꼬리를 맞는 비율은 1.00% — 서버 하나의 성질 그대로예요. 개별 서버 대비 미터가 ×1.00 입니다. 여기가 기준점입니다. 이 상태에서 서버는 앞으로도 전혀 안 바뀝니다.',
+    '폭만 100 으로 올렸습니다. 서버는 그대로인데 꼬리를 맞는 요청이 63.4% 가 됐어요. 격자에서 63칸이 찼습니다. 100대 중 적어도 하나가 느리면 화면이 느린 것이고, 그 확률이 1에서 0.99의 100제곱을 뺀 값입니다. 논문이 이 숫자를 63% 로 적어뒀어요 — 같은 식입니다.',
+    '폭을 69 로 맞췄습니다. 꼬리 비율이 정확히 50.0% 를 넘어섭니다. 폭 68 에서는 49.5% 였어요. 이 지점부터는 p99 이야기가 아니라 p50 이야기입니다 — 중앙값 사용자가 꼬리를 맞습니다. 미터의 "절반을 넘는 폭" 이 처음부터 이 값을 가리키고 있었어요.',
+    '이번엔 서버를 열 배 좋게 만들었습니다. 느릴 확률을 1% 에서 0.10% 로요. 꼬리가 63.4% 에서 9.52% 로 내려옵니다. 좋아지긴 했는데 여전히 열 명 중 한 명이에요. 그리고 개별 서버 대비 배수를 보세요 — ×63.4 에서 ×95.2 로 오히려 커졌습니다. 개별 서버를 좋게 만들수록 팬아웃이 그 이득을 더 크게 깎습니다.',
+    '서버는 1% 로 되돌리고, 대신 사본을 켰습니다. 첫 응답을 30ms 기다린 뒤 같은 요청을 복제본에 한 번 더 보냅니다. 꼬리가 0.995% 가 됐어요 — 서버 개선(9.52%)보다 여섯 배 좋습니다. 추가 요청은 1.00% 뿐입니다. 두 번 다 느려야 느린 것이니 확률이 제곱되거든요. 개별 서버 대비 배수가 ×0.995 — 팬아웃이 사라진 것처럼 보입니다.',
+    '사본을 쏘는 시점만 5ms 로 당겼습니다. 빠른 응답이 10ms 에 오는데 그보다 먼저 쏘니까 모든 요청이 두 번 나갑니다 — 추가 요청 100%. 평균은 39ms 에서 23ms 로 좋아졌어요. 공짜가 아니라 산 겁니다. 그런데 꼬리는 0.995% 그대로입니다. 자를 것은 이미 30ms 에서 다 잘려 있었어요.',
+    '마지막입니다. 사본을 끄고 라운드를 2로 올렸습니다. 폭은 100 그대로인데 꼬리가 86.6% 입니다. 폭을 200 으로 하고 라운드를 1로 두면 똑같이 86.6% 가 나와요 — 꼬리 확률은 쪼갠 것과 넓힌 것을 구별하지 못합니다. 그런데 평균은 1275ms 와 867ms 로 다릅니다. 직렬은 더하고 병렬은 겹치니까요.'
+  ],
+};
+</script>
+<script src="/shared/fanout-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "서버는 안 느려졌는데 사용자는 느려졌다",
+  "description": "서버 하나가 100번에 한 번 1초 걸립니다. 그 서버 100대에 병렬로 물으면 사용자의 63.4% 가 1초를 기다립니다. 서버를 10배 좋게 만들면 9.52%, 사본을 하나 더 보내면 0.995% 입니다 — 추가 부하 1% 로요.",
+  "url": "https://lab.vermilion19.com/fanout/",
+  "inLanguage": "ko",
+  "datePublished": "2026-08-25",
+  "dateModified": "2026-08-25",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "서버는 안 느려졌는데 사용자는 느려졌다"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

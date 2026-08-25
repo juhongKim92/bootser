@@ -280,6 +280,7 @@ mean answer 499 &rarr; <em>294ms</em> · a failing request answers at 3.05s &rar
       <li><a href="/en/retrystorm/"><span class="no">14</span><span><span class="t">The load is gone and it still will not recover</span><span class="why">How the work that continues after everyone gave up takes capacity down.</span></span></a></li>
       <li><a href="/en/connpool/"><span class="no">08</span><span><span class="t">A 17-millisecond query drains the pool</span><span class="why">Raise the budget and occupancy rises, so capacity falls.</span></span></a></li>
       <li><a href="/en/correlation/"><span class="no">12</span><span><span class="t">When does matching responses by order go wrong</span><span class="why">The case where a late answer becomes the next request’s pair.</span></span></a></li>
+      <li><a href="/en/fanout/"><span class="no">24</span><span><span class="t">The servers did not get slower. The users did</span><span class="why">Inside the same budget, this time the distributions multiply — by count rather than by layer.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->
@@ -346,7 +347,7 @@ window.LAB_I18N = {
   "url": "https://lab.vermilion19.com/en/timeout/",
   "inLanguage": "en",
   "datePublished": "2026-08-13",
-  "dateModified": "2026-08-13",
+  "dateModified": "2026-08-25",
   "author": {
     "@type": "Organization",
     "name": "Backend Internals",

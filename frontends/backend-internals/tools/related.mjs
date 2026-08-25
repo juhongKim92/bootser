@@ -17,7 +17,7 @@ export const NO = {
   keepalive: '07', connpool: '08', jobclaim: '09', retryloop: '10', backpressure: '11',
   correlation: '12', genericplan: '13', retrystorm: '14', writeskew: '15', stampede: '16',
   timeout: '17', lockttl: '18', throughput: '19', rebalance: '20', tcpclose: '21',
-  aggregate: '22', alignment: '23'
+  aggregate: '22', alignment: '23', fanout: '24'
 };
 
 /* slug → [{ to, ko, en }] */
@@ -97,7 +97,8 @@ export const RELATED = {
     { to: 'backpressure', ko: '거부를 신호로 쓰면 애초에 이 상태에 들어가지 않습니다.', en: 'Use rejection as a signal and you never enter this state.' },
     { to: 'timeout', ko: '아무도 안 기다리는 그 일이 애초에 왜 시작되는가.', en: 'Why the work nobody is waiting for starts in the first place.' },
     { to: 'connpool', ko: '용량이 왜 그렇게 작은지 — 리틀의 법칙.', en: 'Why the capacity is that small — Little’s law.' },
-    { to: 'rebalance', ko: '부하를 걷어도 안 나오는 루프 — 나가는 문이 설정값에만 있는 경우.', en: 'A loop that shedding load will not end — where the exit exists only in the configuration.' }
+    { to: 'rebalance', ko: '부하를 걷어도 안 나오는 루프 — 나가는 문이 설정값에만 있는 경우.', en: 'A loop that shedding load will not end — where the exit exists only in the configuration.' },
+    { to: 'fanout', ko: '같은 요청을 겹쳐 보내는 것이 언제 꼬리를 자르고 언제 부하 자체가 되는가.', en: 'When overlapping the same request cuts the tail, and when it becomes the load itself.' }
   ],
   writeskew: [
     { to: 'jobclaim', ko: '그래서 락을 어디에 걸어야 하는가.', en: 'So where does the lock have to go?' },
@@ -108,12 +109,14 @@ export const RELATED = {
   stampede: [
     { to: 'lockttl', ko: '뮤텍스를 분산 락으로 옮기면 락의 TTL 이 새 문제가 됩니다.', en: 'Move the mutex to a distributed lock and the lock’s TTL becomes the new problem.' },
     { to: 'genericplan', ko: '평균으로 용량을 잡는 같은 실수를 옵티마이저도 합니다.', en: 'The optimiser makes the same mistake — sizing by the average.' },
-    { to: 'hashring', ko: '노드가 빠질 때의 캐시 붕괴.', en: 'The cache collapse when a node does leave.' }
+    { to: 'hashring', ko: '노드가 빠질 때의 캐시 붕괴.', en: 'The cache collapse when a node does leave.' },
+    { to: 'fanout', ko: '캐시는 잎을 없애 팬아웃 폭을 줄입니다 — 그 폭이 왜 그렇게 비싼가.', en: 'A cache removes leaves and narrows the fan-out — here is why that width is so expensive.' }
   ],
   timeout: [
     { to: 'retrystorm', ko: '포기한 뒤에도 계속되는 그 일이 용량을 어떻게 무너뜨리는가.', en: 'How the work that continues after everyone gave up takes capacity down.' },
     { to: 'connpool', ko: '예산을 늘리면 점유가 늘어 용량이 줍니다.', en: 'Raise the budget and occupancy rises, so capacity falls.' },
-    { to: 'correlation', ko: '늦게 도착한 응답이 다음 요청의 짝이 되는 경우.', en: 'The case where a late answer becomes the next request’s pair.' }
+    { to: 'correlation', ko: '늦게 도착한 응답이 다음 요청의 짝이 되는 경우.', en: 'The case where a late answer becomes the next request’s pair.' },
+    { to: 'fanout', ko: '같은 예산 안에서 이번엔 분포가 곱해집니다 — 계층이 아니라 개수로요.', en: 'Inside the same budget, this time the distributions multiply — by count rather than by layer.' }
   ],
   lockttl: [
     { to: 'jobclaim', ko: '그 락을 애초에 어떻게 제대로 잡는가.', en: 'How you claim that lock correctly in the first place.' },
@@ -140,6 +143,11 @@ export const RELATED = {
     { to: 'keepalive', ko: '반대편 — 이쪽은 정상적으로 끊었는데 유실되고, 7 번은 끊겼는데 살아있다고 믿습니다.', en: 'The mirror — here a proper close loses data; in no. 7 a dead connection looks alive.' },
     { to: 'mqtt', ko: 'TCP 순서 보장이 홉 단위인 것이 QoS 가 홉 단위인 것과 같은 구조입니다.', en: 'TCP ordering being per hop is the same structure as QoS being per hop.' },
     { to: 'rebalance', ko: '"정상 종료" 처럼 "살아 있다" 도 계층마다 다른 뜻입니다 — 하트비트는 정상인데 그룹에서 빠집니다.', en: 'Like “clean shutdown”, “alive” also means different things per layer — heartbeats fine, dropped from the group.' }
+  ],
+  fanout: [
+    { to: 'timeout', ko: '취소가 전파되지 않으면 사본의 추가 부하가 계산보다 커집니다 — 아무도 안 기다리는 일이 남습니다.', en: 'If cancellation does not propagate, the copy costs more than the number says — work nobody waits for is left running.' },
+    { to: 'retrystorm', ko: '여유 용량이 없을 때 겹쳐 보낸 사본이 부하 자체가 되는 자리.', en: 'Where the overlapping copies become the load, once there is no spare capacity left.' },
+    { to: 'backpressure', ko: '폭을 못 줄인다면 남는 선택은 무엇을 버릴지 정하는 것입니다.', en: 'If the width cannot shrink, the remaining choice is deciding what to drop.' }
   ],
   rebalance: [
     { to: 'connpool', ko: '바쁨과 진행을 구별하지 못해서 생기는 같은 사고 — CPU 사용률은 진행률이 아닙니다.', en: 'The same accident from confusing busy with progressing — CPU utilisation is not a progress bar.' },

@@ -25,6 +25,7 @@ node tools/verify-rebalance.mjs    # 20편
 node tools/verify-tcpclose.mjs     # 21편
 node tools/verify-aggregate.mjs    # 22편
 node tools/verify-alignment.mjs    # 23편
+node tools/verify-fanout.mjs       # 24편
 node tools/verify-favicon.mjs      # 파비콘 네 파일이 원화와 같은지
 
 node tools/gen-related.mjs         # "이어서 볼 것" 블록을 박는다
@@ -161,6 +162,27 @@ prose 규칙이 없는 페이지에만 `<main class="wrap prose">` 를 붙인다
 날짜는 `datePublished` = 그 페이지의 첫 커밋, `dateModified` = 페이지와 전용
 `-lab.{js,css}` 중 마지막 커밋이다(`gen-sitemap.mjs` 의 lastmod 와 같은 규칙).
 커밋 안 된 수정본이 있으면 오늘로 본다.
+
+> **더러운 트리에서 두 번 돌리지 말 것 — 2026-08-25 에 겪었다.**
+>
+> 이 생성기는 **자기가 쓴 파일을 다시 "커밋 안 된 수정본" 으로 만든다.** 그래서 한 번
+> 돌린 뒤 `--check` 를 하면 방금 고친 페이지들이 최신이 아니라고 나오고, 그 말을 듣고
+> 한 번 더 돌리면 **내용이 한 글자도 안 바뀐 페이지 39개의 `dateModified` 가 오늘로
+> 밀린다.** 검색엔진에 "오늘 고쳤다" 고 거짓말을 하는 셈이다.
+>
+> `--check` 는 **커밋된 트리에서** 쓰는 것이다 — `gen-sitemap.mjs` 를 "트리가 깨끗할 때"
+> 돌리라고 적어둔 것과 같은 이유다. 작업 중에는 한 번만 돌리고 `--check` 는 넘긴다.
+>
+> 이미 밀렸으면 **날짜 줄만 다른 파일**을 골라 되돌린다 —
+> `git diff -U0 -- <파일> | grep -E '^[+-][^+-]' | grep -v '"dateModified"'` 가 비면
+> 그 파일은 `git checkout` 해도 되는 것이다.
+
+> **되돌린 뒤에 줄바꿈을 확인할 것.** Windows 에서 `git checkout` 은 작업 트리에
+> CRLF 를 쓰는데(`core.autocrlf`) 이 디렉터리의 생성기들은 전부 LF 로 쓴다.
+> 그래서 되돌린 파일은 git 이 보기에는 동일한데 **생성기가 보기에는 다르고**,
+> `gen-related.mjs --check` 와 `gen-prerender.mjs --check` 가 멀쩡한 페이지를
+> "최신이 아니다" 로 잡는다. `git diff` 는 정규화해서 비교하므로 아무것도 안 보여준다.
+> 되돌렸으면 그 파일들을 LF 로 다시 정규화한다.
 
 ## 파비콘 생성기
 

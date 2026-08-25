@@ -222,6 +222,7 @@ in exchange, <em>100 stale responses per expiry</em></div>
       <li><a href="/en/lockttl/"><span class="no">18</span><span><span class="t">You took the lock and two of you got in</span><span class="why">Move the mutex to a distributed lock and the lock’s TTL becomes the new problem.</span></span></a></li>
       <li><a href="/en/genericplan/"><span class="no">13</span><span><span class="t">Slow from the sixth execution</span><span class="why">The optimiser makes the same mistake — sizing by the average.</span></span></a></li>
       <li><a href="/en/hashring/"><span class="no">03</span><span><span class="t">How a cache falls apart when one node leaves</span><span class="why">The cache collapse when a node does leave.</span></span></a></li>
+      <li><a href="/en/fanout/"><span class="no">24</span><span><span class="t">The servers did not get slower. The users did</span><span class="why">A cache removes leaves and narrows the fan-out — here is why that width is so expensive.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->
@@ -278,7 +279,7 @@ window.LAB_I18N = {
   "url": "https://lab.vermilion19.com/en/stampede/",
   "inLanguage": "en",
   "datePublished": "2026-08-12",
-  "dateModified": "2026-08-13",
+  "dateModified": "2026-08-25",
   "author": {
     "@type": "Organization",
     "name": "Backend Internals",

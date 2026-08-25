@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>The servers did not get slower. The users did — fan-out and tail latency</title>
+<meta name="description" content="One server is slow on 1 request in 100. Ask 100 such servers in parallel and 63.4% of users wait a second. Make every server ten times better and it is 9.52%; send one duplicate copy instead and it is 0.995% — for 1% extra load.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/fanout/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/fanout/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/fanout/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/fanout/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="The servers did not get slower. The users did">
+<meta property="og:description" content="A 1% event on one server becomes a 63.4% event for users. Nothing about the server changed.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/fanout/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The servers did not get slower. The users did">
+<meta name="twitter:description" content="Sending the same request one more time beats making every server ten times better — by six to one, for 1% extra load.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/fanout-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/fanout/" hreflang="ko" lang="ko">KO</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>The servers did not get slower. The users did</h1>
+  <p class="lede">One server usually answers in 10ms, and once every hundred requests it takes a second. That is a perfectly decent server. But the moment one screen asks <strong>a hundred such servers in parallel, 63.4% of users wait a second.</strong> Nothing about the server changed. The only thing that grew is the count.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sN">Fan-out width</label>
+          <span class="v" id="vN">1<small> srv</small></span>
+          <input type="range" id="sN" min="1" max="200" step="1" value="1" aria-label="servers called in parallel per round">
+        </div>
+        <div class="dial">
+          <label for="sP">Chance one server is slow</label>
+          <span class="v" id="vP">1<small>%</small></span>
+          <input type="range" id="sP" min="0" max="6" step="1" value="4" aria-label="probability that one server answers on its tail">
+        </div>
+        <div class="dial">
+          <label for="sS">Rounds per screen</label>
+          <span class="v" id="vS">1<small>×</small></span>
+          <input type="range" id="sS" min="1" max="5" step="1" value="1" aria-label="how many times the screen repeats this fan-out in sequence">
+        </div>
+        <div class="dial">
+          <label>Second copy</label>
+          <div class="seg hedge" id="segHedge" role="group" aria-label="hedged request">
+            <button data-hedge="0" aria-pressed="true">off</button>
+            <button data-hedge="1">on</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sH">When to send it</label>
+          <span class="v" id="vH">30<small>ms</small></span>
+          <input type="range" id="sH" min="0" max="200" step="5" value="30" aria-label="wait this long for the first answer before sending a copy">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->1 servers · 1% each · 1 round(s) — 1 servers touched, 1.00% of users get the tail (mean 20ms)<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">A hundred users — who gets the tail</span>
+      <div class="board">
+        <div class="grid" id="grid"><!--pr--><i class="hit"></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><i class=""></i><!--/pr--></div>
+        <div class="gridcap" id="gridCap"><!--pr--><b>1</b> cells filled — one server is 1% and yet 1.00% of users get the tail. Expected value, rounded, not a hundred users drawn and counted.<!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="hit"></i>user who got the tail</span>
+          <span><i class="saved"></i>user the copy rescued</span>
+          <span><i class="ok"></i>user inside the body</span>
+          <span><i class="hedge"></i>what is left with the copy on</span>
+        </div>
+
+        <div class="curvey" id="curveY"><!--pr-->vertical = share of requests that get the tail (0 → 100%) · outer bar is copy off, inner is copy on<!--/pr--></div>
+        <div class="curve" id="curve"><!--pr--><div class="col" title="width 10 — copy off 9.56% · on 0.100%"><div class="off" style="height:9.56%"><div class="on" style="height:1.05%"></div></div></div><div class="col" title="width 20 — copy off 18.2% · on 0.200%"><div class="off" style="height:18.21%"><div class="on" style="height:1.10%"></div></div></div><div class="col" title="width 30 — copy off 26.0% · on 0.300%"><div class="off" style="height:26.03%"><div class="on" style="height:1.15%"></div></div></div><div class="col" title="width 40 — copy off 33.1% · on 0.399%"><div class="off" style="height:33.10%"><div class="on" style="height:1.21%"></div></div></div><div class="col" title="width 50 — copy off 39.5% · on 0.499%"><div class="off" style="height:39.50%"><div class="on" style="height:1.26%"></div></div></div><div class="col" title="width 60 — copy off 45.3% · on 0.598%"><div class="off" style="height:45.28%"><div class="on" style="height:1.32%"></div></div></div><div class="col" title="width 70 — copy off 50.5% · on 0.698%"><div class="off" style="height:50.52%"><div class="on" style="height:1.38%"></div></div></div><div class="col" title="width 80 — copy off 55.2% · on 0.797%"><div class="off" style="height:55.25%"><div class="on" style="height:1.44%"></div></div></div><div class="col" title="width 90 — copy off 59.5% · on 0.896%"><div class="off" style="height:59.53%"><div class="on" style="height:1.51%"></div></div></div><div class="col" title="width 100 — copy off 63.4% · on 0.995%"><div class="off" style="height:63.40%"><div class="on" style="height:1.57%"></div></div></div><div class="col" title="width 110 — copy off 66.9% · on 1.09%"><div class="off" style="height:66.90%"><div class="on" style="height:1.64%"></div></div></div><div class="col" title="width 120 — copy off 70.1% · on 1.19%"><div class="off" style="height:70.06%"><div class="on" style="height:1.70%"></div></div></div><div class="col" title="width 130 — copy off 72.9% · on 1.29%"><div class="off" style="height:72.92%"><div class="on" style="height:1.77%"></div></div></div><div class="col" title="width 140 — copy off 75.5% · on 1.39%"><div class="off" style="height:75.51%"><div class="on" style="height:1.84%"></div></div></div><div class="col" title="width 150 — copy off 77.9% · on 1.49%"><div class="off" style="height:77.85%"><div class="on" style="height:1.91%"></div></div></div><div class="col" title="width 160 — copy off 80.0% · on 1.59%"><div class="off" style="height:79.97%"><div class="on" style="height:1.98%"></div></div></div><div class="col" title="width 170 — copy off 81.9% · on 1.69%"><div class="off" style="height:81.89%"><div class="on" style="height:2.06%"></div></div></div><div class="col" title="width 180 — copy off 83.6% · on 1.78%"><div class="off" style="height:83.62%"><div class="on" style="height:2.13%"></div></div></div><div class="col" title="width 190 — copy off 85.2% · on 1.88%"><div class="off" style="height:85.19%"><div class="on" style="height:2.21%"></div></div></div><div class="col" title="width 200 — copy off 86.6% · on 1.98%"><div class="off" style="height:86.60%"><div class="on" style="height:2.29%"></div></div></div><!--/pr--></div>
+        <div class="curvex" id="curveX"><!--pr--><span>10</span><span>100</span><span>200</span><!--/pr--></div>
+
+        <table class="split" id="split"><!--pr--><tr><th>Outcome of one round</th><th>Finishes at</th><th>Probability</th><th></th></tr><tr><td>everything inside the body</td><td>10ms</td><td>99.0%</td><td><span class="bar f" style="width:99.00%"></span></td></tr><tr><td>the copy rescued it (sent at 30ms)</td><td>40ms</td><td>0%</td><td><span class="bar m" style="width:0.00%"></span></td></tr><tr class="tail"><td>got the tail</td><td>1000ms</td><td>1.00%</td><td><span class="bar s" style="width:1.00%"></span></td></tr><tr><td>weighted mean</td><td>20ms</td><td>&mdash;</td><td></td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">tail requests</span><span class="n">1.00<small>%</small></span></div><div class="m good"><span class="k">versus one server</span><span class="n">×1.00</span></div><div class="m "><span class="k">servers touched</span><span class="n">1</span></div><div class="m good"><span class="k">mean response</span><span class="n">20<small>ms</small></span></div><div class="m good"><span class="k">extra requests</span><span class="n">0<small>%</small></span></div><div class="m "><span class="k">width that crosses half</span><span class="n">69</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>1.00% get the tail — 1.00× the 1% one server has.</b><br>Past width 69 the median user gets the tail <span class="at">— not yet</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">Same setup, copy flipped</span>
+      <table class="cmp" id="cmp"><!--pr--><tr><th>copy</th><th>tail</th><th>vs one</th><th>mean</th><th>extra</th></tr><tr class="on"><td>off</td><td class="num bad">1.00%</td><td class="num bad">×1.00</td><td class="num bad">20ms</td><td class="num good">0%</td></tr><tr class=""><td>on</td><td class="num good">0.010%</td><td class="num good">×0.010</td><td class="num good">10ms</td><td class="num bad">1.00%</td></tr><!--/pr--></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">Previous</button>
+        <button id="btnStep">Next step</button>
+        <button id="btnReset">Reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Work the dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What it changes</th></tr>
+    <tr><td>Fan-out width</td><td>How many servers one round calls <strong>in parallel</strong> — the number of pieces a single screen needs: shards, partitions, microservices, cache nodes.</td></tr>
+    <tr><td>Chance one server is slow</td><td>How often one server answers on the <strong>1000ms</strong> side instead of <strong>10ms</strong>. Turning this dial is the only way to change the server at all — and most of this page leaves it alone.</td></tr>
+    <tr><td>Rounds per screen</td><td>How many times that fan-out happens <strong>in sequence</strong> — fetch the list, then the details, then the permissions. Servers touched is width × rounds.</td></tr>
+    <tr><td>Second copy</td><td>If the first answer has not arrived, send <strong>the same request to another replica</strong> and take whichever returns first (a hedged request). This is not a retry — the first request is not cancelled, the second one <em>overlaps</em> it.</td></tr>
+    <tr><td>When to send it</td><td>How long to wait before sending the copy. <strong>10ms is a cliff</strong> — fire earlier than the fast answer and every single request goes out twice.</td></tr>
+  </table>
+
+  <p>The meters are not samples. One server’s response is reduced to two points (10ms and 1000ms), so everything is a <strong>closed-form calculation</strong>. There is no randomness: the same dials always give the same numbers.</p>
+
+  <p>Each cell in the grid is one user. The number of filled cells is <strong>the expected value, rounded</strong> — not the result of drawing a hundred users and counting.</p>
+
+  <h2>Things to try</h2>
+
+  <div class="recipe">
+    <h4>1. One server → a hundred. The server never changes</h4>
+    <div class="seq">Fan-out width 1 → 100 (chance one server is slow stays 1%)
+Requests that get the tail <em>1.00% → 63.4%</em>
+Versus one server <em>×1.00 → ×63.4</em> · mean response 20 → <em>638ms</em></div>
+    <p class="why">Not one dial that touches the server was moved. 1% is still 1%. Only the count grew, and the share of users who feel it grew 63 times. A screen is slow if <em>at least one</em> of the hundred is slow, and that probability is <code>1 − 0.99<sup>100</sup></code>.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. The width where half is crossed — 69</h4>
+    <div class="seq">Fan-out width 68 → 69
+Requests that get the tail <em>49.5% → 50.0%</em>
+The “width that crosses half” meter had been reading <em>69</em> all along</div>
+    <p class="why">From here on the <strong>median user gets the tail.</strong> This is not a p99 story any more, it is a p50 story. A 1% event on a server becomes <em>the ordinary experience</em> once the width passes 69. The point is the solution of <code>0.99<sup>N</sup> &lt; 0.5</code>, so the meter shows it whatever the current width is.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Make every server ten times better — still one user in ten</h4>
+    <div class="seq">Chance one server is slow 1% → 0.10% (width stays 100)
+Requests that get the tail <em>63.4% → 9.52%</em>
+Versus one server ×63.4 → <em>×95.2</em> · mean 638 → <em>104ms</em></div>
+    <p class="why">Cutting a tail by a factor of ten is usually a quarter of work. The result is <strong>still one user in ten</strong>. And notice the amplification went <em>up</em> (×63.4 → ×95.2) — the better each server gets, the more of that gain fan-out eats. The improvement is linear; the thing multiplying it is exponential.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Turn the copy on — 63.4% → 0.995% for 1% extra load</h4>
+    <div class="seq">Second copy <em>on</em> (sent at 30ms · server still 1%)
+Requests that get the tail <em>63.4% → 0.995%</em>
+Versus one server ×63.4 → <em>×0.995</em> · mean 638 → <em>39ms</em>
+Extra requests <em>1.00%</em></div>
+    <p class="why">Six times better than the ten-fold server improvement in recipe 3 — without touching the server. A leaf is now slow only if <em>both</em> copies are slow, so its tail probability is squared, <code>p</code> → <code>p²</code>. The amplification meter reading <strong>×1.00</strong> is the point: the tail a user feels is now the same as the tail one server has. The fan-out looks like it disappeared.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Send the copy at 5ms — same tail, a hundred times the load</h4>
+    <div class="seq">When to send it 30ms → <em>5ms</em>
+Requests that get the tail 0.995% → <em>0.995%</em> (not one digit moves)
+Mean response 39 → <em>23ms</em>
+Extra requests 1.00% → <em>100.0%</em></div>
+    <p class="why">The fast answer arrives at 10ms, so firing at 5ms means <strong>every request goes out twice.</strong> The mean does improve (39 → 23ms) — that was not free, it was <em>bought</em>: double the traffic for 16ms. And <strong>the tail did not move at all.</strong> Everything the copy could cut was already cut at 30ms.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Two rounds — same tail as width 200, different mean</h4>
+    <div class="seq">Rounds per screen 1 → 2 (width 100)   tail 63.4% → <em>86.6%</em> · mean <em>1275ms</em>
+Width 200 · 1 round                    tail <em>86.6%</em> · mean <em>867ms</em></div>
+    <p class="why">The two tail probabilities are <strong>identical to the last digit</strong>, because the formula only sees servers touched (<code>100×2 = 200×1</code>). <strong>Tail probability cannot tell “split up” from “widened”.</strong> The means differ, though — 1275ms against 867ms — because sequential rounds <em>add</em> slow stretches while parallel width <em>overlaps</em> them. That is why splitting a service into lighter pieces leaves the screen exactly where it was.</p>
+  </div>
+
+  <h2>How 1% becomes 63%</h2>
+
+  <p>A screen is slow when <strong>at least one</strong> server is slow — not when all of them are. So it is easier to count the other side: everything is fast with probability <code>(1−p)<sup>N</sup></code>, and all the rest is tail.</p>
+
+  <div class="callout"><code>P(user gets the tail) = 1 − (1 − p)<sup>N</sup></code><br>Hold the server’s own property <code>p</code> still and grow only <code>N</code>, and this <strong>climbs exponentially toward 1.</strong></div>
+
+  <table class="keytable">
+    <tr><th>Fan-out width</th><th>Requests that get the tail (p = 1%)</th></tr>
+    <tr><td>1</td><td>1.00% — exactly the server’s own property</td></tr>
+    <tr><td>10</td><td>9.56%</td></tr>
+    <tr><td>50</td><td>39.5%</td></tr>
+    <tr><td>69</td><td><strong>50.0% — from here the median user gets the tail</strong></td></tr>
+    <tr><td>100</td><td>63.4%</td></tr>
+    <tr><td>200</td><td>86.6%</td></tr>
+  </table>
+
+  <p>What makes this uncomfortable is that <strong>every dashboard stays green while it happens.</strong> The server mean did not move, nor its p50, nor its p99. The only thing that moved is <em>how many servers one screen calls</em> — and that is usually not a number anyone tracks as a performance metric.</p>
+
+  <h2>The paper confirms this formula twice</h2>
+
+  <p>The axis of this page is not a model I invented — it comes from Dean and Barroso, <strong><em>The Tail at Scale</em></strong> (CACM 2013). The paper says: <em>“consider a system where each server typically responds in 10ms but with a 99th-percentile latency of one second … If a user request must collect responses from 100 such servers in parallel, then 63% of user requests will take more than one second.”</em></p>
+
+  <p>More valuable, though, is that <strong>the paper gives a second point on the same curve</strong>: <em>“Even for services with only one in 10,000 requests experiencing more than one-second latencies at the single-server level, a service with 2,000 such servers will see almost one in five user requests taking more than one second.”</em> Put <code>p = 0.01%</code> and <code>N = 2000</code> into this model and it returns <strong>18.1%</strong>. That is “almost one in five”.</p>
+
+  <div class="callout">One point can match by luck; <strong>two points mean the formula is right.</strong> That is the evidence this page did not simply implement an inherited explanation — checking it in the source before building the model is exactly what this step was for.</div>
+
+  <h2>Why a copy beats improving the server</h2>
+
+  <p>Send a second copy (a hedged request) and the condition for a leaf being slow changes from <em>“it is slow”</em> to <em>“it is slow twice”</em>. The probability goes from <code>p</code> to <code>p²</code>. Improving a server divides <code>p</code> — that is linear. The copy <strong>squares</strong> it.</p>
+
+  <table class="keytable">
+    <tr><th>What you do</th><th>Result at width 100</th></tr>
+    <tr><td>Nothing</td><td>63.4% · mean 638ms</td></tr>
+    <tr><td>Make servers 10× better</td><td>9.52% · mean 104ms — a quarter of engineering work</td></tr>
+    <tr><td>Send one more copy</td><td><strong>0.995% · mean 39ms — 1% extra load</strong></td></tr>
+  </table>
+
+  <p>The extra load is 1% because <strong>the copy only goes out on slow requests.</strong> The fast answer arrives at 10ms and we wait 30ms, so the only calls that get a copy are the slow 1%. The paper reports that in real systems the threshold is set at the 95th percentile, which <em>limits the additional load to approximately 5%</em>; and in a BigTable benchmark reading 1,000 keys spread over 100 servers, <em>a hedging request after a 10ms delay cut the 99.9th-percentile latency from 1,800ms to 74ms while sending just 2% more requests.</em></p>
+
+  <div class="callout">Those figures — 5%, 1,800ms, 74ms, 2% — are <strong>Google’s measurements, not this lab’s output.</strong> All the lab computes is a probability and a weighted mean of two points.</div>
+
+  <p>What the lab does show is <strong>the cliff on the other side of the threshold.</strong> Drop the send time below 10ms and the copy goes out on <em>every</em> request: extra load 100%. The tail is unchanged. <strong>The same technique, the same result, a hundred times the cost — and the two settings sit right next to each other.</strong></p>
+
+  <h2>What this model assumes</h2>
+
+  <table class="keytable">
+    <tr><th>Assumption</th><th>What breaks if it fails</th></tr>
+    <tr><td>Independence</td><td><code>1 − (1−p)<sup>N</sup></code> holds when <strong>slowness on the servers is unrelated.</strong> A shared switch, a GC pause on a shared host, a hot shard — any shared cause correlates the leaves and <strong>the formula overestimates.</strong> The copy stops helping for the same reason: it inherits the shared cause</td></tr>
+    <tr><td>Two points</td><td>A server answers at 10ms or 1000ms and nothing in between, which makes <strong>percentiles a staircase</strong>. That is why this page talks in probabilities rather than percentiles. Real tails are spread out, not a single value</td></tr>
+    <tr><td>Cancellation is free</td><td>With the copy on, the losing request must be cancelled. If cancellation does not propagate, the loser keeps working and <strong>the extra load is larger than the number here</strong> — that is <a href="/en/timeout/">no. 17</a> territory</td></tr>
+    <tr><td>There is spare capacity</td><td>A copy trades spare capacity for latency. If you are already saturated, <a href="/en/retrystorm/">no. 14</a> happens instead — <strong>the copies become the load</strong></td></tr>
+  </table>
+
+  <h2>In the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>The number to count first</td><td>Not server p99 — <strong>how many servers one screen calls.</strong> Very few teams track it. Count the downstream calls hanging off one <a href="/en/correlation/">correlationId</a> and you have it</td></tr>
+    <tr><td>Copies vs retries</td><td>They are different. A retry goes out <strong>after a failure is confirmed</strong>; a copy goes out <strong>alongside something still running</strong>. Cutting tails with retries means short timeouts, which starts the budget-splitting of <a href="/en/timeout/">no. 17</a></td></tr>
+    <tr><td>The threshold</td><td>Set it from <strong>a recent percentile of that call</strong>, not a fixed millisecond value. A fixed value sends every request twice on the day the service slows down — precisely the worst day for it</td></tr>
+    <tr><td>Cancellation</td><td>If copies are on, the loser must be stopped. gRPC propagates <code>ClientCall.cancel()</code> into the server <code>Context</code>; plain HTTP clients often just <strong>drop the connection while the server keeps working</strong></td></tr>
+    <tr><td>Idempotency</td><td>The same request now executes twice. <strong>Use copies for reads</strong>, or make the write carry an idempotency key — the same condition as <a href="/en/jobclaim/">no. 9</a></td></tr>
+    <tr><td>Shrinking the width</td><td>The most reliable fix there is: batch the lookups, defer the pieces that are off-screen, cache a leaf out of existence. Halve the width and the tail comes down near half — and <a href="/en/stampede/">no. 16</a> is what happens when that cache expires all at once</td></tr>
+    <tr><td>Partial answers</td><td>Draw with whatever arrived instead of waiting for the slow leaf. If a few missing results are acceptable, this is the cheapest option of all — the paper calls them “good enough” responses</td></tr>
+    <tr><td>Measurement</td><td>Put server p99 and screen p99 <strong>side by side on one dashboard.</strong> The gap between them is the fan-out amplification — the “versus one server” meter on this page is exactly that number</td></tr>
+  </table>
+
+  <p>If <a href="/en/timeout/">no. 17</a> was about how layers divide a budget they were given, this page is about how distributions combine inside it. There, three sensible values multiplied into a contradiction; here, <strong>one perfectly sensible probability is multiplied by a count and becomes a different number.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/timeout/"><span class="no">17</span><span><span class="t">Everyone got a second and nobody gets to use one</span><span class="why">If cancellation does not propagate, the copy costs more than the number says — work nobody waits for is left running.</span></span></a></li>
+      <li><a href="/en/retrystorm/"><span class="no">14</span><span><span class="t">The load is gone and it still will not recover</span><span class="why">Where the overlapping copies become the load, once there is no spare capacity left.</span></span></a></li>
+      <li><a href="/en/backpressure/"><span class="no">11</span><span><span class="t">Rejection is a signal, not a bug</span><span class="why">If the width cannot shrink, the remaining choice is deciding what to drop.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">Index</a> · <a href="/fanout/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uMs:'ms', uSec:'s', uServers:' srv', uRounds:'×',
+  hint:'$1 servers · $2% each · $3 round(s) — $4 servers touched, $5% of users get the tail (mean $6)',
+  gcPlain:'$1 cells filled — one server is $2% and yet $3% of users get the tail. Expected value, rounded, not a hundred users drawn and counted.',
+  gcHedge:'$1 solid · $2 rescued by the copy — $3% is what is left once the copy is on.',
+  cvY:'vertical = share of requests that get the tail (0 → 100%) · outer bar is copy off, inner is copy on',
+  cvTip:'width $1 — copy off $2% · on $3%',
+  spWhat:'Outcome of one round', spWhen:'Finishes at', spHow:'Probability',
+  spFast:'everything inside the body', spSaved:'the copy rescued it (sent at $1ms)', spTail:'got the tail',
+  spMean:'weighted mean',
+  mTail:'tail requests', mAmp:'versus one server', mK:'servers touched',
+  mMean:'mean response', mExtra:'extra requests', mFlip:'width that crosses half',
+  cHedge:'copy', cTail:'tail', cAmp:'vs one', cMean:'mean', cExtra:'extra',
+  cOff:'off', cOn:'on',
+  vHalf:'<b>More than half of all users — $1% — get the tail.</b><br>One server is still $2% <span class="at">— amplified $3×. It has been this way since width $4</span>',
+  vAmp:'<b>$1% get the tail — $3× the $2% one server has.</b><br>Past width $4 more than half are hit <span class="at">— currently $5</span>',
+  vHedge:'<b>The copy cut $2% down to $1%.</b> Extra requests <b>$3%</b> · mean <b>$4ms</b><br><span class="at">nothing on the server was fixed — a request was just overlapped</span>',
+  vOk:'<b>$1% get the tail — $3× the $2% one server has.</b><br>Past width $4 the median user gets the tail <span class="at">— not yet</span>',
+  scene:[
+    'Only one server is called. The share of users who get the tail is 1.00% — exactly the property of that one server. The “versus one server” meter reads ×1.00. This is the baseline, and from here on the server itself never changes.',
+    'Only the width moved, to 100. The server is untouched, yet 63.4% of requests now get the tail: 63 cells in the grid. A screen is slow if at least one of the hundred is slow, and that is one minus 0.99 to the hundredth. The paper writes this number as 63% — the same formula.',
+    'Width set to 69. The tail share crosses 50.0%; at width 68 it was 49.5%. From this point it is no longer a p99 story but a p50 one — the median user gets the tail. The “width that crosses half” meter has been pointing at this value from the very first step.',
+    'Now make every server ten times better: the chance of being slow goes from 1% to 0.10%. The tail falls from 63.4% to 9.52%. Better, certainly — and still one user in ten. Then look at the amplification: it went from ×63.4 up to ×95.2. The better each server gets, the more of that gain the fan-out takes back.',
+    'Server back to 1%, and the copy is on instead. We wait 30ms for the first answer, then send the same request to another replica. The tail is 0.995% — six times better than improving the servers gave us. Extra requests: 1.00%. A leaf is slow only if both copies are slow, so the probability is squared. Amplification ×0.995 — the fan-out looks like it vanished.',
+    'Only the send time moved, to 5ms. The fast answer takes 10ms, so firing earlier means every request goes out twice — extra requests 100%. The mean improves from 39ms to 23ms; that was bought, not free. And the tail is still 0.995%. Everything worth cutting was already cut at 30ms.',
+    'Last step. Copy off, rounds up to 2. The width is still 100 but the tail is 86.6% — exactly what width 200 with one round gives. Tail probability cannot tell splitting from widening. The means differ though, 1275ms against 867ms, because sequential rounds add and parallel width overlaps.'
+  ],
+};
+</script>
+<script src="/shared/fanout-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "The servers did not get slower. The users did",
+  "description": "One server is slow on 1 request in 100. Ask 100 such servers in parallel and 63.4% of users wait a second. Make every server ten times better and it is 9.52%; send one duplicate copy instead and it is 0.995% — for 1% extra load.",
+  "url": "https://lab.vermilion19.com/en/fanout/",
+  "inLanguage": "en",
+  "datePublished": "2026-08-25",
+  "dateModified": "2026-08-25",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "The servers did not get slower. The users did"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

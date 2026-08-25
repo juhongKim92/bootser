@@ -280,6 +280,7 @@ C 호출 1.80 → <em>1.00건</em> · 기한 뒤 시작 0.80 → <em>0.00건</em
       <li><a href="/retrystorm/"><span class="no">14</span><span><span class="t">부하는 걷혔는데 돌아오지 않는다</span><span class="why">포기한 뒤에도 계속되는 그 일이 용량을 어떻게 무너뜨리는가.</span></span></a></li>
       <li><a href="/connpool/"><span class="no">08</span><span><span class="t">17밀리초 쿼리가 커넥션 풀을 말린다</span><span class="why">예산을 늘리면 점유가 늘어 용량이 줍니다.</span></span></a></li>
       <li><a href="/correlation/"><span class="no">12</span><span><span class="t">응답을 순서로 맞추면 언제 어긋나는가</span><span class="why">늦게 도착한 응답이 다음 요청의 짝이 되는 경우.</span></span></a></li>
+      <li><a href="/fanout/"><span class="no">24</span><span><span class="t">서버는 안 느려졌는데 사용자는 느려졌다</span><span class="why">같은 예산 안에서 이번엔 분포가 곱해집니다 — 계층이 아니라 개수로요.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->
@@ -346,7 +347,7 @@ window.LAB_I18N = {
   "url": "https://lab.vermilion19.com/timeout/",
   "inLanguage": "ko",
   "datePublished": "2026-08-13",
-  "dateModified": "2026-08-13",
+  "dateModified": "2026-08-25",
   "author": {
     "@type": "Organization",
     "name": "Backend Internals",
