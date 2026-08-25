@@ -28,6 +28,7 @@ node tools/verify-alignment.mjs    # 23편
 node tools/verify-fanout.mjs       # 24편
 node tools/verify-omission.mjs     # 25편
 node tools/verify-slowstart.mjs    # 26편
+node tools/verify-backlog.mjs      # 27편
 node tools/verify-favicon.mjs      # 파비콘 네 파일이 원화와 같은지
 
 node tools/gen-related.mjs         # "이어서 볼 것" 블록을 박는다

@@ -278,6 +278,7 @@ for (long missingValue = value - expectedIntervalBetweenValueSamples;
       <li><a href="/fanout/"><span class="no">24</span><span><span class="t">서버는 안 느려졌는데 사용자는 느려졌다</span><span class="why">측정을 고치고 나면 볼 것 — 개별 서버의 꼬리가 사용자에게 몇 배로 도착하는가.</span></span></a></li>
       <li><a href="/aggregate/"><span class="no">22</span><span><span class="t">같은 숫자가 두 화면에서 다르다</span><span class="why">같은 사건이 두 숫자가 되는 다른 이유 — 이쪽은 둘 다 맞습니다.</span></span></a></li>
       <li><a href="/connpool/"><span class="no">08</span><span><span class="t">17밀리초 쿼리가 커넥션 풀을 말린다</span><span class="why">큐와 풀에서 기다린 시간이 응답시간에서 사라지는 자리.</span></span></a></li>
+      <li><a href="/backlog/"><span class="no">27</span><span><span class="t">커널이 커넥션을 버리는데 애플리케이션 로그는 깨끗하다</span><span class="why">측정이 시작되기 전의 시간 — 서버의 시계는 accept() 부터 돕니다.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->

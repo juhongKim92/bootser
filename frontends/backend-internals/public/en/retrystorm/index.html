@@ -239,6 +239,7 @@ queue 0 · goodput back to 60/s</div>
       <li><a href="/en/connpool/"><span class="no">08</span><span><span class="t">A 17-millisecond query drains the pool</span><span class="why">Why the capacity is that small — Little’s law.</span></span></a></li>
       <li><a href="/en/rebalance/"><span class="no">20</span><span><span class="t">The consumers never stop and the lag never falls</span><span class="why">A loop that shedding load will not end — where the exit exists only in the configuration.</span></span></a></li>
       <li><a href="/en/fanout/"><span class="no">24</span><span><span class="t">The servers did not get slower. The users did</span><span class="why">When overlapping the same request cuts the tail, and when it becomes the load itself.</span></span></a></li>
+      <li><a href="/en/backlog/"><span class="no">27</span><span><span class="t">The kernel drops connections and the application log stays clean</span><span class="why">Where retries arrive together on a staircase and form the second burst.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->

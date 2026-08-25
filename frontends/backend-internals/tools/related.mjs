@@ -17,7 +17,8 @@ export const NO = {
   keepalive: '07', connpool: '08', jobclaim: '09', retryloop: '10', backpressure: '11',
   correlation: '12', genericplan: '13', retrystorm: '14', writeskew: '15', stampede: '16',
   timeout: '17', lockttl: '18', throughput: '19', rebalance: '20', tcpclose: '21',
-  aggregate: '22', alignment: '23', fanout: '24', omission: '25', slowstart: '26'
+  aggregate: '22', alignment: '23', fanout: '24', omission: '25', slowstart: '26',
+  backlog: '27'
 };
 
 /* slug → [{ to, ko, en }] */
@@ -81,7 +82,8 @@ export const RELATED = {
     { to: 'retrystorm', ko: '무너지는 임계와 회복하는 임계가 다릅니다.', en: 'The threshold where it breaks and the threshold where it recovers are not the same.' },
     { to: 'connpool', ko: '자라는 큐가 어디서 오는가.', en: 'Where the growing queue comes from.' },
     { to: 'timeout', ko: '거부가 신호라는 것과 남은 예산을 아래로 넘기는 것은 같은 이야기입니다.', en: 'Rejection as a signal and passing the remaining budget downward are the same idea.' },
-    { to: 'omission', ko: '큐에서 기다린 시간은 서버가 재는 응답시간에 안 들어갑니다 — 통째로 사라집니다.', en: 'Time spent waiting in the queue never enters server-side latency — it vanishes whole.' }
+    { to: 'omission', ko: '큐에서 기다린 시간은 서버가 재는 응답시간에 안 들어갑니다 — 통째로 사라집니다.', en: 'Time spent waiting in the queue never enters server-side latency — it vanishes whole.' },
+    { to: 'backlog', ko: '큐를 키우면 거부가 대기로 바뀌는 일이 커널 안에서도 똑같이 벌어집니다.', en: 'Growing the queue turns rejection into waiting — the same thing happens inside the kernel.' }
   ],
   correlation: [
     { to: 'timeout', ko: '타임아웃으로 포기한 요청의 응답이 늦게 오면, 그게 다음 요청의 짝이 됩니다.', en: 'When the answer to a timed-out request arrives late, it becomes the next request’s pair.' },
@@ -100,7 +102,8 @@ export const RELATED = {
     { to: 'timeout', ko: '아무도 안 기다리는 그 일이 애초에 왜 시작되는가.', en: 'Why the work nobody is waiting for starts in the first place.' },
     { to: 'connpool', ko: '용량이 왜 그렇게 작은지 — 리틀의 법칙.', en: 'Why the capacity is that small — Little’s law.' },
     { to: 'rebalance', ko: '부하를 걷어도 안 나오는 루프 — 나가는 문이 설정값에만 있는 경우.', en: 'A loop that shedding load will not end — where the exit exists only in the configuration.' },
-    { to: 'fanout', ko: '같은 요청을 겹쳐 보내는 것이 언제 꼬리를 자르고 언제 부하 자체가 되는가.', en: 'When overlapping the same request cuts the tail, and when it becomes the load itself.' }
+    { to: 'fanout', ko: '같은 요청을 겹쳐 보내는 것이 언제 꼬리를 자르고 언제 부하 자체가 되는가.', en: 'When overlapping the same request cuts the tail, and when it becomes the load itself.' },
+    { to: 'backlog', ko: '재시도가 계단으로 몰려 두 번째 버스트를 만드는 자리.', en: 'Where retries arrive together on a staircase and form the second burst.' }
   ],
   writeskew: [
     { to: 'jobclaim', ko: '그래서 락을 어디에 걸어야 하는가.', en: 'So where does the lock have to go?' },
@@ -158,12 +161,18 @@ export const RELATED = {
   omission: [
     { to: 'fanout', ko: '측정을 고치고 나면 볼 것 — 개별 서버의 꼬리가 사용자에게 몇 배로 도착하는가.', en: 'Once the measurement is fixed: how one server’s tail arrives magnified at the user.' },
     { to: 'aggregate', ko: '같은 사건이 두 숫자가 되는 다른 이유 — 이쪽은 둘 다 맞습니다.', en: 'The other way one event becomes two numbers — there, both are right.' },
-    { to: 'connpool', ko: '큐와 풀에서 기다린 시간이 응답시간에서 사라지는 자리.', en: 'Where time spent waiting in the queue and the pool drops out of the latency number.' }
+    { to: 'connpool', ko: '큐와 풀에서 기다린 시간이 응답시간에서 사라지는 자리.', en: 'Where time spent waiting in the queue and the pool drops out of the latency number.' },
+    { to: 'backlog', ko: '측정이 시작되기 전의 시간 — 서버의 시계는 accept() 부터 돕니다.', en: 'The time before the measurement starts — the server’s clock begins at accept().' }
   ],
   slowstart: [
     { to: 'throughput', ko: '정상 상태로 넘어가면 이번엔 손실률이 처리량을 정합니다 — 거기도 대역폭은 식에 없습니다.', en: 'Once the steady state arrives, loss rate sets the throughput — and bandwidth is not in that formula either.' },
     { to: 'connpool', ko: '계단을 건너뛰려면 커넥션이 살아 있어야 합니다. 그 풀을 얼마나 잡아야 하는가.', en: 'Skipping the staircase needs a live connection — and how big that pool has to be.' },
     { to: 'fanout', ko: '왕복 하나가 계단이라면, 그 호출이 100개로 늘어나면 어떻게 되는가.', en: 'If one round trip is a step, what happens when the call fans out to a hundred?' }
+  ],
+  backlog: [
+    { to: 'backpressure', ko: '큐를 키울지 거부할지 — 같은 결정을 애플리케이션 층에서 봅니다.', en: 'Grow the queue or reject — the same decision seen at the application layer.' },
+    { to: 'omission', ko: '큐에서 기다린 시간이 서버 지표에서 사라지는 이유.', en: 'Why the time spent waiting in the queue vanishes from the server metrics.' },
+    { to: 'timeout', ko: '127초를 기다리지 않으려면 커넥트 타임아웃을 어디에 두어야 하는가.', en: 'Where to put the connect timeout so nothing waits 127 seconds.' }
   ],
   rebalance: [
     { to: 'connpool', ko: '바쁨과 진행을 구별하지 못해서 생기는 같은 사고 — CPU 사용률은 진행률이 아닙니다.', en: 'The same accident from confusing busy with progressing — CPU utilisation is not a progress bar.' },

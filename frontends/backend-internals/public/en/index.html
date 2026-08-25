@@ -307,7 +307,7 @@
       <summary>
         <span class="arw" aria-hidden="true"></span>
         <h2>Failing quietly <em>no exception, no log — just a wrong result</em></h2>
-        <span class="count">7</span>
+        <span class="count">8</span>
       </summary>
       <div class="glist">
 
@@ -370,6 +370,15 @@
         <span>
           <h2>The load test never counted the 30 seconds it was frozen</h2>
           <p>Coordinated omission. Reported p99 10ms, actual 27.01s — the samples were not wrong, they were never taken.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
+
+      <a class="card" href="/en/backlog/">
+        <span class="no">27</span>
+        <span>
+          <h2>The kernel drops connections and the application log stays clean</h2>
+          <p>The accept queue and SYN retries. 7,372 dropped, zero in the application metrics — the latency is all on the client side.</p>
         </span>
         <span class="tag live">live</span>
       </a>

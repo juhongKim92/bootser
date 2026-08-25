@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>커널이 커넥션을 버리는데 애플리케이션 로그는 깨끗하다 — accept 큐</title>
+<meta name="description" content="5초 동안 몰린 트래픽에 커넥션 7,372개가 버려졌습니다. 애플리케이션 지표에는 0건입니다 — 커널이 버렸으니 요청을 본 적이 없거든요. 클라이언트는 7초를 기다립니다. 재시도가 1·3·7초 계단이라서요.">
+<link rel="canonical" href="https://lab.vermilion19.com/backlog/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/backlog/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/backlog/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/backlog/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="커널이 커넥션을 버리는데 애플리케이션 로그는 깨끗하다">
+<meta property="og:description" content="지연은 전부 클라이언트 쪽에 있습니다. 서버 지표에는 흔적이 없어요.">
+<meta property="og:url" content="https://lab.vermilion19.com/backlog/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="커널이 커넥션을 버리는데 애플리케이션 로그는 깨끗하다">
+<meta name="twitter:description" content="2초 과부하가 3초 지연, 4초 과부하가 7초 지연. 재시도가 계단이라 실제 과부하보다 깁니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/backlog-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/backlog/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>커널이 커넥션을 버리는데 애플리케이션 로그는 깨끗하다</h1>
+  <p class="lede">트래픽이 5초 동안 몰렸습니다. 그동안 커넥션 <strong>7,372개가 버려졌어요.</strong> 그런데 애플리케이션 지표에 남은 것은 <strong>0건</strong>입니다 — 커널이 버렸으니 그 요청을 본 적이 없거든요. 클라이언트는 그동안 <strong>7초</strong>를 기다립니다. 과부하는 5초였는데요.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sL">커넥션 도착</label>
+          <span class="v" id="vL">400<small>/초</small></span>
+          <input type="range" id="sL" min="100" max="5000" step="100" value="400" aria-label="초당 도착하는 새 커넥션 수">
+        </div>
+        <div class="dial">
+          <label for="sA">accept 처리</label>
+          <span class="v" id="vA">500<small>/초</small></span>
+          <input type="range" id="sA" min="100" max="2000" step="100" value="500" aria-label="애플리케이션이 초당 accept 하는 수">
+        </div>
+        <div class="dial">
+          <label for="sB">backlog</label>
+          <span class="v" id="vB">128<small>개</small></span>
+          <input type="range" id="sB" min="0" max="4" step="1" value="1" aria-label="accept 큐 크기">
+        </div>
+        <div class="dial">
+          <label for="sD">몰리는 시간</label>
+          <span class="v" id="vD">5<small>초</small></span>
+          <input type="range" id="sD" min="0" max="70" step="1" value="5" aria-label="트래픽이 몰리는 구간의 길이">
+        </div>
+        <div class="dial">
+          <label>넘칠 때</label>
+          <div class="seg" id="segAbort" role="group" aria-label="tcp_abort_on_overflow">
+            <button data-abort="0" aria-pressed="true">조용히 버린다</button>
+            <button data-abort="1">RST 를 보낸다</button>
+          </div>
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->도착 400/초 · accept 500/초 · backlog 128 · 5초 동안 — 받는 속도가 더 빨라서 큐가 안 찬다<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">몰리는 동안 큐에서 벌어지는 일</span>
+      <div class="board">
+        <div class="tape" id="tape"><!--pr--><div class="zone fill" style="left:0;width:71.42857142857143%"></div><div class="zone calm" style="left:71.42857142857143%;right:0"></div><div class="edge" style="left:71.42857142857143%"></div><div class="lbl" style="left:0">큐가 차는 중 안 참</div><!--/pr--></div>
+        <div class="tapex" id="tapeX"><!--pr--><span>0초</span><span>4초</span><span>7초</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="fill"></i>큐가 차는 중</span>
+          <span><i class="over"></i>넘쳐서 버려지는 중</span>
+          <span><i class="q"></i>큐에 들어간 커넥션</span>
+          <span><i class="hit"></i>클라이언트가 성공하는 재시도</span>
+        </div>
+
+        <div class="qbar" id="qbar"><!--pr--><div class="fillq" style="width:0.0%"></div><div class="cap"></div><!--/pr--></div>
+        <div class="qcap" id="qcap"><!--pr-->큐에 들어간 것 0 / 128 — 맨 뒤는 0.00초 를 기다린다. 넘쳐서 버려진 것 <b>0</b>건.<!--/pr--></div>
+
+        <div class="stairy" id="stairY"><!--pr-->넘치지 않았다 — 재시도할 것이 없다<!--/pr--></div>
+        <div class="stair" id="stair"><!--pr--><div class="st"><span class="lb"></span><span class="bar" style="height:1.6%"></span></div><div class="st"><span class="lb"></span><span class="bar" style="height:4.8%"></span></div><div class="st"><span class="lb"></span><span class="bar" style="height:11.1%"></span></div><div class="st"><span class="lb"></span><span class="bar" style="height:23.8%"></span></div><div class="st"><span class="lb"></span><span class="bar" style="height:49.2%"></span></div><div class="st"><span class="lb"></span><span class="bar" style="height:100.0%"></span></div><div class="st"><span class="lb"></span><span class="bar" style="height:0.0%"></span></div><!--/pr--></div>
+        <div class="stairx" id="stairX"><!--pr--><span>1</span><span>3</span><span>7</span><span>15</span><span>31</span><span>63</span><span>127</span><!--/pr--></div>
+
+        <table class="sides" id="sides"><!--pr--><tr><th>누가</th><th>무엇을 보나</th></tr><tr><td>애플리케이션</td><td class="blind">요청 0건 · 에러 0건 · 응답 시간 정상</td></tr><tr><td>커널</td><td class="">버린 것 0건 · 큐에 넣은 것 0건</td></tr><tr><td>클라이언트</td><td class="hurt">기다린 것 없음</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m "><span class="k">큐가 차기까지</span><span class="n">안 참</span></div><div class="m good"><span class="k">버려진 커넥션</span><span class="n">0</span></div><div class="m good"><span class="k">클라이언트 지연</span><span class="n">—</span></div><div class="m "><span class="k">넘친 구간 대비</span><span class="n">—</span></div><div class="m good"><span class="k">큐 맨 뒤 대기</span><span class="n">0.00초</span></div><div class="m good"><span class="k">애플리케이션이 본 것</span><span class="n">0</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>큐가 안 찬다.</b> 큐에 0개 · 맨 뒤 대기 0.00초<br><span class="at">받는 속도가 오는 속도보다 빠르면 backlog 는 아무 의미가 없다</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>커넥션 도착</td><td>초당 새로 열리는 커넥션 수. <strong>accept 처리보다 크면</strong> 큐가 차기 시작합니다.</td></tr>
+    <tr><td>accept 처리</td><td>애플리케이션이 초당 <code>accept()</code> 를 부르는 횟수. 요청을 처리하는 속도가 아니라 <strong>받아들이는 속도</strong>입니다 — 이벤트 루프가 막혀 있으면 이 값이 0 이 됩니다.</td></tr>
+    <tr><td>backlog</td><td>accept 큐 크기. <code>listen()</code> 인자와 <code>somaxconn</code> 중 작은 쪽이에요. <strong>리눅스 5.4 이전 기본값이 128, 이후가 4096</strong> 입니다.</td></tr>
+    <tr><td>몰리는 시간</td><td>과부하가 지속되는 길이. <strong>이 값과 클라이언트가 겪는 지연을 나란히 보세요</strong> — 같지 않습니다.</td></tr>
+    <tr><td>넘칠 때</td><td><code>tcp_abort_on_overflow</code> 입니다. 기본값은 <strong>조용히 버리기</strong>예요. 켜면 RST 를 보내서 클라이언트가 <em>즉시</em> 실패합니다.</td></tr>
+  </table>
+
+  <p>도착이 고정 간격이라 모든 값이 닫힌 식으로 나옵니다. 난수도 표본도 없어요.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 과부하가 아니면 아무 일도 없다</h4>
+    <div class="seq">도착 400/초 · accept 500/초 · backlog 128
+큐에 쌓이는 것 <em>0개</em> · 버려짐 <em>0건</em> · 클라이언트 지연 <em>없음</em></div>
+    <p class="why">받는 속도가 오는 속도보다 빠르면 큐는 늘 비어 있습니다. <strong>backlog 를 얼마로 두든 상관이 없어요</strong> — 이 값이 논쟁거리가 되지 않는 이유이고, 그래서 아무도 안 보다가 몰리는 날 문제가 됩니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 도착을 2,000/초로 — 큐가 0.09초 만에 찬다</h4>
+    <div class="seq">도착 400 → <em>2,000/초</em> (accept 500 그대로 · 5초 동안)
+큐가 차기까지 <em>0.09초</em> · 버려짐 <em>7,372건</em>
+애플리케이션 지표 <em>0건</em> · 클라이언트 지연 <em>7초</em></div>
+    <p class="why">초당 1,500개씩 남으니 <strong>128칸은 0.09초면 찹니다.</strong> 그 뒤 5초 동안 오는 것은 전부 버려져요. 그런데 <strong>애플리케이션은 그 7,372건을 본 적이 없습니다</strong> — 커널이 버렸으니까요. 응답 시간 그래프도 에러율도 깨끗합니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 2초만 몰려도 3초 — 지연이 과부하보다 길다</h4>
+    <div class="seq">몰리는 시간 5 → <em>2초</em>
+넘치는 구간 <em>1.91초</em> · 클라이언트 지연 <em>3초</em> — 넘친 구간의 <em>1.57배</em></div>
+    <p class="why">버려진 커넥션은 <strong>1초 · 3초 · 7초</strong> 에 다시 시도합니다. 1.91초를 기다려야 하는데 1초짜리 재시도는 아직 이르고, 그다음이 3초예요. <strong>1.09초를 그냥 앉아서 보냅니다.</strong> 서버는 이미 한가한데요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. 4초 몰리면 7초 — 계단이 벌어진다</h4>
+    <div class="seq">몰리는 시간 2 → <em>4초</em>
+넘치는 구간 <em>3.91초</em> · 클라이언트 지연 <em>7초</em> — 넘친 구간의 <em>1.79배</em></div>
+    <p class="why">계단이 <code>2ᵏ − 1</code> 이라 간격이 점점 벌어집니다. 3.91초를 넘는 첫 칸이 7초예요. <strong>과부하가 길어질수록 낭비되는 시간의 비율도 커집니다</strong> — 8초 과부하는 15초, 16초는 31초. 최대 2배 가까이 갑니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. backlog 를 4096 으로 — 드롭이 대기로 바뀐다</h4>
+    <div class="seq">backlog 128 → <em>4,096</em> (도착 2,000 · 5초)
+큐가 차기까지 0.09 → <em>2.73초</em> · 버려짐 7,372 → <em>3,404건</em>
+클라이언트 지연 7 → <em>3초</em> · <strong>큐 대기 0.26 → <em>8.19초</em></strong></div>
+    <p class="why">좋아진 것처럼 보이는데 절반만 맞습니다. 버려지는 것은 줄었지만 <strong>큐 맨 뒤에 들어간 커넥션은 8.19초를 기다립니다.</strong> 그리고 그 8초는 <strong>서버가 재는 응답 시간에 안 들어갑니다</strong> — 서버의 시계는 <code>accept()</code> 부터 도니까요. <a href="/backpressure/">11번</a>이 말한 "거부가 대기로 바뀐다" 가 여기서 <a href="/omission/">25번</a>이 말한 "지표에서 사라지는 시간" 과 만납니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. RST 를 보내게 한다 — 지연이 사라지고 에러가 난다</h4>
+    <div class="seq">넘칠 때 조용히 버린다 → <em>RST 를 보낸다</em> (<code>tcp_abort_on_overflow=1</code>)
+클라이언트 지연 7초 → <em>즉시</em> · 대신 <em>즉시 실패</em></div>
+    <p class="why">7초를 기다리다 성공하는 것과 0초에 실패하는 것 중 무엇이 나은가 — <strong>이건 성능 문제가 아니라 정책 결정입니다.</strong> 사용자가 기다릴 수 있는 화면이면 재시도가 낫고, 다른 서버로 넘길 수 있는 클라이언트면 즉시 실패가 훨씬 낫습니다. <a href="/backpressure/">11번</a>의 "거부는 신호다" 가 커널 설정 한 줄로 나타나는 자리예요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. 70초 몰리면 커넥션이 죽는다</h4>
+    <div class="seq">몰리는 시간 5 → <em>70초</em>
+넘치는 구간 <em>69.91초</em> · 마지막 재시도가 <em>63초</em>
+클라이언트 <em>127초 뒤 ETIMEDOUT</em></div>
+    <p class="why">재시도는 63초에서 끝납니다(<code>tcp_syn_retries</code> 기본 6회). <strong>64초를 넘는 과부하는 재시도로 살릴 수 없어요.</strong> 클라이언트는 127초를 기다린 뒤 실패합니다 — 그동안 사용자는 <em>아무 화면도</em> 못 봅니다. 타임아웃을 짧게 걸어두지 않았다면요.</p>
+  </div>
+
+  <h2>큐가 둘이고, 넘칠 때 다르게 행동한다</h2>
+
+  <p>리눅스에는 커넥션 큐가 두 개 있습니다. 헷갈리기 쉬운데 <strong>증상이 다르게 나타나서</strong> 구별할 값이 있어요.</p>
+
+  <table class="keytable">
+    <tr><th>큐</th><th>무엇이 담기나 · 넘치면</th></tr>
+    <tr><td>SYN 큐</td><td>아직 악수가 안 끝난 커넥션. <code>tcp_max_syn_backlog</code> 가 크기입니다 — man page 의 표현으로 <em>"이 수를 넘으면 커널이 요청을 버리기 시작한다"</em>. syncookies 를 켜면 이 한도가 무시됩니다</td></tr>
+    <tr><td>accept 큐</td><td><strong>악수가 끝났는데 애플리케이션이 아직 안 가져간</strong> 커넥션. <code>listen()</code> 의 backlog 가 크기이고 <code>somaxconn</code> 으로 잘립니다. 넘치면 <em>"요청이 무시되어, 나중에 다시 시도하면 성공할 수 있다"</em></td></tr>
+  </table>
+
+  <p>리눅스 2.2 이후로 <strong><code>listen()</code> 의 backlog 는 두 번째 큐를 가리킵니다.</strong> 이걸 SYN 큐로 아는 경우가 많은데 man page 가 명시적으로 바꿔 적어뒀어요 — <em>"미완성 커넥션 요청의 수가 아니라, 완전히 수립되어 accept 를 기다리는 소켓의 큐 길이"</em>.</p>
+
+  <div class="callout"><strong>기본값이 바뀐 것도 알아둘 만합니다.</strong> <code>somaxconn</code> 은 <strong>리눅스 5.4 부터 4096</strong> 이고 그 이전은 <strong>128</strong> 이었습니다. 커널을 올렸더니 같은 코드가 다르게 버티는 이유가 이겁니다.</div>
+
+  <h2>서버는 왜 아무것도 모르는가</h2>
+
+  <p>이 페이지에서 가장 불편한 칸입니다. 같은 5초 동안 세 쪽이 본 것이 이렇게 다릅니다.</p>
+
+  <table class="keytable">
+    <tr><th>누가</th><th>무엇을 보나</th></tr>
+    <tr><td>애플리케이션</td><td><strong>아무것도.</strong> 요청 0건, 에러 0건, 응답 시간 정상. 그 커넥션은 <code>accept()</code> 를 통과한 적이 없습니다</td></tr>
+    <tr><td>커널</td><td>버린 것 7,372건, 큐에 넣은 것 128건. <code>netstat -s</code> 의 <em>listen queue overflow</em> 카운터에만 남습니다</td></tr>
+    <tr><td>클라이언트</td><td><strong>7초.</strong> 그리고 그게 왜인지 알 방법이 없습니다 — RST 도 안 왔으니까요</td></tr>
+  </table>
+
+  <p>기본 설정에서 <strong>RST 를 보내지 않는다</strong>는 게 핵심입니다. <code>tcp_abort_on_overflow</code> 문서가 <em>"수신 서비스가 너무 느려서 따라잡지 못할 때 커넥션을 리셋하도록 <strong>켠다</strong>"</em> 라고 적혀 있어요 — 켜는 기능이라는 건 기본이 꺼짐이라는 뜻입니다.</p>
+
+  <div class="callout">그래서 <strong>두 쪽의 상태가 갈립니다.</strong> 클라이언트 TCP 는 마지막 ACK 를 보낸 시점에 자기 쪽에서 커넥션이 수립됐다고 봅니다. 서버 애플리케이션은 그 커넥션을 아직(어쩌면 영영) 못 받았고요. <strong>아무도 서로에게 알려주지 않습니다.</strong></div>
+
+  <p>이 페이지는 여기서 <strong>패킷 수준 서술을 일부러 하지 않습니다.</strong> "정확히 어느 패킷이 버려지는가" 는 흔히 이야기되지만 man page 에서 확인되는 내용이 아니에요. 문서로 확인되는 것은 <em>전달되지 않는다 · RST 가 안 나간다 · 나중에 재시도하면 성공할 수 있다</em> 셋뿐이고, 이 실험대는 그 셋만 모델로 만들었습니다.</p>
+
+  <h2>계단은 어디서 오는가</h2>
+
+  <p>버려진 커넥션이 다시 시도하는 간격은 <strong>RFC 6298</strong> 이 정합니다. 왕복 시간을 아직 못 재봤으면 <em>"송신자는 RTO 를 1초로 두어야 한다(SHOULD)"</em> 이고, 타임아웃마다 <em>"RTO ← RTO × 2"</em> 로 물립니다.</p>
+
+  <div class="callout"><code>재전송 시각 = 2ᵏ − 1</code> → <strong>1 · 3 · 7 · 15 · 31 · 63초</strong><br>그리고 마지막 재전송 뒤에도 한 번 더 기다리므로 포기는 <code>2⁷ − 1 = 127초</code> 입니다.</div>
+
+  <p>RFC 는 <strong>몇 번까지 재시도할지는 정하지 않습니다.</strong> 그건 OS 몫이고, 리눅스 <code>tcp_syn_retries</code> 의 기본값이 6이에요. 그리고 man page 가 그 값을 이렇게 설명합니다 — <em>"기본값은 6이고, 이는 <strong>약 127초</strong> 동안 재시도하는 것에 해당한다"</em>.</p>
+
+  <div class="callout"><strong>명세가 규칙을 주고 man page 가 합계를 줍니다.</strong> <code>2⁷ − 1 = 127</code> 이 맞아떨어지는 것이 이 모델의 검산점이었어요 — 계단을 지어낸 게 아니라 두 문서가 같은 숫자를 가리킵니다.</div>
+
+  <p>그래서 클라이언트가 겪는 지연은 <strong>과부하 길이가 아니라 그것을 넘는 첫 계단</strong>입니다. 서버는 이미 회복했는데 클라이언트는 다음 재시도 시각까지 앉아 있어요.</p>
+
+  <table class="keytable">
+    <tr><th>몰린 시간</th><th>클라이언트가 기다린 시간</th></tr>
+    <tr><td>2초</td><td>3초 — 몰린 시간의 1.50배</td></tr>
+    <tr><td>4초</td><td>7초 — 몰린 시간의 1.75배</td></tr>
+    <tr><td>8초</td><td>15초 — 몰린 시간의 1.88배</td></tr>
+    <tr><td>16초</td><td>31초 — 몰린 시간의 1.94배</td></tr>
+    <tr><td>64초 이상</td><td><strong>127초 뒤 실패</strong> — 살릴 재시도가 없습니다</td></tr>
+  </table>
+
+  <h2>이 모델이 가정하는 것</h2>
+
+  <table class="keytable">
+    <tr><th>가정</th><th>깨지면 어떻게 되나</th></tr>
+    <tr><td>버스트가 한 번</td><td>몰림이 끝나면 도착이 멎는다고 봤습니다. 실제로는 <strong>재시도가 다시 몰려 두 번째 버스트</strong>를 만들 수 있어요 — 그러면 계단이 한 칸 더 밀립니다. <a href="/retrystorm/">14번</a>의 자리입니다</td></tr>
+    <tr><td>도착이 고른 간격</td><td>실제 도착은 뭉칩니다. 뭉치면 같은 평균에도 큐가 더 빨리 차요</td></tr>
+    <tr><td>클라이언트가 계단을 따른다</td><td>OS 의 TCP 재시도를 그대로 쓴다고 봤습니다. 애플리케이션이 자체 타임아웃(예: 3초)을 걸어두면 <strong>계단을 못 기다리고 먼저 포기</strong>합니다 — 그게 더 나은 경우가 많아요</td></tr>
+    <tr><td>큐 대기는 순수 대기</td><td>큐에서 기다린 커넥션이 그 뒤 정상 처리된다고 봤습니다. 실제로는 그 시간에 이미 클라이언트 타임아웃이 지났을 수 있고, 그러면 <a href="/timeout/">17번</a>의 "아무도 안 기다리는 일" 이 됩니다</td></tr>
+  </table>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>지금 넘치고 있나</td><td><code>ss -lnt</code> 의 <code>Send-Q</code> 가 backlog 이고 <code>Recv-Q</code> 가 <strong>지금 accept 를 기다리는 수</strong>입니다. 둘이 같으면 넘치는 중이에요. 누적은 <code>netstat -s | grep -i listen</code> 입니다</td></tr>
+    <tr><td>애플리케이션 설정</td><td>프레임워크마다 backlog 기본값이 다릅니다(대개 511 · 1024 · 100). <strong><code>somaxconn</code> 보다 크게 잡아도 조용히 잘립니다</strong> — 둘 다 봐야 해요</td></tr>
+    <tr><td>accept 가 왜 느린가</td><td>이 문제는 처리 속도가 아니라 <strong>받아들이는 속도</strong>가 원인입니다. 이벤트 루프가 블로킹 호출에 막혀 있거나, accept 스레드가 하나거나, GC 정지 중이면 <a href="/gc/">2번</a>) 그동안 큐만 찹니다</td></tr>
+    <tr><td>배포 순간</td><td>가장 흔한 재현 조건입니다. 새 인스턴스가 뜨자마자 트래픽을 받으면 <strong>JIT 도 캐시도 안 데워진 상태로 accept 를 못 따라갑니다.</strong> 워밍업 없이 로드밸런서에 넣으면 이 페이지의 그림이 그대로 나옵니다</td></tr>
+    <tr><td>지표에 남기기</td><td>커널 카운터를 <strong>반드시 대시보드에 올리세요.</strong> 애플리케이션 지표만 보면 이 사건은 존재하지 않습니다. <a href="/omission/">25번</a>과 같은 종류의 사각지대예요</td></tr>
+    <tr><td>클라이언트 타임아웃</td><td>커넥트 타임아웃을 안 걸면 <strong>127초까지 매달립니다.</strong> 3초쯤으로 걸고 다른 인스턴스로 넘기는 편이 거의 언제나 낫습니다 — <a href="/timeout/">17번</a>의 예산 이야기가 여기서 시작돼요</td></tr>
+    <tr><td>큐를 키울까</td><td>버스트가 <em>짧고</em> accept 가 곧 따라잡을 수 있을 때만 도움이 됩니다. 지속적인 과부하에서는 <strong>더 오래 기다렸다 실패</strong>할 뿐이에요 — <a href="/backpressure/">11번</a>의 결론 그대로입니다</td></tr>
+  </table>
+
+  <p><a href="/omission/">25번</a>이 <em>측정이 놓친 시간</em>이었다면 이 페이지는 <em>측정이 시작되기 전의 시간</em>입니다. 서버의 시계는 <code>accept()</code> 부터 도는데, 이 사건은 전부 그 앞에서 벌어집니다.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/backpressure/"><span class="no">11</span><span><span class="t">거부는 버그가 아니라 신호다</span><span class="why">큐를 키울지 거부할지 — 같은 결정을 애플리케이션 층에서 봅니다.</span></span></a></li>
+      <li><a href="/omission/"><span class="no">25</span><span><span class="t">멈춰 있던 30초를 부하 테스트가 세지 않았다</span><span class="why">큐에서 기다린 시간이 서버 지표에서 사라지는 이유.</span></span></a></li>
+      <li><a href="/timeout/"><span class="no">17</span><span><span class="t">각자 1초씩 줬는데 왜 아무도 1초를 못 쓰나</span><span class="why">127초를 기다리지 않으려면 커넥트 타임아웃을 어디에 두어야 하는가.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/backlog/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uSec:'초', uPerSec:'/초', uCount:'개', uNone:'없음', uNever:'안 참',
+  hint:'도착 $1/초 · accept $2/초 · backlog $3 · $4초 동안 — 큐가 차기까지 $5',
+  hintNever:'도착 $1/초 · accept $2/초 · backlog $3 · $4초 동안 — 받는 속도가 더 빨라서 큐가 안 찬다',
+  zFill:'큐가 차는 중 $1', zOver:'넘치는 중 $1',
+  qCap:'큐에 들어간 것 $1 / $2 — 맨 뒤는 $3 를 기다린다. 넘쳐서 버려진 것 $4건.',
+  stY:'재시도 계단 — $1 를 넘는 첫 칸이 $2 다',
+  stNone:'넘치지 않았다 — 재시도할 것이 없다',
+  sWho:'누가', sWhat:'무엇을 보나',
+  sApp:'애플리케이션', sAppV:'요청 $1건 · 에러 0건 · 응답 시간 정상',
+  sKernel:'커널', sKernelV:'버린 것 $1건 · 큐에 넣은 것 $2건',
+  sClient:'클라이언트', sClientV:'$1 를 기다렸다 — 이유는 알 수 없다',
+  sClientOk:'기다린 것 없음', sClientAbort:'즉시 실패 — 적어도 이유는 안다',
+  sClientDead:'$1초 뒤 ETIMEDOUT — 살릴 재시도가 없었다',
+  mFill:'큐가 차기까지', mDropped:'버려진 커넥션', mClient:'클라이언트 지연',
+  mRatio:'넘친 구간 대비', mQueueWait:'큐 맨 뒤 대기', mServer:'애플리케이션이 본 것',
+  mNow:'즉시',
+  vCalm:'<b>큐가 안 찬다.</b> 큐에 $1개 · 맨 뒤 대기 $2<br><span class="at">받는 속도가 오는 속도보다 빠르면 backlog 는 아무 의미가 없다</span>',
+  vStair:'<b>$1건이 버려졌는데 애플리케이션 지표는 0건이다.</b><br>클라이언트는 $2 를 기다린다 — 넘친 구간은 $3 였다 <span class="at">($4배)</span>',
+  vDead:'<b>$1건이 버려졌고 재시도로는 못 살린다.</b> 넘친 구간이 $2 인데<br>마지막 재전송이 63초다 <span class="at">— 클라이언트는 $3초 뒤 ETIMEDOUT</span>',
+  vAbort:'<b>$1건을 RST 로 즉시 끊었다.</b> 조용히 버렸다면 $2 를 기다렸을 것이다.<br><span class="at">기다렸다 성공하는 것과 즉시 실패하는 것 — 성능이 아니라 정책이다</span>',
+  scene:[
+    '먼저 과부하가 아닌 상태입니다. 초당 400개가 오고 애플리케이션은 500개를 받아요. 큐는 늘 비어 있고 버려지는 것도 없습니다. 여기서는 backlog 를 얼마로 두든 상관이 없어요 — 그래서 아무도 이 값을 안 보다가, 몰리는 날 문제가 됩니다.',
+    '도착을 2,000/초로 올렸습니다. 초당 1,500개가 남으니 128칸짜리 큐는 0.09초 만에 찹니다. 그 뒤 5초 동안 오는 7,372건이 전부 버려져요. 그런데 아래 표를 보세요 — 애플리케이션이 본 요청은 0건입니다. 커널이 버렸으니 accept() 를 통과한 적이 없거든요. 응답 시간도 에러율도 깨끗합니다.',
+    '몰리는 시간을 2초로 줄였습니다. 넘치는 구간은 1.91초예요. 그런데 클라이언트는 3초를 기다립니다. 재시도가 1초, 3초, 7초에 나가는데 1.91초를 넘는 첫 칸이 3초라서요. 서버는 이미 한가한데 클라이언트는 1.09초를 그냥 앉아서 보냅니다.',
+    '4초로 늘렸습니다. 넘치는 구간 3.91초, 클라이언트 지연 7초 — 1.75배입니다. 계단이 2의 거듭제곱에서 1을 뺀 값이라 간격이 점점 벌어져요. 8초 과부하는 15초, 16초는 31초가 됩니다. 과부하가 길어질수록 낭비되는 비율도 커집니다.',
+    'backlog 를 4,096 으로 올렸습니다. 리눅스 5.4 부터의 기본값이에요. 큐가 차기까지 2.73초로 늘고 버려지는 것이 7,372 에서 3,404 건으로 줄었습니다. 좋아 보이죠. 그런데 큐 맨 뒤 대기를 보세요 — 0.26초에서 8.19초가 됐습니다. 그리고 그 8초는 서버가 재는 응답 시간에 안 들어갑니다. 시계가 accept() 부터 도니까요.',
+    'tcp_abort_on_overflow 를 켰습니다. 이제 넘치면 RST 를 보내요. 클라이언트는 7초를 기다리는 대신 즉시 실패합니다. 어느 쪽이 나은가는 성능 문제가 아니라 정책 결정이에요 — 기다릴 수 있는 화면이면 재시도가 낫고, 다른 서버로 넘길 수 있는 클라이언트면 즉시 실패가 훨씬 낫습니다.',
+    '마지막으로 70초 동안 몰아봅니다. 재시도는 63초에서 끝나요. tcp_syn_retries 기본값이 6이라서요. 64초를 넘는 과부하는 재시도로 살릴 수 없습니다. 클라이언트는 127초를 기다린 뒤 ETIMEDOUT 으로 실패해요. man page 가 그 6이라는 값을 "약 127초 동안 재시도하는 것에 해당한다" 고 적어둔 그 숫자입니다.'
+  ],
+};
+</script>
+<script src="/shared/backlog-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "커널이 커넥션을 버리는데 애플리케이션 로그는 깨끗하다",
+  "description": "5초 동안 몰린 트래픽에 커넥션 7,372개가 버려졌습니다. 애플리케이션 지표에는 0건입니다 — 커널이 버렸으니 요청을 본 적이 없거든요. 클라이언트는 7초를 기다립니다. 재시도가 1·3·7초 계단이라서요.",
+  "url": "https://lab.vermilion19.com/backlog/",
+  "inLanguage": "ko",
+  "datePublished": "2026-08-25",
+  "dateModified": "2026-08-25",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "커널이 커넥션을 버리는데 애플리케이션 로그는 깨끗하다"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

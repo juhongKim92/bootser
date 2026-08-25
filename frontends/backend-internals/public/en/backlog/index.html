@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>The kernel drops connections and the application log stays clean — the accept queue</title>
+<meta name="description" content="A five-second traffic burst threw away 7,372 connections. The application metrics show 0 — the kernel dropped them, so it never saw a request. The client waits 7 seconds, because retries land on a 1/3/7-second staircase.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/backlog/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/backlog/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/backlog/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/backlog/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="The kernel drops connections and the application log stays clean">
+<meta property="og:description" content="The latency is entirely on the client side. There is no trace of it in the server metrics.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/backlog/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The kernel drops connections and the application log stays clean">
+<meta name="twitter:description" content="A 2-second overload costs 3 seconds; a 4-second overload costs 7. Retries land on a staircase, so the wait outlasts the overload.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/backlog-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/backlog/" hreflang="ko" lang="ko">KO</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>The kernel drops connections and the application log stays clean</h1>
+  <p class="lede">Traffic piled up for five seconds. During it, <strong>7,372 connections were thrown away.</strong> What the application metrics recorded is <strong>zero</strong> — the kernel dropped them, so it never saw a request. Meanwhile the client waits <strong>7 seconds</strong>. The overload was 5.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sL">Connections arriving</label>
+          <span class="v" id="vL">400<small>/s</small></span>
+          <input type="range" id="sL" min="100" max="5000" step="100" value="400" aria-label="new connections arriving per second">
+        </div>
+        <div class="dial">
+          <label for="sA">accept rate</label>
+          <span class="v" id="vA">500<small>/s</small></span>
+          <input type="range" id="sA" min="100" max="2000" step="100" value="500" aria-label="how many the application accepts per second">
+        </div>
+        <div class="dial">
+          <label for="sB">backlog</label>
+          <span class="v" id="vB">128<small> slots</small></span>
+          <input type="range" id="sB" min="0" max="4" step="1" value="1" aria-label="accept queue size">
+        </div>
+        <div class="dial">
+          <label for="sD">Burst length</label>
+          <span class="v" id="vD">5<small>s</small></span>
+          <input type="range" id="sD" min="0" max="70" step="1" value="5" aria-label="how long the overload lasts">
+        </div>
+        <div class="dial">
+          <label>On overflow</label>
+          <div class="seg" id="segAbort" role="group" aria-label="tcp_abort_on_overflow">
+            <button data-abort="0" aria-pressed="true">drop silently</button>
+            <button data-abort="1">send RST</button>
+          </div>
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->arriving 400/s · accept 500/s · backlog 128 · for 5s — intake is faster, so the queue never fills<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">What happens in the queue during the burst</span>
+      <div class="board">
+        <div class="tape" id="tape"><!--pr--><div class="zone fill" style="left:0;width:71.42857142857143%"></div><div class="zone calm" style="left:71.42857142857143%;right:0"></div><div class="edge" style="left:71.42857142857143%"></div><div class="lbl" style="left:0">filling never</div><!--/pr--></div>
+        <div class="tapex" id="tapeX"><!--pr--><span>0s</span><span>4s</span><span>7s</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="fill"></i>queue filling</span>
+          <span><i class="over"></i>overflowing, being dropped</span>
+          <span><i class="q"></i>connections in the queue</span>
+          <span><i class="hit"></i>the retry that succeeds</span>
+        </div>
+
+        <div class="qbar" id="qbar"><!--pr--><div class="fillq" style="width:0.0%"></div><div class="cap"></div><!--/pr--></div>
+        <div class="qcap" id="qcap"><!--pr-->queued 0 of 128 — the back of it waits 0.00s. Dropped on overflow: <b>0</b>.<!--/pr--></div>
+
+        <div class="stairy" id="stairY"><!--pr-->nothing overflowed — there is nothing to retry<!--/pr--></div>
+        <div class="stair" id="stair"><!--pr--><div class="st"><span class="lb"></span><span class="bar" style="height:1.6%"></span></div><div class="st"><span class="lb"></span><span class="bar" style="height:4.8%"></span></div><div class="st"><span class="lb"></span><span class="bar" style="height:11.1%"></span></div><div class="st"><span class="lb"></span><span class="bar" style="height:23.8%"></span></div><div class="st"><span class="lb"></span><span class="bar" style="height:49.2%"></span></div><div class="st"><span class="lb"></span><span class="bar" style="height:100.0%"></span></div><div class="st"><span class="lb"></span><span class="bar" style="height:0.0%"></span></div><!--/pr--></div>
+        <div class="stairx" id="stairX"><!--pr--><span>1</span><span>3</span><span>7</span><span>15</span><span>31</span><span>63</span><span>127</span><!--/pr--></div>
+
+        <table class="sides" id="sides"><!--pr--><tr><th>who</th><th>what they see</th></tr><tr><td>application</td><td class="blind">0 requests · 0 errors · latency normal</td></tr><tr><td>kernel</td><td class="">0 dropped · 0 queued</td></tr><tr><td>client</td><td class="hurt">no waiting</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m "><span class="k">queue fills in</span><span class="n">never</span></div><div class="m good"><span class="k">connections dropped</span><span class="n">0</span></div><div class="m good"><span class="k">client latency</span><span class="n">—</span></div><div class="m "><span class="k">vs overflow window</span><span class="n">—</span></div><div class="m good"><span class="k">back-of-queue wait</span><span class="n">0.00s</span></div><div class="m good"><span class="k">what the app saw</span><span class="n">0</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>The queue never fills.</b> 0 queued · back of it waits 0.00s<br><span class="at">take them in faster than they arrive and the backlog value means nothing</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">Previous</button>
+        <button id="btnStep">Next step</button>
+        <button id="btnReset">Reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Work the dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What it changes</th></tr>
+    <tr><td>Connections arriving</td><td>New connections per second. <strong>Above the accept rate</strong> the queue starts filling.</td></tr>
+    <tr><td>accept rate</td><td>How often the application calls <code>accept()</code>. Not how fast it serves requests — how fast it <strong>takes them in</strong>. A blocked event loop makes this zero.</td></tr>
+    <tr><td>backlog</td><td>Accept-queue size: the smaller of the <code>listen()</code> argument and <code>somaxconn</code>. <strong>The default was 128 before Linux 5.4 and is 4096 after.</strong></td></tr>
+    <tr><td>Burst length</td><td>How long the overload lasts. <strong>Read it next to the client-side latency</strong> — they are not the same number.</td></tr>
+    <tr><td>On overflow</td><td>This is <code>tcp_abort_on_overflow</code>. The default is <strong>drop silently</strong>. Turn it on and the client fails <em>immediately</em> with a RST.</td></tr>
+  </table>
+
+  <p>Arrivals are evenly spaced, so every value comes out of a closed-form expression. No randomness, no samples.</p>
+
+  <h2>Things to try</h2>
+
+  <div class="recipe">
+    <h4>1. Without an overload, nothing happens at all</h4>
+    <div class="seq">Arriving 400/s · accept 500/s · backlog 128
+Queued <em>0</em> · dropped <em>0</em> · client latency <em>none</em></div>
+    <p class="why">If you take them in faster than they arrive, the queue is always empty. <strong>The backlog value makes no difference whatsoever</strong> — which is why nobody argues about it, and why nobody is looking at it on the day traffic piles up.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Raise arrivals to 2,000/s — the queue fills in 0.09s</h4>
+    <div class="seq">Arriving 400 → <em>2,000/s</em> (accept still 500 · for 5 seconds)
+Queue fills in <em>0.09s</em> · dropped <em>7,372</em>
+Application metrics <em>0</em> · client latency <em>7s</em></div>
+    <p class="why">1,500 per second have nowhere to go, so <strong>128 slots fill in 0.09 seconds.</strong> Everything arriving in the next five seconds is thrown away. And <strong>the application never saw those 7,372</strong> — the kernel dropped them. Latency graphs and error rates stay clean.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Two seconds of overload costs three — the wait outlasts it</h4>
+    <div class="seq">Burst length 5 → <em>2s</em>
+Overflow window <em>1.91s</em> · client latency <em>3s</em> — <em>1.57×</em> the overflow window</div>
+    <p class="why">Dropped connections retry at <strong>1s, 3s, 7s</strong>. The wait needed is 1.91 seconds; the 1-second retry is still too early, and the next one is at 3. <strong>1.09 seconds are spent sitting still</strong> while the server is already idle.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Four seconds costs seven — the gaps widen</h4>
+    <div class="seq">Burst length 2 → <em>4s</em>
+Overflow window <em>3.91s</em> · client latency <em>7s</em> — <em>1.79×</em> the overflow window</div>
+    <p class="why">The steps are <code>2ᵏ − 1</code>, so the gaps keep widening. The first step past 3.91 is 7. <strong>The longer the overload, the larger the share of wasted time</strong> — 8 seconds costs 15, 16 costs 31. It approaches a factor of two.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Raise backlog to 4096 — drops turn into waiting</h4>
+    <div class="seq">backlog 128 → <em>4,096</em> (arriving 2,000 · 5 seconds)
+Queue fills in 0.09 → <em>2.73s</em> · dropped 7,372 → <em>3,404</em>
+Client latency 7 → <em>3s</em> · <strong>back-of-queue wait 0.26 → <em>8.19s</em></strong></div>
+    <p class="why">It looks better, and it is — halfway. Fewer are dropped, but <strong>a connection at the back of that queue waits 8.19 seconds.</strong> And those 8 seconds <strong>never enter the latency the server measures</strong>, because the server's clock starts at <code>accept()</code>. This is where <a href="/en/backpressure/">no. 11</a>’s “rejection becomes waiting” meets <a href="/en/omission/">no. 25</a>’s “time that vanishes from the metrics”.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Send a RST instead — the wait disappears and an error arrives</h4>
+    <div class="seq">On overflow: drop silently → <em>send RST</em> (<code>tcp_abort_on_overflow=1</code>)
+Client latency 7s → <em>immediate</em> · but <em>immediate failure</em></div>
+    <p class="why">Waiting seven seconds and succeeding, versus failing at zero — <strong>this is not a performance question, it is a policy decision.</strong> For a screen a user will wait on, the retry is better. For a client that can go to another instance, failing fast is far better. It is <a href="/en/backpressure/">no. 11</a>’s “rejection is a signal”, expressed as one kernel setting.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. Seventy seconds of overload kills the connection</h4>
+    <div class="seq">Burst length 5 → <em>70s</em>
+Overflow window <em>69.9s</em> · last retry at <em>63s</em>
+Client <em>ETIMEDOUT after 127s</em></div>
+    <p class="why">Retries stop at 63 seconds (<code>tcp_syn_retries</code> defaults to 6). <strong>An overload longer than 64 seconds cannot be rescued by retrying.</strong> The client waits 127 seconds and then fails — and for all of it the user sees <em>nothing</em>, unless a shorter timeout was set.</p>
+  </div>
+
+  <h2>There are two queues, and they misbehave differently</h2>
+
+  <p>Linux keeps two connection queues. They are easy to confuse, but <strong>the symptoms differ</strong>, which makes the distinction worth having.</p>
+
+  <table class="keytable">
+    <tr><th>Queue</th><th>What it holds · what overflow does</th></tr>
+    <tr><td>SYN queue</td><td>Connections whose handshake is unfinished. Sized by <code>tcp_max_syn_backlog</code> — in the man page’s words, <em>“If this number is exceeded, the kernel will begin dropping requests.”</em> Enabling syncookies makes the limit moot</td></tr>
+    <tr><td>accept queue</td><td><strong>Handshake finished, application has not picked it up yet.</strong> Sized by <code>listen()</code>’s backlog, capped by <code>somaxconn</code>. On overflow, <em>“the request may be ignored so that a later reattempt at connection succeeds”</em></td></tr>
+  </table>
+
+  <p>Since Linux 2.2, <strong><code>listen()</code>’s backlog refers to the second queue.</strong> It is often taken to mean the SYN queue, but the man page says the change explicitly — the backlog <em>“specifies the queue length for completely established sockets waiting to be accepted, instead of the number of incomplete connection requests.”</em></p>
+
+  <div class="callout"><strong>The default changed, too.</strong> <code>somaxconn</code> is <strong>4096 since Linux 5.4</strong>; before that it was <strong>128</strong>. That is why the same code survives differently after a kernel upgrade.</div>
+
+  <h2>Why the server knows nothing about it</h2>
+
+  <p>The most uncomfortable table on this page. Here is what three parties saw during the same five seconds.</p>
+
+  <table class="keytable">
+    <tr><th>Who</th><th>What they see</th></tr>
+    <tr><td>Application</td><td><strong>Nothing.</strong> Zero requests, zero errors, normal latency. Those connections never came out of <code>accept()</code></td></tr>
+    <tr><td>Kernel</td><td>7,372 dropped, 128 queued. It shows up only in the <em>listen queue overflow</em> counter in <code>netstat -s</code></td></tr>
+    <tr><td>Client</td><td><strong>Seven seconds.</strong> With no way to learn why — no RST ever arrived</td></tr>
+  </table>
+
+  <p>The key is that <strong>no RST is sent by default.</strong> The documentation for <code>tcp_abort_on_overflow</code> reads <em>“<strong>Enable</strong> resetting connections if the listening service is too slow and unable to keep up and accept them”</em> — something you enable is something that is off by default.</p>
+
+  <div class="callout">So <strong>the two sides disagree about the state.</strong> The client’s TCP considers the connection established the moment it sends its final ACK. The server application has not received it, and may never. <strong>Neither side tells the other.</strong></div>
+
+  <p>This page deliberately <strong>does not narrate the packets.</strong> “Exactly which packet gets dropped” is widely repeated but is not something the man pages establish. What they do establish is three things — it is not delivered, no RST is sent, and a later reattempt may succeed — and those three are all this lab models.</p>
+
+  <h2>Where the staircase comes from</h2>
+
+  <p>The interval between retries is set by <strong>RFC 6298</strong>. Before any round-trip measurement exists, <em>“the sender SHOULD set RTO &lt;- 1 second”</em>, and on each timeout <em>“RTO &lt;- RTO * 2”</em>.</p>
+
+  <div class="callout"><code>retransmission at 2ᵏ − 1</code> → <strong>1 · 3 · 7 · 15 · 31 · 63 seconds</strong><br>And since one more RTO has to expire after the last retransmission, giving up lands at <code>2⁷ − 1 = 127 seconds</code>.</div>
+
+  <p>The RFC <strong>does not say how many times to retry.</strong> That is the OS’s call, and Linux defaults <code>tcp_syn_retries</code> to 6. The man page then describes that value: <em>“The default value is 6, which corresponds to retrying for up to <strong>approximately 127 seconds</strong>.”</em></p>
+
+  <div class="callout"><strong>The spec gives the rule and the man page gives the total.</strong> That <code>2⁷ − 1 = 127</code> lines up was the check on this model — the staircase is not invented, two documents point at the same number.</div>
+
+  <p>So what a client experiences is not the length of the overload but <strong>the first step that covers it</strong>. The server has already recovered while the client sits waiting for its next retry.</p>
+
+  <table class="keytable">
+    <tr><th>Overload lasted</th><th>The client waited</th></tr>
+    <tr><td>2s</td><td>3s — 1.50× the burst</td></tr>
+    <tr><td>4s</td><td>7s — 1.75×</td></tr>
+    <tr><td>8s</td><td>15s — 1.88×</td></tr>
+    <tr><td>16s</td><td>31s — 1.94×</td></tr>
+    <tr><td>64s or more</td><td><strong>failure after 127s</strong> — no retry left to rescue it</td></tr>
+  </table>
+
+  <h2>What this model assumes</h2>
+
+  <table class="keytable">
+    <tr><th>Assumption</th><th>What breaks if it fails</th></tr>
+    <tr><td>One burst</td><td>Arrivals are assumed to stop when the burst ends. In reality <strong>the retries themselves can arrive together and form a second burst</strong>, pushing the staircase out another step — that is <a href="/en/retrystorm/">no. 14</a></td></tr>
+    <tr><td>Evenly spaced arrivals</td><td>Real arrivals clump. Clumped arrivals fill the queue faster at the same average rate</td></tr>
+    <tr><td>The client follows the staircase</td><td>It is assumed to use the OS TCP retries. An application-level connect timeout (say 3 seconds) means it <strong>gives up before the next step</strong> — which is often the better outcome</td></tr>
+    <tr><td>Queue time is pure waiting</td><td>A connection that waited in the queue is assumed to be served normally afterwards. In practice the client’s own timeout may have passed, which turns it into <a href="/en/timeout/">no. 17</a>’s work nobody is waiting for</td></tr>
+  </table>
+
+  <h2>In the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>Is it overflowing now</td><td>In <code>ss -lnt</code>, <code>Send-Q</code> is the backlog and <code>Recv-Q</code> is <strong>how many are waiting to be accepted right now</strong>. Equal means overflowing. For the running total, <code>netstat -s | grep -i listen</code></td></tr>
+    <tr><td>Application setting</td><td>Frameworks default the backlog differently (511, 1024, 100 are common). <strong>Setting it above <code>somaxconn</code> is silently capped</strong> — check both</td></tr>
+    <tr><td>Why accept is slow</td><td>The cause is not service speed but <strong>intake speed</strong>. A blocked event loop, a single accept thread, or a <a href="/en/gc/">GC pause</a> all leave the queue to fill</td></tr>
+    <tr><td>Deploy time</td><td>The most common way to reproduce it. A fresh instance taking traffic immediately <strong>cannot keep up with accept while nothing is warmed up.</strong> Add it to the load balancer without a warm-up and you get exactly this picture</td></tr>
+    <tr><td>Getting it on a graph</td><td><strong>Put the kernel counters on the dashboard.</strong> Watch only application metrics and this event does not exist — the same blind spot as <a href="/en/omission/">no. 25</a></td></tr>
+    <tr><td>Client timeouts</td><td>Without a connect timeout the client <strong>hangs for up to 127 seconds.</strong> Three seconds and a move to another instance is almost always better — which is where <a href="/en/timeout/">no. 17</a>’s budget story begins</td></tr>
+    <tr><td>Should the queue be bigger</td><td>Only when bursts are <em>short</em> and accept can catch up. Under sustained overload it just means <strong>waiting longer before failing</strong> — <a href="/en/backpressure/">no. 11</a>’s conclusion exactly</td></tr>
+  </table>
+
+  <p>If <a href="/en/omission/">no. 25</a> was the time the measurement missed, this page is the time <em>before the measurement starts</em>. The server's clock begins at <code>accept()</code>, and all of this happens in front of it.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/backpressure/"><span class="no">11</span><span><span class="t">Rejection is a signal, not a bug</span><span class="why">Grow the queue or reject — the same decision seen at the application layer.</span></span></a></li>
+      <li><a href="/en/omission/"><span class="no">25</span><span><span class="t">The load test never counted the 30 seconds it was frozen</span><span class="why">Why the time spent waiting in the queue vanishes from the server metrics.</span></span></a></li>
+      <li><a href="/en/timeout/"><span class="no">17</span><span><span class="t">Everyone got a second and nobody gets to use one</span><span class="why">Where to put the connect timeout so nothing waits 127 seconds.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">Index</a> · <a href="/backlog/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uSec:'s', uPerSec:'/s', uCount:' slots', uNone:'none', uNever:'never',
+  hint:'arriving $1/s · accept $2/s · backlog $3 · for $4s — queue fills in $5',
+  hintNever:'arriving $1/s · accept $2/s · backlog $3 · for $4s — intake is faster, so the queue never fills',
+  zFill:'filling $1', zOver:'overflowing $1',
+  qCap:'queued $1 of $2 — the back of it waits $3. Dropped on overflow: $4.',
+  stY:'retry staircase — the first step past $1 is $2',
+  stNone:'nothing overflowed — there is nothing to retry',
+  sWho:'who', sWhat:'what they see',
+  sApp:'application', sAppV:'$1 requests · 0 errors · latency normal',
+  sKernel:'kernel', sKernelV:'$1 dropped · $2 queued',
+  sClient:'client', sClientV:'waited $1 — with no way to know why',
+  sClientOk:'no waiting', sClientAbort:'immediate failure — at least the reason is known',
+  sClientDead:'ETIMEDOUT after $1s — no retry could rescue it',
+  mFill:'queue fills in', mDropped:'connections dropped', mClient:'client latency',
+  mRatio:'vs overflow window', mQueueWait:'back-of-queue wait', mServer:'what the app saw',
+  mNow:'instant',
+  vCalm:'<b>The queue never fills.</b> $1 queued · back of it waits $2<br><span class="at">take them in faster than they arrive and the backlog value means nothing</span>',
+  vStair:'<b>$1 were dropped and the application metrics say zero.</b><br>The client waits $2 — the overflow window was $3 <span class="at">($4×)</span>',
+  vDead:'<b>$1 dropped, and no retry can rescue them.</b> The overflow window is $2<br>but the last retransmission is at 63s <span class="at">— the client gets ETIMEDOUT after $3s</span>',
+  vAbort:'<b>$1 were cut immediately with a RST.</b> Dropping silently would have cost $2 of waiting.<br><span class="at">wait and succeed, or fail at once — a policy decision, not a performance one</span>',
+  scene:[
+    'Start without an overload: 400 connections arrive per second and the application accepts 500. The queue is always empty and nothing is dropped. Here the backlog value makes no difference at all — which is why nobody looks at it, until the day traffic piles up.',
+    'Raise arrivals to 2,000 per second. Fifteen hundred a second have nowhere to go, so the 128-slot queue fills in 0.09 seconds. Everything arriving over the next five seconds — 7,372 connections — is thrown away. Now look at the table: the application saw zero requests. The kernel dropped them, so nothing came out of accept(). Latency and error rate stay clean.',
+    'Shorten the burst to two seconds. The overflow window is 1.91 seconds. Yet the client waits three, because retries go out at 1, 3 and 7 seconds and the first step past 1.91 is 3. The server is already idle while the client spends 1.09 seconds sitting still.',
+    'Four seconds now. Overflow window 3.91 seconds, client latency 7 — 1.79 times the window. The steps are powers of two minus one, so the gaps keep widening: an 8-second overload costs 15, a 16-second one costs 31. The longer the overload, the larger the share that is pure waste.',
+    'Raise the backlog to 4,096, the default since Linux 5.4. The queue now takes 2.73 seconds to fill and drops fall from 7,372 to 3,404. That looks like a win. But watch the back-of-queue wait: 0.26 seconds became 8.19. And those eight seconds never enter the latency the server measures, because its clock starts at accept().',
+    'Turn on tcp_abort_on_overflow. Overflow now sends a RST, so instead of waiting seven seconds the client fails immediately. Which is better is not a performance question but a policy decision — for a screen someone will wait on, the retry wins; for a client that can try another instance, failing fast wins by a lot.',
+    'Finally, seventy seconds of overload. Retries stop at 63 seconds, because tcp_syn_retries defaults to 6. An overload longer than 64 seconds cannot be rescued by retrying: the client waits 127 seconds and fails with ETIMEDOUT. That is the number the man page attaches to the default — "approximately 127 seconds".'
+  ],
+};
+</script>
+<script src="/shared/backlog-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "The kernel drops connections and the application log stays clean",
+  "description": "A five-second traffic burst threw away 7,372 connections. The application metrics show 0 — the kernel dropped them, so it never saw a request. The client waits 7 seconds, because retries land on a 1/3/7-second staircase.",
+  "url": "https://lab.vermilion19.com/en/backlog/",
+  "inLanguage": "en",
+  "datePublished": "2026-08-25",
+  "dateModified": "2026-08-25",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "The kernel drops connections and the application log stays clean"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

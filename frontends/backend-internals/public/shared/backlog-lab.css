@@ -1,0 +1,127 @@
+/* ============================================================
+   27. 커널이 SYN 을 버리는데 애플리케이션 로그는 깨끗하다 — accept 큐
+   ============================================================ */
+
+.lab{margin:32px 0 8px;border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);overflow:hidden}
+.lab section{border-bottom:1px solid var(--rule);padding:16px 18px}
+.lab section:last-child{border-bottom:none}
+.cap{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;display:block}
+
+/* --- 손잡이 --- */
+.dials{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end}
+.dial label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
+.dial input[type=range]{width:124px;max-width:42vw;accent-color:var(--horizon);vertical-align:middle}
+.dial .v{font-family:var(--mono);font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums;min-width:64px;display:inline-block}
+.dial .v small{font-size:11px;color:var(--ink-3)}
+.seg{display:flex;gap:0;border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+.seg button{border:none;border-right:1px solid var(--rule);border-radius:0;padding:6px 12px;font-size:11px;white-space:nowrap}
+.seg button:last-child{border-right:none}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.seg.reuse button[aria-pressed="true"]{background:var(--horizon);color:var(--paper)}
+.hint{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:8px;min-height:14px}
+.hint.warn{color:var(--blocked)}
+
+.board{border:1px solid var(--rule);border-radius:3px;background:var(--paper);padding:13px 14px 10px}
+
+/* --- 버스트 타임라인 -----------------------------------------------------
+   가로가 시간. 큐가 차기 전 · 넘치는 구간 · 회복으로 나뉜다. */
+.tape{position:relative;height:34px;background:var(--paper-2);border-radius:2px;overflow:hidden;margin-bottom:4px}
+.tape .zone{position:absolute;top:0;bottom:0}
+.tape .zone.fill{background:color-mix(in srgb,var(--live) 22%,transparent)}
+.tape .zone.over{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--blocked) 30%,transparent) 0 4px,transparent 4px 7px)}
+.tape .zone.calm{background:color-mix(in srgb,var(--ink-3) 8%,transparent)}
+.tape .edge{position:absolute;top:0;bottom:0;width:0;border-left:1.5px solid var(--blocked);z-index:3}
+.tape .lbl{position:absolute;top:3px;font-family:var(--mono);font-size:8.5px;color:var(--ink-2);white-space:nowrap;padding:0 4px;z-index:4}
+.tapex{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:4px}
+
+/* --- 큐 길이 --- */
+.qbar{position:relative;height:15px;background:var(--paper-2);border-radius:2px;overflow:hidden;margin-top:11px}
+.qbar .fillq{position:absolute;top:0;bottom:0;left:0;background:var(--live)}
+.qbar .cap{position:absolute;top:0;bottom:0;right:0;width:0;border-left:1.5px dashed var(--blocked)}
+.qcap{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:6px;line-height:1.7}
+.qcap b{color:var(--blocked);font-weight:500}
+
+/* --- 재시도 계단 -----------------------------------------------------
+   1 · 3 · 7 · 15 · 31 · 63 초. 넘치는 구간을 넘는 첫 칸이 클라이언트가 겪는 값이다. */
+.stair{display:flex;align-items:flex-end;gap:4px;height:88px;margin-top:15px}
+.stair .st{flex:1;position:relative;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center}
+.stair .st .bar{width:100%;background:color-mix(in srgb,var(--ink-3) 22%,transparent);border-top:1.5px solid var(--ink-3);border-radius:1px 1px 0 0}
+.stair .st.hit .bar{background:color-mix(in srgb,var(--blocked) 40%,transparent);border-top-color:var(--blocked)}
+.stair .st.dead .bar{background:repeating-linear-gradient(135deg,var(--blocked) 0 2px,transparent 2px 5px)}
+.stair .st .lb{font-family:var(--mono);font-size:9px;color:var(--ink-3);margin-bottom:2px;white-space:nowrap}
+.stair .st.hit .lb{color:var(--blocked)}
+.stairx{display:flex;gap:4px;margin-top:5px}
+.stairx span{flex:1;text-align:center;font-family:var(--mono);font-size:9px;color:var(--ink-3)}
+.stairy{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-bottom:6px}
+
+/* --- 어느 쪽이 보나 표 --- */
+.sides{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:15px}
+.sides th,.sides td{text-align:left;padding:5px 10px 5px 0;border-bottom:1px solid var(--rule);vertical-align:baseline}
+.sides th{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--ink-3);font-weight:400}
+.sides td{font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.sides td:first-child{color:var(--ink);white-space:nowrap;padding-right:16px}
+.sides td.blind{color:var(--ink-3)}
+.sides td.hurt{color:var(--blocked)}
+
+/* --- 미터 --- */
+.meters{display:flex;gap:24px;flex-wrap:wrap;margin-top:15px}
+.meters .m{min-width:84px}
+.meters .k{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.meters .n{font-family:var(--mono);font-size:19px;color:var(--ink);font-variant-numeric:tabular-nums}
+.meters .n small{font-size:11px;color:var(--ink-3);margin-left:2px}
+.meters .m.bad .n{color:var(--blocked)}
+.meters .m.good .n{color:var(--live)}
+
+/* --- 판정 --- */
+.verdict{border-left:2px solid var(--rule);background:var(--paper);padding:10px 0 10px 13px;margin-top:14px;
+  font-family:var(--mono);font-size:10.5px;line-height:1.8;color:var(--ink-2)}
+.verdict.stuck{border-left-color:var(--blocked)}
+.verdict.stuck b{color:var(--blocked)}
+.verdict.ok{border-left-color:var(--live)}
+.verdict.ok b{color:var(--live)}
+.verdict b{font-weight:500;color:var(--ink)}
+.verdict .at{color:var(--ink-3)}
+
+/* --- IW 비교 표 --- */
+.cmp-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.cmp-tbl th,.cmp-tbl td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.cmp-tbl th{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.cmp-tbl td:first-child{font-size:12.5px;width:1%;white-space:nowrap;padding-right:16px}
+.cmp-tbl td.num{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
+.cmp-tbl tr.on td{background:var(--paper-3)}
+.cmp-tbl td.bad{color:var(--blocked)}
+.cmp-tbl td.good{color:var(--live)}
+.cmp-tbl td.same{color:var(--ink-3)}
+
+/* --- 조작대 --- */
+.transport{background:var(--paper-3);display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.transport .keys{display:flex;gap:6px;flex-wrap:wrap}
+.narration{flex:1;min-width:240px;font-family:var(--serif);font-size:14.5px;line-height:1.65;color:var(--ink)}
+.narration .n{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-3);display:block;margin-bottom:3px}
+
+/* --- 안내 --- */
+.recipe{border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);padding:14px 16px;margin:14px 0;max-width:68ch}
+.recipe h4{font-family:var(--sans);font-size:14px;font-weight:700;margin:0 0 4px}
+.recipe .seq{font-family:var(--mono);font-size:11px;line-height:1.9;background:var(--paper);border:1px solid var(--rule);
+  border-radius:2px;padding:9px 11px;margin:9px 0;white-space:pre-wrap;color:var(--ink-2)}
+.recipe .seq em{font-style:normal;color:var(--horizon)}
+.recipe .why{font-size:13.5px;color:var(--ink-2);margin:0}
+.keytable{width:100%;border-collapse:collapse;margin:12px 0;max-width:68ch;font-size:13.5px}
+.keytable th,.keytable td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.keytable th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.keytable td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap;width:1%;padding-right:18px;color:var(--ink)}
+
+/* 범례 */
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:11px;font-family:var(--mono);font-size:9.5px;color:var(--ink-3)}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend i{width:16px;height:9px;border-radius:1px;display:block;flex:none}
+.legend i.fill{background:color-mix(in srgb,var(--live) 22%,transparent)}
+.legend i.over{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--blocked) 30%,transparent) 0 4px,transparent 4px 7px)}
+.legend i.q{background:var(--live)}
+.legend i.hit{background:color-mix(in srgb,var(--blocked) 40%,transparent);border-top:1.5px solid var(--blocked)}
+
+@media (max-width:600px){
+  .stair{height:70px;gap:2px}
+  .stair .st .lb{font-size:8px}
+  .stairx span{font-size:8px}
+}
