@@ -312,6 +312,7 @@ LIMIT 10;</code></pre>
       <li><a href="/en/connpool/"><span class="no">08</span><span><span class="t">A 17-millisecond query drains the pool</span><span class="why">The price of holding a transaction open — here it blocks cleanup, in no. 8 it drains the pool.</span></span></a></li>
       <li><a href="/en/writeskew/"><span class="no">15</span><span><span class="t">Both checked, and both passed</span><span class="why">This page is what a snapshot shows you; no. 15 is what that snapshot lets through.</span></span></a></li>
       <li><a href="/en/genericplan/"><span class="no">13</span><span><span class="t">Slow from the sixth execution</span><span class="why">VACUUM also refreshes the statistics — and stale statistics make the optimiser pick the wrong plan.</span></span></a></li>
+      <li><a href="/en/pagesplit/"><span class="no">29</span><span><span class="t">How much bigger does a random key make the index</span><span class="why">After why deletes do not shrink: why inserting alone costs this much.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->

@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>Two small writes cost forty milliseconds — Nagle and delayed ACK</title>
+<meta name="description" content="The same 400 bytes takes 1ms as one write() and 42ms as two. The sender waits for an ACK while the receiver waits for a timer. Two algorithms, each sensible on its own, waiting for each other.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/nagle/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/nagle/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/nagle/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/nagle/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="Two small writes cost forty milliseconds">
+<meta property="og:description" content="The byte count is identical. How many times you called write() is what creates the delay.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/nagle/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Two small writes cost forty milliseconds">
+<meta name="twitter:description" content="Full-sized segments never stall. The RFC's every-other-packet rule is the fork in the road.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/nagle-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/nagle/" hreflang="ko" lang="ko">KO</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>Two small writes cost forty milliseconds</h1>
+  <p class="lede">The same 400 bytes takes <strong>1ms</strong> as one <code>write()</code> and <strong>42ms</strong> as two. Same byte count, same link, same everything else in the code. The sender waits for an ACK while the receiver waits for a timer — <strong>two algorithms, each sensible on its own, waiting for each other.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>How it writes</label>
+          <div class="seg" id="segJoin" role="group" aria-label="split or joined writes">
+            <button data-join="0" aria-pressed="true">split</button>
+            <button data-join="1">joined</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sW">write() calls</label>
+          <span class="v" id="vW">1<small>×</small></span>
+          <input type="range" id="sW" min="1" max="4" step="1" value="1" aria-label="how many write calls before reading the response">
+        </div>
+        <div class="dial">
+          <label for="sS">Bytes per write</label>
+          <span class="v" id="vS">200<small>B</small></span>
+          <input type="range" id="sS" min="0" max="3" step="1" value="1" aria-label="bytes handed to each write call">
+        </div>
+        <div class="dial">
+          <label>Nagle</label>
+          <div class="seg" id="segNagle" role="group" aria-label="TCP_NODELAY">
+            <button data-nagle="1" aria-pressed="true">on</button>
+            <button data-nagle="0">off</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sD">Delayed-ACK timer</label>
+          <span class="v" id="vD">40<small>ms</small></span>
+          <input type="range" id="sD" min="0" max="4" step="1" value="1" aria-label="how long the receiver defers its ACK">
+        </div>
+        <div class="dial">
+          <label for="sR">Round-trip time</label>
+          <span class="v" id="vR">1<small>ms</small></span>
+          <input type="range" id="sR" min="1" max="100" step="1" value="1" aria-label="time for one round trip">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->1 write(s) × 200B (200B total) · 1 segment(s) — 1ms total<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">What actually crossed the wire</span>
+      <div class="board">
+        <div class="wire" id="wire"><!--pr--><div class="lane tx"></div><div class="lane rx"></div><div class="who tx">sender</div><div class="who rx">receiver</div><div class="pkt small" style="left:0%"></div><div class="tag up" style="left:0%">first write 200B</div><div class="pkt rsp" style="left:22.727272727272727%"></div><div class="tag dn" style="left:22.727272727272727%">response</div><!--/pr--></div>
+        <div class="wirex" id="wireX"><!--pr--><span>0ms</span><span>1.1ms</span><span>2.2ms</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="full"></i>full-sized segment</span>
+          <span><i class="small"></i>small segment</span>
+          <span><i class="ackl"></i>ACK</span>
+          <span><i class="heldl"></i>held by Nagle</span>
+        </div>
+
+        <table class="four" id="four"><!--pr--><tr><th>setting</th><th>total</th><th>added</th><th>packets</th></tr><tr><td>split (default)</td><td class="good">1ms</td><td class="good">—</td><td>1</td></tr><tr><td>joined</td><td class="good">1ms</td><td class="good">—</td><td>1</td></tr><tr><td>TCP_NODELAY</td><td class="good">1ms</td><td class="good">—</td><td>1</td></tr><tr><td>TCP_QUICKACK</td><td class="good">1ms</td><td class="good">—</td><td>1</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">total time</span><span class="n">1ms</span></div><div class="m good"><span class="k">added delay</span><span class="n">—</span></div><div class="m "><span class="k">if joined</span><span class="n">1ms</span></div><div class="m "><span class="k">packets</span><span class="n">1</span></div><div class="m "><span class="k">segments</span><span class="n">has a small one</span></div><div class="m "><span class="k">ACKs</span><span class="n">1</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>No stall — 1ms.</b> 1 packet(s)<br><span class="at">nothing unacknowledged, or no small segment to hold</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">Previous</button>
+        <button id="btnStep">Next step</button>
+        <button id="btnReset">Reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Work the dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What it changes</th></tr>
+    <tr><td>How it writes</td><td><strong>Split</strong> calls <code>write()</code> several times (header, then body). <strong>Joined</strong> hands over the same bytes in one call. This dial is the whole page.</td></tr>
+    <tr><td>write() calls</td><td>How many writes happen before the response is read. <strong>It stalls from 2 onward, and 3 or 4 are no worse</strong> — the reason is below.</td></tr>
+    <tr><td>Bytes per write</td><td><strong>Push it to 1460 (the MSS)</strong> and the stall disappears. Nagle never holds a full-sized segment, and the receiver does not defer either.</td></tr>
+    <tr><td>Nagle</td><td>This is <code>TCP_NODELAY</code>. Turning it off removes the delay but <strong>raises the packet count</strong>.</td></tr>
+    <tr><td>Delayed-ACK timer</td><td>How long the receiver defers. <strong>Off</strong> is <code>TCP_QUICKACK</code>; <strong>500ms</strong> is the ceiling RFC 1122 sets. 40ms is a Linux value.</td></tr>
+    <tr><td>Round-trip time</td><td>Under 1ms inside a datacenter, over 100ms across an ocean. <strong>The smaller the RTT, the larger 40ms looks in comparison.</strong></td></tr>
+  </table>
+
+  <p>Every instant here is determined — no randomness, no samples. One segment is 1,460 bytes (the MSS).</p>
+
+  <h2>Things to try</h2>
+
+  <div class="recipe">
+    <h4>1. One write — nothing happens</h4>
+    <div class="seq">1 write × 200B · Nagle on · delayed ACK 40ms · RTT 1ms
+Total <em>1ms</em> · packets <em>1</em> · added delay <em>none</em></div>
+    <p class="why">There is no unacknowledged data, so Nagle has nothing to hold. The request lands half a round trip later and the receiver <strong>puts its ACK on the response</strong> — the delayed-ACK timer has no reason to run. <strong>Up to here, neither algorithm is visible.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Split it in two — 42ms</h4>
+    <div class="seq">write() 1 → <em>2</em> (200B each · 400B total)
+Total 1 → <em>42ms</em> · added <em>+41ms</em> · packets <em>3</em></div>
+    <p class="why">The first 200 bytes go out immediately. <strong>Nagle holds the second 200</strong> — the first is still unacknowledged and this is not a full-sized segment. But <strong>the receiver cannot produce a response</strong> (the request is incomplete), so it has no data to carry an ACK, and the 40ms delayed-ACK timer becomes the only way out.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Join the same bytes — back to 1ms</h4>
+    <div class="seq">How it writes: split → <em>joined</em> (400B in one call)
+Total 42 → <em>1ms</em> · packets 3 → <em>1</em></div>
+    <p class="why">The bytes sent are exactly the same. <strong>The only thing that changed is the number of <code>write()</code> calls.</strong> 400 bytes fit in one segment and nothing is unacknowledged, so it leaves at once. This is the cheapest fix available — not a kernel setting, not a socket option, <strong>a buffer</strong>.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Turn Nagle off — delay gone, packets up</h4>
+    <div class="seq">Nagle on → <em>off</em> (<code>TCP_NODELAY</code> · still split)
+Total 42 → <em>1ms</em> · packets <em>2</em></div>
+    <p class="why">With nothing holding it, the second segment leaves immediately. <strong>The symptom is gone and the cause is not</strong> — 400 bytes still travel as two packets. For a service doing tens of thousands of small writes per second, that packet count is the bill. Which is what Nagle existed to prevent.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Turn off delayed ACK on the receiver — 2ms</h4>
+    <div class="seq">Delayed-ACK timer 40ms → <em>off</em> (<code>TCP_QUICKACK</code>)
+Total 42 → <em>2ms</em> · still slower than joining the write (1ms)</div>
+    <p class="why">The ACK leaves at once, so Nagle releases immediately. But <strong>it is not free</strong> — one extra round trip (1ms → 2ms). More importantly, <strong>this dial is on the other side</strong>. That is how "we changed nothing and it got better after they touched their server" happens.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Write 1460 bytes at a time — no stall</h4>
+    <div class="seq">Bytes per write 200 → <em>1,460B</em> (= MSS · still 2 split writes)
+Total 42 → <em>1ms</em> · ACKs <em>1</em></div>
+    <p class="why">Both are <strong>full-sized segments</strong>, so Nagle does not hold them (it only defers *small* ones). And the receiver does not defer either, because RFC 1122 says <em>in a stream of full packets there should be an ACK for at least every other packet</em>. <strong>Two segments, one ACK</strong> — no room for the timer.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. Joining is not always enough — a small tail stalls too</h4>
+    <div class="seq">700B × 3 written <em>joined</em> (2,100B total)
+Segments <em>1,460 + 640</em> · total <em>42ms</em></div>
+    <p class="why">One write, and it still stalls. 2,100 bytes exceeds the MSS, so it splits into <strong>one full segment plus a 640-byte tail</strong>, and Nagle holds that tail. <strong>"Just join the writes" only holds while the request fits in one MSS.</strong> Beyond that you need a different fix.</p>
+  </div>
+
+  <h2>What each algorithm was protecting</h2>
+
+  <p>Both fixed a real problem in the 1980s, and both are still mostly right.</p>
+
+  <table class="keytable">
+    <tr><th>Algorithm</th><th>What it saves</th></tr>
+    <tr><td>Nagle</td><td><strong>Packet count.</strong> It stops you spending a 41-byte packet to carry one byte. One rule: <em>while unacknowledged data is outstanding, defer small segments.</em> RFC 1122 §4.2.3.4 makes it a <strong>MAY</strong> and says an application must be able to turn it off</td></tr>
+    <tr><td>Delayed ACK</td><td><strong>ACK packet count.</strong> It avoids packets that carry an ACK and nothing else. If there is a response to ride along on, it rides; otherwise it waits a moment</td></tr>
+  </table>
+
+  <p>The trouble is <strong>where "waits a moment" meets "waits for an ACK"</strong>. The sender says it will send once an ACK arrives; the receiver says it will ACK once it has data to send. But <strong>the data has not fully arrived, so there is nothing to send.</strong> Each is waiting on the other.</p>
+
+  <div class="callout">This is not a deadlock — <strong>a timer breaks it.</strong> But that timer is 40ms, and in a world where a datacenter round trip is 1ms, that is <strong>forty times</strong> the cost.</div>
+
+  <h2>The RFC marks the fork</h2>
+
+  <p>Why do full-sized segments escape? RFC 1122 §4.2.3.2 permits delayed ACK with this condition attached:</p>
+
+  <div class="callout"><em>"An ACK SHOULD NOT be excessively delayed; the delay MUST be less than 0.5 seconds, and in a stream of full packets there SHOULD be an ACK for at least every other packet."</em></div>
+
+  <p>Two things follow. First, <strong>the ceiling on deferral is half a second</strong> — 40ms is not the spec but a value Linux chose; push the dial to 500ms to see the worst the RFC allows. Second, <strong>a stream of full packets must be ACKed at least every other packet.</strong> So when segments are full there is no room for the timer to intervene.</p>
+
+  <p>Nagle's side points at the same place — it only defers <strong>small</strong> segments. Which means this problem needs <strong>"small" and "unacknowledged" to hold at the same time.</strong></p>
+
+  <table class="keytable">
+    <tr><th>Situation</th><th>Does it stall?</th></tr>
+    <tr><td>One write</td><td>No — nothing unacknowledged, so Nagle has nothing to hold</td></tr>
+    <tr><td>Two or more small writes</td><td><strong>Yes</strong> — the picture on this page</td></tr>
+    <tr><td>Full-sized segments</td><td>No — Nagle lets them through and the RFC rule forces the ACK</td></tr>
+    <tr><td>One request → one response</td><td>No — the receiver always has data to ride an ACK on</td></tr>
+  </table>
+
+  <p>That last row matters. <strong>This only appears in a write-write-read pattern.</strong> Code that strictly alternates request and response never meets it — which is why it shows up out of nowhere after a library swap.</p>
+
+  <h2>More writes do not make it worse</h2>
+
+  <p>Push the write count to 3 and 4. <strong>It stays at 42ms.</strong> Surprising at first, but there is a reason.</p>
+
+  <p>When the application calls <code>write()</code> repeatedly, those bytes <strong>accumulate in the kernel send buffer.</strong> While Nagle waits for the first segment's ACK, writes 2, 3 and 4 are all sitting in that buffer — and the moment the ACK lands they <strong>leave as a single segment.</strong></p>
+
+  <div class="callout">So <strong>it stalls exactly once.</strong> Ten writes still cost one 40ms wait. Put the other way round — <strong>reducing the number of writes does not help; getting to one does.</strong></div>
+
+  <h2>What this model assumes</h2>
+
+  <table class="keytable">
+    <tr><th>Assumption</th><th>What breaks if it fails</th></tr>
+    <tr><td>The writes come back to back</td><td>The application is assumed to do no work between <code>write()</code> calls. With a long computation in between, the second write reaches the buffer late and <strong>goes out separately</strong> — which can mean more than one stall</td></tr>
+    <tr><td>The receiver answers only when complete</td><td>It is assumed to need the whole request first. A streaming protocol that <strong>emits something after the first chunk</strong> gets an ACK for free and never sees this</td></tr>
+    <tr><td>No loss</td><td>A retransmission shifts every instant. That regime is <a href="/en/slowstart/">no. 26</a> and <a href="/en/backlog/">no. 27</a></td></tr>
+    <tr><td>40ms is a Linux value</td><td>The spec only sets the <strong>0.5-second ceiling</strong>. It differs by OS and version, and Linux adapts it in some cases — <strong>never let code assume the exact number</strong></td></tr>
+  </table>
+
+  <h2>In the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>First thing to look at</td><td>Whether the latency distribution has a <strong>bump near 40ms</strong>. It only shows in a histogram, never in the mean — only the stalled requests pay the 40</td></tr>
+    <tr><td>Order of fixes</td><td>① <strong>buffer and write once</strong> (cheapest, and it lowers packet count) ② if that is impossible, <code>TCP_NODELAY</code> ③ if the other end is yours, <code>TCP_QUICKACK</code>. <strong>① is rarely actually impossible</strong></td></tr>
+    <tr><td>Java</td><td>Writing straight to an <code>OutputStream</code> without <code>BufferedOutputStream</code> turns each <code>write()</code> into a segment. Writing headers and body separately is especially common. <code>Socket.setTcpNoDelay(true)</code> exists, but the order above still holds</td></tr>
+    <tr><td>HTTP clients</td><td>Most already set <code>TCP_NODELAY</code>. But <strong>hand-rolled binary protocols</strong> and older RPC stacks often do not — check the socket options for real</td></tr>
+    <tr><td>Worse when you are close</td><td>At 100ms RTT, 40ms is 40%. At 0.5ms RTT it is <strong>eighty times</strong>. <em>The nearer you are, the more it hurts</em> — the opposite of intuition</td></tr>
+    <tr><td>How to confirm</td><td><code>tcpdump</code> shows it plainly: one small segment leaves, then <strong>40ms of nothing</strong>, then an ACK, then the next segment. That empty 40ms is the evidence</td></tr>
+    <tr><td>Before disabling Nagle</td><td>Price the extra packets. A service sending very many small messages may find <strong>Nagle was earning its keep</strong> — there, batching in the application is the right answer</td></tr>
+  </table>
+
+  <p>If <a href="/en/slowstart/">no. 26</a> was about not sending when you could, this page is about both sides waiting while there is something to send. Neither is caused by bandwidth, and both <strong>hurt more inside the same datacenter.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/slowstart/"><span class="no">26</span><span><span class="t">One byte bigger and it costs another round trip</span><span class="why">The other one that hurts more inside a datacenter — round trips become a staircase.</span></span></a></li>
+      <li><a href="/en/timeout/"><span class="no">17</span><span><span class="t">Everyone got a second and nobody gets to use one</span><span class="why">What a 40ms-taxed call does to a budget once it sits inside a chain.</span></span></a></li>
+      <li><a href="/en/connpool/"><span class="no">08</span><span><span class="t">A 17-millisecond query drains the pool</span><span class="why">How much capacity you lose when each request holds its connection 40ms longer.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">Index</a> · <a href="/nagle/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uMs:'ms', uB:'B', uTimes:'×', uOff:'off',
+  hint:'$1 write(s) × $2B ($3B total) · $4 segment(s) — $5 total',
+  wTx:'sender', wRx:'receiver',
+  pFirst:'first write $1B', pHeld:'held by Nagle $1', pTimer:'delayed-ACK timer $1',
+  pAck:'ACK', pReleased:'released', pRsp:'response',
+  fWhat:'setting', fTime:'total', fExtra:'added', fPkt:'packets',
+  fSplit:'split (default)', fJoined:'joined', fNodelay:'TCP_NODELAY', fQuick:'TCP_QUICKACK',
+  mTime:'total time', mExtra:'added delay', mJoined:'if joined',
+  mPkt:'packets', mSeg:'segments', mAck:'ACKs',
+  mAllFull:'all full', mHasSmall:'has a small one',
+  vClean:'<b>No stall — $1.</b> $2 packet(s)<br><span class="at">nothing unacknowledged, or no small segment to hold</span>',
+  vFull:'<b>All $1 segments are full — nothing to stall on.</b> $2 ACK(s) · $3 total<br><span class="at">RFC 1122’s "an ACK for at least every other packet" beats the timer to it</span>',
+  vQuick:'<b>The ACK left at once, so Nagle released immediately — $1.</b><br>Still one round trip more than joining the write ($2) <span class="at">— and this dial is on the other side</span>',
+  vHeld:'<b>$1 total — the whole $2 delayed-ACK timer was spent waiting.</b><br>The same bytes joined would have been $3 <span class="at">— a difference of $4</span>',
+  vJoinedHeld:'<b>Joined and it stalled anyway.</b> $1B exceeds the MSS of $2, leaving a $3B tail.<br><span class="at">that tail is small, so Nagle holds it — $4 total</span>',
+  scene:[
+    'One write() call. Two hundred bytes leave immediately and the receiver puts its ACK on the response: 1ms total. Nothing is unacknowledged so Nagle has nothing to hold, and there is data to carry the ACK so the timer has no reason to run. Up to here neither algorithm is visible at all.',
+    'The same 400 bytes, now as two writes of 200. It became 42ms. Look at the timeline: the first segment leaves at once and Nagle holds the second, because the first is still unacknowledged and this is not a full-sized segment. Meanwhile the receiver cannot build a response from half a request, so it has no data to carry an ACK. The only exit left is the 40ms timer.',
+    'Only the write style changed, to joined. Back to 1ms. The bytes sent are exactly the same; the only difference is the number of write() calls. Four hundred bytes fit one segment and nothing is unacknowledged, so it leaves at once. Not a kernel setting, not a socket option — a buffer.',
+    'Back to split writes, and now Nagle is off: TCP_NODELAY. 42ms becomes 1ms. But watch the packet count — 400 bytes still travel as two packets. The symptom is gone and the cause remains. For a service sending tens of thousands of small messages a second, that packet count is the bill.',
+    'Nagle back on, and this time the receiver’s delayed ACK is off: TCP_QUICKACK. The ACK leaves at once so Nagle releases immediately, giving 2ms. Not entirely free — one round trip more than joining the write. And note this dial sits on the other side. That is how "we changed nothing and their server fix made it better" happens.',
+    'Bytes per write pushed to 1,460 — the MSS. Still two split writes, and yet 1ms. Both are full-sized segments, and Nagle only defers small ones. The receiver does not defer either, because RFC 1122 says a stream of full packets should be ACKed at least every other packet. Two segments, one ACK, no room for the timer.',
+    'The last one is a trap. Seven hundred bytes three times, joined into a single 2,100-byte write. Still 42ms. It exceeds the MSS, so it splits into one full segment and a small 640-byte tail, and Nagle holds that tail. "Just join the writes" only holds while it fits in one MSS.'
+  ],
+};
+</script>
+<script src="/shared/nagle-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Two small writes cost forty milliseconds",
+  "description": "The same 400 bytes takes 1ms as one write() and 42ms as two. The sender waits for an ACK while the receiver waits for a timer. Two algorithms, each sensible on its own, waiting for each other.",
+  "url": "https://lab.vermilion19.com/en/nagle/",
+  "inLanguage": "en",
+  "datePublished": "2026-08-25",
+  "dateModified": "2026-08-25",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Two small writes cost forty milliseconds"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

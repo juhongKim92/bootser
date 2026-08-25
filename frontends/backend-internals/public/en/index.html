@@ -103,7 +103,7 @@
       <summary>
         <span class="arw" aria-hidden="true"></span>
         <h2>Concepts <em>internals you can put your hands on</em></h2>
-        <span class="count">6</span>
+        <span class="count">7</span>
       </summary>
       <div class="glist">
 
@@ -157,6 +157,15 @@
         <span>
           <h2>The moment the TTL ends</h2>
           <p>Cache stampede. A 99.4% hit rate, and one expiry starts 101 recomputations at once.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
+
+      <a class="card" href="/en/pagesplit/">
+        <span class="no">29</span>
+        <span>
+          <h2>How much bigger does a random key make the index</h2>
+          <p>B-tree page splits. "Double" is an overstatement — 1.30× at the same key width, 1.80× at worst.</p>
         </span>
         <span class="tag live">live</span>
       </a>
@@ -224,7 +233,7 @@
       <summary>
         <span class="arw" aria-hidden="true"></span>
         <h2>How capacity collapses <em>the queries are fast and the system stalls anyway</em></h2>
-        <span class="count">8</span>
+        <span class="count">9</span>
       </summary>
       <div class="glist">
 
@@ -296,6 +305,15 @@
         <span>
           <h2>One byte bigger and it costs another round trip</h2>
           <p>Slow start. Transfer time is not proportional to size but a staircase of round trips — and bandwidth is not in the formula.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
+
+      <a class="card" href="/en/nagle/">
+        <span class="no">28</span>
+        <span>
+          <h2>Two small writes cost forty milliseconds</h2>
+          <p>Nagle and delayed ACK. The same 400 bytes is 1ms as one write and 42ms as two — each side waiting for the other.</p>
         </span>
         <span class="tag live">live</span>
       </a>

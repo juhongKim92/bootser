@@ -261,6 +261,22 @@
   </url>
 
   <url>
+    <loc>https://lab.vermilion19.com/nagle/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/nagle/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/nagle/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/nagle/"/>
+    <lastmod>2026-08-25</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/nagle/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/nagle/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/nagle/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/nagle/"/>
+    <lastmod>2026-08-25</lastmod>
+  </url>
+
+  <url>
     <loc>https://lab.vermilion19.com/omission/</loc>
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/omission/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/omission/"/>
@@ -273,6 +289,22 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/omission/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/omission/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/omission/"/>
+    <lastmod>2026-08-25</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/pagesplit/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/pagesplit/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/pagesplit/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/pagesplit/"/>
+    <lastmod>2026-08-25</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/pagesplit/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/pagesplit/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/pagesplit/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/pagesplit/"/>
     <lastmod>2026-08-25</lastmod>
   </url>
 

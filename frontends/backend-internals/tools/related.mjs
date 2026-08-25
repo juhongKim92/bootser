@@ -18,7 +18,7 @@ export const NO = {
   correlation: '12', genericplan: '13', retrystorm: '14', writeskew: '15', stampede: '16',
   timeout: '17', lockttl: '18', throughput: '19', rebalance: '20', tcpclose: '21',
   aggregate: '22', alignment: '23', fanout: '24', omission: '25', slowstart: '26',
-  backlog: '27'
+  backlog: '27', nagle: '28', pagesplit: '29'
 };
 
 /* slug → [{ to, ko, en }] */
@@ -26,7 +26,8 @@ export const RELATED = {
   mvcc: [
     { to: 'connpool', ko: '트랜잭션을 오래 열어두는 대가 — 여기서는 정리가 막히고, 8번에서는 커넥션이 마릅니다.', en: 'The price of holding a transaction open — here it blocks cleanup, in no. 8 it drains the pool.' },
     { to: 'writeskew', ko: '스냅숏이 무엇을 보여주는지가 이 페이지라면, 그 스냅숏이 무엇을 통과시키는지가 15번입니다.', en: 'This page is what a snapshot shows you; no. 15 is what that snapshot lets through.' },
-    { to: 'genericplan', ko: 'VACUUM 은 통계도 갱신합니다. 통계가 낡으면 옵티마이저가 계획을 잘못 고릅니다.', en: 'VACUUM also refreshes the statistics — and stale statistics make the optimiser pick the wrong plan.' }
+    { to: 'genericplan', ko: 'VACUUM 은 통계도 갱신합니다. 통계가 낡으면 옵티마이저가 계획을 잘못 고릅니다.', en: 'VACUUM also refreshes the statistics — and stale statistics make the optimiser pick the wrong plan.' },
+    { to: 'pagesplit', ko: '지운 것이 안 줄어드는 쪽 다음에 — 넣기만 했는데 왜 이만큼인가.', en: 'After why deletes do not shrink: why inserting alone costs this much.' }
   ],
   gc: [
     { to: 'lockttl', ko: '그 정지가 분산 락의 TTL 을 넘으면 락을 잃습니다. 본인은 모릅니다.', en: 'When that pause outlasts a distributed lock’s TTL the lock is gone — and the process cannot tell.' },
@@ -95,7 +96,8 @@ export const RELATED = {
     { to: 'stampede', ko: '평균으로 판단하고 꼬리에서 사고가 납니다 — 젠센 부등식이 옷을 바꿔 입었습니다.', en: 'Judge by the average and break in the tail — Jensen’s inequality in different clothes.' },
     { to: 'mvcc', ko: '그 통계를 갱신하는 것이 VACUUM 과 ANALYZE 입니다.', en: 'Those statistics are what VACUUM and ANALYZE refresh.' },
     { to: 'connpool', ko: '느려진 쿼리가 풀을 말리는 데 얼마나 걸리지 않는가.', en: 'How little it takes for a slowed query to drain the pool.' },
-    { to: 'aggregate', ko: '평균으로 판단하는 문제의 사촌 — 평균을 한 번 더 평균하면 가중치를 잃습니다.', en: 'A cousin of judging by the average — average it twice and the weights are gone.' }
+    { to: 'aggregate', ko: '평균으로 판단하는 문제의 사촌 — 평균을 한 번 더 평균하면 가중치를 잃습니다.', en: 'A cousin of judging by the average — average it twice and the weights are gone.' },
+    { to: 'pagesplit', ko: '같은 인덱스를 크기 쪽에서 — 채움률이 계획보다 먼저 정해집니다.', en: 'The same index from the size side — occupancy is settled before any plan is.' }
   ],
   retrystorm: [
     { to: 'backpressure', ko: '거부를 신호로 쓰면 애초에 이 상태에 들어가지 않습니다.', en: 'Use rejection as a signal and you never enter this state.' },
@@ -109,7 +111,8 @@ export const RELATED = {
     { to: 'jobclaim', ko: '그래서 락을 어디에 걸어야 하는가.', en: 'So where does the lock have to go?' },
     { to: 'lockttl', ko: '예외도 로그도 없이 결과만 틀리는 같은 종류가 분산 락에서 나옵니다.', en: 'The same species — no exception, no log, just a wrong result — out of a distributed lock.' },
     { to: 'mvcc', ko: '각자가 보고 있던 스냅숏이 무엇이었는가.', en: 'What the snapshot each of them was reading actually was.' },
-    { to: 'aggregate', ko: '이쪽은 동시성 때문에 틀리고, 22 는 정의가 갈려서 값이 둘입니다.', en: 'Here concurrency makes it wrong; in no. 22 the definition splits and there are two values.' }
+    { to: 'aggregate', ko: '이쪽은 동시성 때문에 틀리고, 22 는 정의가 갈려서 값이 둘입니다.', en: 'Here concurrency makes it wrong; in no. 22 the definition splits and there are two values.' },
+    { to: 'pagesplit', ko: '같은 B-tree 를 정확성이 아니라 공간 쪽에서 봅니다.', en: 'The same B-tree seen from space rather than correctness.' }
   ],
   stampede: [
     { to: 'lockttl', ko: '뮤텍스를 분산 락으로 옮기면 락의 TTL 이 새 문제가 됩니다.', en: 'Move the mutex to a distributed lock and the lock’s TTL becomes the new problem.' },
@@ -132,7 +135,8 @@ export const RELATED = {
     { to: 'connpool', ko: '같은 식을 커넥션 풀에서 만납니다 — 동시성 = 처리량 × 지연.', en: 'The same formula met at the connection pool — concurrency = throughput × latency.' },
     { to: 'mqtt', ko: 'Receive Maximum 이 그 식의 또 다른 단위입니다.', en: 'Receive Maximum is that formula in yet another unit.' },
     { to: 'timeout', ko: '같은 RTT 가 처리량도 정하고 타임아웃 예산도 먹습니다.', en: 'The same RTT sets your throughput and eats your timeout budget.' },
-    { to: 'slowstart', ko: '이 페이지가 미뤄둔 구간 — 정상 상태에 닿기 전에 끝나는 전송은 어떻게 되는가.', en: 'The phase this page set aside — what happens to transfers that end before the steady state.' }
+    { to: 'slowstart', ko: '이 페이지가 미뤄둔 구간 — 정상 상태에 닿기 전에 끝나는 전송은 어떻게 되는가.', en: 'The phase this page set aside — what happens to transfers that end before the steady state.' },
+    { to: 'nagle', ko: '대역폭이 아니라 두 알고리즘이 서로를 기다려서 40ms 가 붙는 경우.', en: 'Where 40ms is added not by bandwidth but by two algorithms waiting on each other.' }
   ],
   aggregate: [
     { to: 'writeskew', ko: '예외도 로그도 없이 숫자만 틀리는 같은 종류 — 저쪽은 동시성입니다.', en: 'The same species of silent wrong number — that one comes from concurrency.' },
@@ -150,7 +154,8 @@ export const RELATED = {
     { to: 'keepalive', ko: '반대편 — 이쪽은 정상적으로 끊었는데 유실되고, 7 번은 끊겼는데 살아있다고 믿습니다.', en: 'The mirror — here a proper close loses data; in no. 7 a dead connection looks alive.' },
     { to: 'mqtt', ko: 'TCP 순서 보장이 홉 단위인 것이 QoS 가 홉 단위인 것과 같은 구조입니다.', en: 'TCP ordering being per hop is the same structure as QoS being per hop.' },
     { to: 'rebalance', ko: '"정상 종료" 처럼 "살아 있다" 도 계층마다 다른 뜻입니다 — 하트비트는 정상인데 그룹에서 빠집니다.', en: 'Like “clean shutdown”, “alive” also means different things per layer — heartbeats fine, dropped from the group.' },
-    { to: 'slowstart', ko: '같은 홉 단위 이야기 — 프록시를 넘으면 초기 창도 처음부터 다시 시작합니다.', en: 'The same per-hop story — cross a proxy and the initial window starts over too.' }
+    { to: 'slowstart', ko: '같은 홉 단위 이야기 — 프록시를 넘으면 초기 창도 처음부터 다시 시작합니다.', en: 'The same per-hop story — cross a proxy and the initial window starts over too.' },
+    { to: 'nagle', ko: '같은 소켓 옵션 자리 — write() 를 몇 번 불렀는지가 지연을 만듭니다.', en: 'The same socket-option territory — how many times you called write() becomes latency.' }
   ],
   fanout: [
     { to: 'timeout', ko: '취소가 전파되지 않으면 사본의 추가 부하가 계산보다 커집니다 — 아무도 안 기다리는 일이 남습니다.', en: 'If cancellation does not propagate, the copy costs more than the number says — work nobody waits for is left running.' },
@@ -167,12 +172,23 @@ export const RELATED = {
   slowstart: [
     { to: 'throughput', ko: '정상 상태로 넘어가면 이번엔 손실률이 처리량을 정합니다 — 거기도 대역폭은 식에 없습니다.', en: 'Once the steady state arrives, loss rate sets the throughput — and bandwidth is not in that formula either.' },
     { to: 'connpool', ko: '계단을 건너뛰려면 커넥션이 살아 있어야 합니다. 그 풀을 얼마나 잡아야 하는가.', en: 'Skipping the staircase needs a live connection — and how big that pool has to be.' },
-    { to: 'fanout', ko: '왕복 하나가 계단이라면, 그 호출이 100개로 늘어나면 어떻게 되는가.', en: 'If one round trip is a step, what happens when the call fans out to a hundred?' }
+    { to: 'fanout', ko: '왕복 하나가 계단이라면, 그 호출이 100개로 늘어나면 어떻게 되는가.', en: 'If one round trip is a step, what happens when the call fans out to a hundred?' },
+    { to: 'nagle', ko: '보낼 수 있는데 안 보내는 또 다른 이유 — 이번엔 두 알고리즘이 서로를 기다립니다.', en: 'Another reason it will not send when it could — this time two algorithms wait for each other.' }
   ],
   backlog: [
     { to: 'backpressure', ko: '큐를 키울지 거부할지 — 같은 결정을 애플리케이션 층에서 봅니다.', en: 'Grow the queue or reject — the same decision seen at the application layer.' },
     { to: 'omission', ko: '큐에서 기다린 시간이 서버 지표에서 사라지는 이유.', en: 'Why the time spent waiting in the queue vanishes from the server metrics.' },
     { to: 'timeout', ko: '127초를 기다리지 않으려면 커넥트 타임아웃을 어디에 두어야 하는가.', en: 'Where to put the connect timeout so nothing waits 127 seconds.' }
+  ],
+  nagle: [
+    { to: 'slowstart', ko: '같은 데이터센터에서 더 아픈 또 하나 — 왕복 수가 계단이 됩니다.', en: 'The other one that hurts more inside a datacenter — round trips become a staircase.' },
+    { to: 'timeout', ko: '40ms 가 붙은 호출이 사슬 안에 있으면 예산이 어떻게 어긋나는가.', en: 'What a 40ms-taxed call does to a budget once it sits inside a chain.' },
+    { to: 'connpool', ko: '한 요청이 40ms 더 오래 커넥션을 잡으면 용량이 얼마나 주는가.', en: 'How much capacity you lose when each request holds its connection 40ms longer.' }
+  ],
+  pagesplit: [
+    { to: 'mvcc', ko: '삭제와 갱신이 섞이면 채움률이 더 낮아집니다 — VACUUM 이 왜 필요한가.', en: 'Mixed deletes and updates push occupancy lower still — which is what VACUUM is for.' },
+    { to: 'stampede', ko: '인덱스가 버퍼 캐시를 넘는 순간이 실제로 아픈 지점입니다.', en: 'The moment the index outgrows the buffer cache is where it actually hurts.' },
+    { to: 'genericplan', ko: '같은 인덱스를 옵티마이저 쪽에서 — 통계가 낡으면 계획이 갈립니다.', en: 'The same index from the optimiser side — stale statistics split the plan.' }
   ],
   rebalance: [
     { to: 'connpool', ko: '바쁨과 진행을 구별하지 못해서 생기는 같은 사고 — CPU 사용률은 진행률이 아닙니다.', en: 'The same accident from confusing busy with progressing — CPU utilisation is not a progress bar.' },

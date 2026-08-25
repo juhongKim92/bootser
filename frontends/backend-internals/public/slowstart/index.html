@@ -288,6 +288,7 @@
       <li><a href="/throughput/"><span class="no">19</span><span><span class="t">대역폭은 남는데 처리량이 안 나온다</span><span class="why">정상 상태로 넘어가면 이번엔 손실률이 처리량을 정합니다 — 거기도 대역폭은 식에 없습니다.</span></span></a></li>
       <li><a href="/connpool/"><span class="no">08</span><span><span class="t">17밀리초 쿼리가 커넥션 풀을 말린다</span><span class="why">계단을 건너뛰려면 커넥션이 살아 있어야 합니다. 그 풀을 얼마나 잡아야 하는가.</span></span></a></li>
       <li><a href="/fanout/"><span class="no">24</span><span><span class="t">서버는 안 느려졌는데 사용자는 느려졌다</span><span class="why">왕복 하나가 계단이라면, 그 호출이 100개로 늘어나면 어떻게 되는가.</span></span></a></li>
+      <li><a href="/nagle/"><span class="no">28</span><span><span class="t">작은 쓰기 두 번이 40밀리초가 된다</span><span class="why">보낼 수 있는데 안 보내는 또 다른 이유 — 이번엔 두 알고리즘이 서로를 기다립니다.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->

@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>작은 쓰기 두 번이 40밀리초가 된다 — Nagle 과 지연 ACK</title>
+<meta name="description" content="같은 400바이트를 write() 한 번으로 보내면 1ms, 두 번으로 나눠 보내면 42ms 입니다. 보내는 쪽은 ACK 를 기다리고 받는 쪽은 타이머를 기다려요. 두 알고리즘이 각자 합리적인데 겹치면 서로를 기다립니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/nagle/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/nagle/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/nagle/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/nagle/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="작은 쓰기 두 번이 40밀리초가 된다">
+<meta property="og:description" content="바이트 수는 같습니다. write() 를 몇 번 불렀는지가 지연을 만듭니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/nagle/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="작은 쓰기 두 번이 40밀리초가 된다">
+<meta name="twitter:description" content="꽉 찬 세그먼트면 안 걸립니다. RFC 의 '두 개마다 하나' 규칙이 그 갈림길입니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/nagle-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/nagle/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>작은 쓰기 두 번이 40밀리초가 된다</h1>
+  <p class="lede">같은 400바이트를 <code>write()</code> 한 번으로 보내면 <strong>1ms</strong>, 두 번으로 나눠 보내면 <strong>42ms</strong> 입니다. 바이트 수도, 회선도, 코드의 나머지도 같아요. 보내는 쪽은 ACK 를 기다리고 받는 쪽은 타이머를 기다립니다 — <strong>두 알고리즘이 각자 합리적인데 겹치면 서로를 기다립니다.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>쓰는 방식</label>
+          <div class="seg" id="segJoin" role="group" aria-label="나눠 쓰나 합쳐 쓰나">
+            <button data-join="0" aria-pressed="true">나눠 쓴다</button>
+            <button data-join="1">합쳐 쓴다</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sW">쓰기 횟수</label>
+          <span class="v" id="vW">1<small>회</small></span>
+          <input type="range" id="sW" min="1" max="4" step="1" value="1" aria-label="응답을 읽기 전에 write 를 몇 번 부르나">
+        </div>
+        <div class="dial">
+          <label for="sS">한 번에 쓰는 크기</label>
+          <span class="v" id="vS">200<small>B</small></span>
+          <input type="range" id="sS" min="0" max="3" step="1" value="1" aria-label="write 한 번에 넘기는 바이트">
+        </div>
+        <div class="dial">
+          <label>Nagle</label>
+          <div class="seg" id="segNagle" role="group" aria-label="TCP_NODELAY">
+            <button data-nagle="1" aria-pressed="true">켬</button>
+            <button data-nagle="0">끔</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sD">지연 ACK 타이머</label>
+          <span class="v" id="vD">40<small>ms</small></span>
+          <input type="range" id="sD" min="0" max="4" step="1" value="1" aria-label="받는 쪽이 ACK 를 미루는 시간">
+        </div>
+        <div class="dial">
+          <label for="sR">왕복 시간</label>
+          <span class="v" id="vR">1<small>ms</small></span>
+          <input type="range" id="sR" min="1" max="100" step="1" value="1" aria-label="한 왕복에 걸리는 시간">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->write 1회 × 200B (합계 200B) · 세그먼트 1개 — 총 1ms<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">선로 위에서 실제로 오간 것</span>
+      <div class="board">
+        <div class="wire" id="wire"><!--pr--><div class="lane tx"></div><div class="lane rx"></div><div class="who tx">보내는 쪽</div><div class="who rx">받는 쪽</div><div class="pkt small" style="left:0%"></div><div class="tag up" style="left:0%">첫 쓰기 200B</div><div class="pkt rsp" style="left:22.727272727272727%"></div><div class="tag dn" style="left:22.727272727272727%">응답</div><!--/pr--></div>
+        <div class="wirex" id="wireX"><!--pr--><span>0ms</span><span>1.1ms</span><span>2.2ms</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="full"></i>꽉 찬 세그먼트</span>
+          <span><i class="small"></i>작은 세그먼트</span>
+          <span><i class="ackl"></i>ACK</span>
+          <span><i class="heldl"></i>Nagle 이 붙잡고 있는 구간</span>
+        </div>
+
+        <table class="four" id="four"><!--pr--><tr><th>설정</th><th>총 시간</th><th>추가</th><th>패킷</th></tr><tr><td>나눠 쓴다 (기본)</td><td class="good">1ms</td><td class="good">—</td><td>1</td></tr><tr><td>합쳐 쓴다</td><td class="good">1ms</td><td class="good">—</td><td>1</td></tr><tr><td>TCP_NODELAY</td><td class="good">1ms</td><td class="good">—</td><td>1</td></tr><tr><td>TCP_QUICKACK</td><td class="good">1ms</td><td class="good">—</td><td>1</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">총 시간</span><span class="n">1ms</span></div><div class="m good"><span class="k">추가된 지연</span><span class="n">—</span></div><div class="m "><span class="k">합쳐 썼다면</span><span class="n">1ms</span></div><div class="m "><span class="k">패킷 수</span><span class="n">1</span></div><div class="m "><span class="k">세그먼트</span><span class="n">작은 것 있음</span></div><div class="m "><span class="k">ACK 수</span><span class="n">1</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>막히지 않았다 — 1ms.</b> 패킷 1개<br><span class="at">미확인 데이터가 없거나 붙잡을 작은 세그먼트가 없다</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>쓰는 방식</td><td><strong>나눠 쓴다</strong>면 <code>write()</code> 를 여러 번 부릅니다(헤더 따로, 본문 따로). <strong>합쳐 쓴다</strong>면 같은 바이트를 한 번에 넘겨요. 이 손잡이가 이 페이지 전체입니다.</td></tr>
+    <tr><td>쓰기 횟수</td><td>응답을 읽기 전에 <code>write()</code> 를 몇 번 부르나. <strong>2회부터 걸리고, 3회·4회로 늘려도 더 나빠지지 않습니다</strong> — 왜인지는 아래에 있습니다.</td></tr>
+    <tr><td>한 번에 쓰는 크기</td><td><strong>1460(MSS)으로 올려 보세요</strong> — 걸리던 것이 사라집니다. 꽉 찬 세그먼트는 Nagle 이 안 막고, 받는 쪽도 안 미룹니다.</td></tr>
+    <tr><td>Nagle</td><td><code>TCP_NODELAY</code> 입니다. 끄면 지연이 사라지지만 <strong>패킷 수가 늘어납니다</strong>.</td></tr>
+    <tr><td>지연 ACK 타이머</td><td>받는 쪽이 ACK 를 미루는 시간. <strong>끔</strong>은 <code>TCP_QUICKACK</code> 이고, <strong>500ms</strong> 는 RFC 1122 가 정한 상한입니다. 40ms 는 리눅스 값이에요.</td></tr>
+    <tr><td>왕복 시간</td><td>같은 데이터센터면 1ms 안쪽, 대륙을 넘으면 100ms 대입니다. <strong>RTT 가 작을수록 40ms 가 상대적으로 더 크게 보입니다.</strong></td></tr>
+  </table>
+
+  <p>모든 시각이 결정됩니다 — 난수도 표본도 없어요. 세그먼트 하나는 1,460바이트(MSS)로 뒀습니다.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. write 한 번 — 아무 일도 없다</h4>
+    <div class="seq">쓰기 1회 × 200B · Nagle 켬 · 지연 ACK 40ms · RTT 1ms
+총 <em>1ms</em> · 패킷 <em>1개</em> · 추가 지연 <em>없음</em></div>
+    <p class="why">보낼 때 미확인 데이터가 없으니 Nagle 이 막을 게 없습니다. 요청이 반 왕복에 도착하고, 받는 쪽은 <strong>응답에 ACK 를 얹어</strong> 보냅니다 — 지연 ACK 타이머가 뜰 이유가 없어요. <strong>여기까지는 두 알고리즘이 보이지 않습니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 두 번으로 나눈다 — 42ms</h4>
+    <div class="seq">쓰기 1 → <em>2회</em> (200B 씩 · 합계 400B)
+총 1 → <em>42ms</em> · 추가 <em>+41ms</em> · 패킷 <em>3개</em></div>
+    <p class="why">첫 200바이트는 바로 나갑니다. <strong>둘째 200바이트는 Nagle 이 붙잡습니다</strong> — 앞의 것이 아직 ACK 를 못 받았고, 이건 꽉 찬 세그먼트가 아니니까요. 그런데 <strong>받는 쪽은 응답을 만들 수가 없습니다</strong>(요청이 덜 왔으니). 그래서 ACK 를 얹어 보낼 데이터가 없고, 지연 ACK 타이머 40ms 가 유일한 출구가 됩니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 같은 바이트를 합쳐 쓴다 — 다시 1ms</h4>
+    <div class="seq">쓰는 방식 나눠 쓴다 → <em>합쳐 쓴다</em> (400B 한 번)
+총 42 → <em>1ms</em> · 패킷 3 → <em>1개</em></div>
+    <p class="why">보낸 바이트는 정확히 같습니다. <strong>바뀐 것은 <code>write()</code> 호출 횟수뿐이에요.</strong> 400바이트가 한 세그먼트에 들어가고, 미확인 데이터가 없으니 즉시 나갑니다. 이게 이 문제의 가장 싼 처방입니다 — 커널 설정도 아니고 소켓 옵션도 아니고 <strong>버퍼 하나</strong>입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Nagle 을 끈다 — 지연은 사라지고 패킷은 늘어난다</h4>
+    <div class="seq">Nagle 켬 → <em>끔</em> (<code>TCP_NODELAY</code> · 나눠 쓴 그대로)
+총 42 → <em>1ms</em> · 패킷 <em>2개</em></div>
+    <p class="why">붙잡는 규칙이 없어지니 둘째 세그먼트가 바로 나갑니다. <strong>증상은 사라지는데 원인은 그대로예요</strong> — 400바이트를 두 패킷으로 보내는 것은 여전합니다. 작은 쓰기를 초당 수만 번 하는 서비스라면 그 패킷 수가 그대로 비용입니다. Nagle 이 애초에 막으려던 게 그거였고요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 받는 쪽에서 지연 ACK 를 끈다 — 2ms</h4>
+    <div class="seq">지연 ACK 타이머 40ms → <em>끔</em> (<code>TCP_QUICKACK</code>)
+총 42 → <em>2ms</em> · 합쳐 쓰기(1ms)보다는 여전히 느리다</div>
+    <p class="why">ACK 가 즉시 나가니 Nagle 이 곧바로 풀립니다. 그런데 <strong>완전히 공짜는 아니에요</strong> — 왕복 하나가 더 듭니다(1ms → 2ms). 더 중요한 건 <strong>이 손잡이가 반대편에 있다</strong>는 겁니다. 우리 코드를 안 고쳤는데 상대 서버 설정을 바꾸니 나아지는 경우가 이래서 생깁니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. 쓰기 크기를 1460으로 — 걸리지 않는다</h4>
+    <div class="seq">크기 200 → <em>1,460B</em> (= MSS · 나눠 쓰기 2회)
+총 42 → <em>1ms</em> · ACK <em>1개</em></div>
+    <p class="why">둘 다 <strong>꽉 찬 세그먼트</strong>라 Nagle 이 막지 않습니다(Nagle 은 *작은* 세그먼트만 미룹니다). 그리고 받는 쪽도 미루지 않아요 — RFC 1122 가 <em>꽉 찬 패킷 흐름에서는 적어도 두 개마다 하나는 ACK 하라</em>고 정해뒀거든요. <strong>세그먼트 두 개 = ACK 한 개</strong>, 타이머가 뜰 자리가 없습니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. 합쳐 써도 걸리는 경우 — 꼬리가 작으면</h4>
+    <div class="seq">크기 700B × 3회를 <em>합쳐 쓴다</em> (합계 2,100B)
+세그먼트 <em>1,460 + 640</em> · 총 <em>42ms</em></div>
+    <p class="why">한 번에 썼는데도 걸립니다. 2,100바이트가 MSS 를 넘어 <strong>꽉 찬 세그먼트 하나 + 작은 꼬리 640바이트</strong>로 쪼개지고, 그 꼬리가 Nagle 에 붙잡히거든요. <strong>"합쳐 쓰면 된다" 는 MSS 안에 들어갈 때만 맞습니다.</strong> 요청이 MSS 를 넘는다면 다른 처방이 필요합니다.</p>
+  </div>
+
+  <h2>두 알고리즘이 각자 무엇을 막으려 했나</h2>
+
+  <p>둘 다 1980년대에 실재한 문제를 고친 것이고, 지금도 대체로 옳습니다.</p>
+
+  <table class="keytable">
+    <tr><th>알고리즘</th><th>무엇을 아끼나</th></tr>
+    <tr><td>Nagle</td><td><strong>패킷 수.</strong> 1바이트를 보내려고 41바이트 패킷을 만드는 낭비를 막습니다. 규칙은 하나예요 — <em>미확인 데이터가 있으면 작은 세그먼트를 미룬다.</em> RFC 1122 §4.2.3.4 는 이걸 <strong>MAY</strong>(선택)로 두고, 애플리케이션이 끌 수 있어야 한다고 적습니다</td></tr>
+    <tr><td>지연 ACK</td><td><strong>ACK 패킷 수.</strong> 데이터 없이 ACK 만 든 패킷을 줄입니다. 응답에 얹어 보낼 수 있으면 그렇게 하고, 없으면 잠깐 기다립니다</td></tr>
+  </table>
+
+  <p>문제는 <strong>"잠깐 기다린다" 와 "ACK 를 기다린다" 가 만날 때</strong>입니다. 보내는 쪽은 ACK 가 오면 보내겠다고 하고, 받는 쪽은 보낼 데이터가 생기면 ACK 를 얹겠다고 합니다. 그런데 <strong>받을 데이터가 다 안 왔으니 보낼 데이터도 안 생깁니다.</strong> 서로가 상대를 기다려요.</p>
+
+  <div class="callout">이건 교착이 아닙니다 — <strong>타이머가 있어서 풀립니다.</strong> 다만 그 타이머가 40ms 고, 같은 데이터센터의 왕복이 1ms 인 세상에서는 <strong>40배</strong>입니다.</div>
+
+  <h2>RFC 가 갈림길을 정해뒀다</h2>
+
+  <p>왜 꽉 찬 세그먼트는 안 걸리는가. RFC 1122 §4.2.3.2 가 지연 ACK 를 허용하면서 단 조건을 이렇게 씁니다.</p>
+
+  <div class="callout"><em>"An ACK SHOULD NOT be excessively delayed; the delay MUST be less than 0.5 seconds, and in a stream of full packets there SHOULD be an ACK for at least every other packet."</em></div>
+
+  <p>두 가지가 여기서 나옵니다. 첫째, <strong>미룰 수 있는 상한이 0.5초</strong>입니다 — 40ms 는 명세가 아니라 리눅스가 고른 값이고, 손잡이를 500ms 까지 올려 보면 RFC 가 허용하는 최악을 볼 수 있습니다. 둘째, <strong>꽉 찬 패킷이 흐르면 두 개마다 하나는 ACK 해야 합니다.</strong> 그래서 세그먼트가 꽉 차 있으면 타이머가 개입할 자리가 없어요.</p>
+
+  <p>Nagle 쪽 조건도 같은 자리를 가리킵니다 — 미루는 대상이 <strong>작은</strong> 세그먼트뿐입니다. 그래서 이 문제는 <strong>"작다"와 "미확인" 이 동시에 성립할 때만</strong> 생깁니다.</p>
+
+  <table class="keytable">
+    <tr><th>상황</th><th>걸리나</th></tr>
+    <tr><td>write 한 번</td><td>안 걸립니다 — 미확인 데이터가 없으니 Nagle 이 막을 게 없습니다</td></tr>
+    <tr><td>작은 write 두 번 이상</td><td><strong>걸립니다</strong> — 이 페이지의 그림</td></tr>
+    <tr><td>꽉 찬 세그먼트들</td><td>안 걸립니다 — Nagle 도 안 막고 RFC 규칙이 ACK 를 부릅니다</td></tr>
+    <tr><td>요청 하나 → 응답 하나</td><td>안 걸립니다 — 받는 쪽에 얹어 보낼 데이터가 늘 있습니다</td></tr>
+  </table>
+
+  <p>마지막 줄이 중요합니다. <strong>이 문제는 write-write-read 패턴에서만 나옵니다.</strong> 요청-응답만 반복하는 코드에서는 평생 안 만나요. 그래서 라이브러리를 하나 바꾸다가 갑자기 나타납니다.</p>
+
+  <h2>쓰기를 늘려도 더 나빠지지 않는다</h2>
+
+  <p>쓰기 횟수를 3회, 4회로 올려 보세요. <strong>42ms 에서 안 움직입니다.</strong> 처음 보면 이상한데, 이유가 있습니다.</p>
+
+  <p>애플리케이션이 <code>write()</code> 를 연달아 부르면 그 바이트들은 <strong>커널 송신 버퍼에 쌓입니다.</strong> Nagle 이 첫 세그먼트의 ACK 를 기다리는 동안 2·3·4번째 쓰기가 모두 버퍼에 들어와 있고, ACK 가 오는 순간 <strong>하나의 세그먼트로 합쳐져 나갑니다.</strong></p>
+
+  <div class="callout">그래서 <strong>막히는 것은 한 번뿐입니다.</strong> 쓰기를 열 번 해도 40ms 는 한 번이에요. 반대로 말하면 — <strong>쓰기를 줄이는 것으로는 안 없어집니다. 2회를 1회로 만들어야 없어집니다.</strong></div>
+
+  <h2>이 모델이 가정하는 것</h2>
+
+  <table class="keytable">
+    <tr><th>가정</th><th>깨지면 어떻게 되나</th></tr>
+    <tr><td>쓰기가 연달아 온다</td><td><code>write()</code> 들 사이에 애플리케이션이 일하지 않는다고 봤습니다. 사이에 계산이 오래 끼면 두 번째 쓰기가 버퍼에 늦게 들어와 <strong>합쳐지지 않고 따로 나갑니다</strong> — 그러면 막히는 횟수가 늘 수 있습니다</td></tr>
+    <tr><td>받는 쪽이 다 받아야 답한다</td><td>요청을 끝까지 읽어야 응답을 만든다고 봤습니다. 스트리밍 프로토콜처럼 <strong>앞부분만 보고 뭔가를 보내는</strong> 구현이면 ACK 가 얹혀서 이 문제가 사라집니다</td></tr>
+    <tr><td>손실이 없다</td><td>재전송이 끼면 시각이 밀립니다. 그쪽은 <a href="/slowstart/">26번</a>·<a href="/backlog/">27번</a>의 자리예요</td></tr>
+    <tr><td>40ms 는 리눅스 값</td><td>명세는 <strong>0.5초 상한</strong>만 정합니다. 운영체제와 버전마다 다르고, 리눅스는 상황에 따라 이 값을 조절하기도 합니다 — <strong>정확한 값을 코드가 가정하면 안 됩니다</strong></td></tr>
+  </table>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>제일 먼저 볼 것</td><td>응답 시간 분포에 <strong>40ms 근처의 봉우리</strong>가 있는지. 평균이 아니라 히스토그램을 봐야 보입니다 — 걸린 요청만 40ms 를 더 쓰니까요</td></tr>
+    <tr><td>고칠 순서</td><td>① <strong>버퍼에 모아 한 번에 쓴다</strong>(가장 싸고 패킷도 준다) ② 그게 안 되면 <code>TCP_NODELAY</code> ③ 반대편이 우리 것이면 <code>TCP_QUICKACK</code>. <strong>①이 안 되는 경우는 드뭅니다</strong></td></tr>
+    <tr><td>자바</td><td><code>BufferedOutputStream</code> 없이 <code>OutputStream</code> 에 직접 쓰면 <code>write()</code> 호출이 그대로 세그먼트가 됩니다. 헤더와 본문을 따로 쓰는 코드가 특히 흔해요. <code>Socket.setTcpNoDelay(true)</code> 도 있지만 순서는 위와 같습니다</td></tr>
+    <tr><td>HTTP 클라이언트</td><td>대부분 이미 <code>TCP_NODELAY</code> 를 켭니다. 그런데 <strong>직접 만든 바이너리 프로토콜</strong>이나 오래된 RPC 는 안 켠 경우가 있습니다 — 소켓 옵션을 실제로 확인하세요</td></tr>
+    <tr><td>같은 데이터센터일 때 더 나쁘다</td><td>RTT 가 100ms 면 40ms 는 40% 지만, RTT 가 0.5ms 면 <strong>80배</strong>입니다. <em>가까울수록 상대적으로 더 아픕니다</em> — 직관과 반대예요</td></tr>
+    <tr><td>확인하는 방법</td><td><code>tcpdump</code> 로 보면 바로 나옵니다 — 작은 세그먼트 하나가 나가고 <strong>40ms 동안 아무것도 없다가</strong> ACK 가 오고 그다음 세그먼트가 나갑니다. 그 빈 40ms 가 증거입니다</td></tr>
+    <tr><td>Nagle 을 끄기 전에</td><td>패킷 수가 늘어나는 대가를 봅니다. 작은 메시지를 아주 많이 보내는 서비스라면 <strong>Nagle 이 실제로 값을 하고 있었을</strong> 수 있어요 — 그럴 때는 애플리케이션에서 모아 쓰는 쪽이 맞습니다</td></tr>
+  </table>
+
+  <p><a href="/slowstart/">26번</a>이 <em>보낼 수 있는데 안 보내는</em> 이야기였다면, 이 페이지는 <em>보낼 것이 있는데 서로 기다리는</em> 이야기입니다. 둘 다 대역폭이 원인이 아니고, 둘 다 <strong>같은 데이터센터에서 더 아픕니다.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/slowstart/"><span class="no">26</span><span><span class="t">파일이 1바이트 커졌는데 왕복이 한 번 더 든다</span><span class="why">같은 데이터센터에서 더 아픈 또 하나 — 왕복 수가 계단이 됩니다.</span></span></a></li>
+      <li><a href="/timeout/"><span class="no">17</span><span><span class="t">각자 1초씩 줬는데 왜 아무도 1초를 못 쓰나</span><span class="why">40ms 가 붙은 호출이 사슬 안에 있으면 예산이 어떻게 어긋나는가.</span></span></a></li>
+      <li><a href="/connpool/"><span class="no">08</span><span><span class="t">17밀리초 쿼리가 커넥션 풀을 말린다</span><span class="why">한 요청이 40ms 더 오래 커넥션을 잡으면 용량이 얼마나 주는가.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/nagle/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uMs:'ms', uB:'B', uTimes:'회', uOff:'끔',
+  hint:'write $1회 × $2B (합계 $3B) · 세그먼트 $4개 — 총 $5',
+  wTx:'보내는 쪽', wRx:'받는 쪽',
+  pFirst:'첫 쓰기 $1B', pHeld:'Nagle 이 붙잡는다 $1', pTimer:'지연 ACK 타이머 $1',
+  pAck:'ACK', pReleased:'풀려서 나간다', pRsp:'응답',
+  fWhat:'설정', fTime:'총 시간', fExtra:'추가', fPkt:'패킷',
+  fSplit:'나눠 쓴다 (기본)', fJoined:'합쳐 쓴다', fNodelay:'TCP_NODELAY', fQuick:'TCP_QUICKACK',
+  mTime:'총 시간', mExtra:'추가된 지연', mJoined:'합쳐 썼다면',
+  mPkt:'패킷 수', mSeg:'세그먼트', mAck:'ACK 수',
+  mAllFull:'전부 꽉 참', mHasSmall:'작은 것 있음',
+  vClean:'<b>막히지 않았다 — $1.</b> 패킷 $2개<br><span class="at">미확인 데이터가 없거나 붙잡을 작은 세그먼트가 없다</span>',
+  vFull:'<b>세그먼트 $1개가 전부 꽉 찼다 — 막힐 자리가 없다.</b> ACK $2개 · 총 $3<br><span class="at">RFC 1122 의 "꽉 찬 패킷 흐름에서는 두 개마다 하나" 규칙이 타이머를 앞지른다</span>',
+  vHeld:'<b>총 $1 — 지연 ACK 타이머 $2 를 통째로 기다렸다.</b><br>같은 바이트를 합쳐 썼다면 $3 였다 <span class="at">— 차이 $4</span>',
+  vQuick:'<b>ACK 가 즉시 나가서 Nagle 이 바로 풀렸다 — $1.</b><br>그래도 합쳐 쓰기($2)보다 왕복 하나가 더 든다 <span class="at">— 그리고 이 손잡이는 반대편에 있다</span>',
+  vJoinedHeld:'<b>합쳐 썼는데도 막혔다.</b> $1B 가 MSS $2 를 넘어 꼬리 $3B 가 남았다.<br><span class="at">그 꼬리가 작아서 Nagle 이 붙잡는다 — 총 $4</span>',
+  scene:[
+    'write 를 한 번만 부릅니다. 200바이트가 바로 나가고, 받는 쪽은 응답에 ACK 를 얹어 보냅니다. 총 1ms 예요. 미확인 데이터가 없으니 Nagle 이 막을 게 없고, 얹어 보낼 데이터가 있으니 지연 ACK 타이머도 뜰 이유가 없습니다. 여기까지는 두 알고리즘이 아예 보이지 않습니다.',
+    '같은 400바이트를 200씩 두 번에 나눠 씁니다. 42ms 가 됐어요. 시간축을 보세요 — 첫 세그먼트는 바로 나가고, 둘째는 Nagle 이 붙잡습니다. 앞의 것이 아직 ACK 를 못 받았고 꽉 찬 세그먼트도 아니니까요. 그런데 받는 쪽은 요청이 덜 와서 응답을 못 만들고, 그래서 ACK 를 얹어 보낼 데이터가 없습니다. 남은 출구가 40ms 타이머 하나뿐입니다.',
+    '쓰는 방식만 합쳐 쓰기로 바꿨습니다. 1ms 로 돌아왔어요. 보낸 바이트는 정확히 같고 바뀐 것은 write 호출 횟수뿐입니다. 400바이트가 한 세그먼트에 들어가고 미확인 데이터가 없으니 즉시 나갑니다. 커널 설정도 소켓 옵션도 아니고 버퍼 하나가 처방입니다.',
+    '나눠 쓰기로 되돌리고 Nagle 을 껐습니다. TCP_NODELAY 죠. 42ms 가 1ms 가 됩니다. 그런데 패킷 수를 보세요 — 400바이트를 두 패킷으로 보내는 것은 그대로입니다. 증상은 사라지고 원인은 남았어요. 작은 메시지를 초당 수만 번 보내는 서비스라면 그 패킷 수가 그대로 비용입니다.',
+    'Nagle 을 다시 켜고, 이번엔 받는 쪽의 지연 ACK 를 껐습니다. TCP_QUICKACK 입니다. ACK 가 즉시 나가니 Nagle 이 곧바로 풀려서 2ms 가 됩니다. 완전히 공짜는 아니에요 — 합쳐 쓰기의 1ms 보다 왕복 하나가 더 듭니다. 그리고 이 손잡이는 반대편에 있습니다. 우리 코드를 안 고쳤는데 상대 서버 설정을 바꾸니 나아지는 경우가 이래서 생깁니다.',
+    '쓰기 크기를 1,460바이트, 즉 MSS 로 올렸습니다. 나눠 쓰는 건 그대로인데 1ms 예요. 둘 다 꽉 찬 세그먼트라 Nagle 이 막지 않습니다 — 미루는 대상은 작은 세그먼트뿐이니까요. 그리고 받는 쪽도 안 미룹니다. RFC 1122 가 꽉 찬 패킷 흐름에서는 적어도 두 개마다 하나는 ACK 하라고 정해뒀거든요. 세그먼트 둘에 ACK 하나, 타이머가 뜰 자리가 없습니다.',
+    '마지막은 함정입니다. 700바이트를 세 번, 합쳐서 2,100바이트를 한 번에 썼습니다. 그런데도 42ms 예요. MSS 를 넘으니 꽉 찬 세그먼트 하나와 작은 꼬리 640바이트로 쪼개지고, 그 꼬리가 Nagle 에 붙잡힙니다. "합쳐 쓰면 된다" 는 MSS 안에 들어갈 때만 맞습니다.'
+  ],
+};
+</script>
+<script src="/shared/nagle-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "작은 쓰기 두 번이 40밀리초가 된다",
+  "description": "같은 400바이트를 write() 한 번으로 보내면 1ms, 두 번으로 나눠 보내면 42ms 입니다. 보내는 쪽은 ACK 를 기다리고 받는 쪽은 타이머를 기다려요. 두 알고리즘이 각자 합리적인데 겹치면 서로를 기다립니다.",
+  "url": "https://lab.vermilion19.com/nagle/",
+  "inLanguage": "ko",
+  "datePublished": "2026-08-25",
+  "dateModified": "2026-08-25",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "작은 쓰기 두 번이 40밀리초가 된다"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

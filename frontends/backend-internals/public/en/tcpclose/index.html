@@ -278,6 +278,7 @@ signal on the wire <em>FIN</em> · loss bound <em>0</em> · verdicts <em>3 / 3</
       <li><a href="/en/mqtt/"><span class="no">05</span><span><span class="t">What "exactly once" actually costs</span><span class="why">TCP ordering being per hop is the same structure as QoS being per hop.</span></span></a></li>
       <li><a href="/en/rebalance/"><span class="no">20</span><span><span class="t">The consumers never stop and the lag never falls</span><span class="why">Like “clean shutdown”, “alive” also means different things per layer — heartbeats fine, dropped from the group.</span></span></a></li>
       <li><a href="/en/slowstart/"><span class="no">26</span><span><span class="t">One byte bigger and it costs another round trip</span><span class="why">The same per-hop story — cross a proxy and the initial window starts over too.</span></span></a></li>
+      <li><a href="/en/nagle/"><span class="no">28</span><span><span class="t">Two small writes cost forty milliseconds</span><span class="why">The same socket-option territory — how many times you called write() becomes latency.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->

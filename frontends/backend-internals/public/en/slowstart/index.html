@@ -288,6 +288,7 @@ At 100KB it was 4 vs 7 (<em>1.75×</em>) · at 1MB it is 9 vs 13 (<em>1.44×</em
       <li><a href="/en/throughput/"><span class="no">19</span><span><span class="t">The bandwidth is there and the throughput is not</span><span class="why">Once the steady state arrives, loss rate sets the throughput — and bandwidth is not in that formula either.</span></span></a></li>
       <li><a href="/en/connpool/"><span class="no">08</span><span><span class="t">A 17-millisecond query drains the pool</span><span class="why">Skipping the staircase needs a live connection — and how big that pool has to be.</span></span></a></li>
       <li><a href="/en/fanout/"><span class="no">24</span><span><span class="t">The servers did not get slower. The users did</span><span class="why">If one round trip is a step, what happens when the call fans out to a hundred?</span></span></a></li>
+      <li><a href="/en/nagle/"><span class="no">28</span><span><span class="t">Two small writes cost forty milliseconds</span><span class="why">Another reason it will not send when it could — this time two algorithms wait for each other.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->

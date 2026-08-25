@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>How much bigger does a random key make the index — B-tree page splits</title>
+<meta name="description" content="People say a UUID primary key doubles the index. Work it out from the documented rules and it is 1.30× at the same key width, 1.80× at worst. The number close to two only appears once you multiply the key width in as well — 1.83×.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/pagesplit/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/pagesplit/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/pagesplit/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/pagesplit/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="How much bigger does a random key make the index">
+<meta property="og:description" content="“Double” is an overstatement. At the same width it is 1.30× — and the real price is not size.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/pagesplit/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="How much bigger does a random key make the index">
+<meta name="twitter:description" content="Raising fillfactor does nothing for random insertions. The documentation says exactly why.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/pagesplit-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/pagesplit/" hreflang="ko" lang="ko">KO</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>How much bigger does a random key make the index</h1>
+  <p class="lede">People say a UUID primary key <strong>doubles</strong> the index. Work it out from the documented rules and it is <strong>1.30× at the same key width, 1.80× at worst</strong>. The number close to two — 1.83× — only appears once you <strong>multiply the key width in as well</strong>. This page is where those numbers get separated.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>Insertion order</label>
+          <div class="seg" id="segOrder" role="group" aria-label="sequential or random keys">
+            <button data-rand="0" aria-pressed="true">sequential</button>
+            <button data-rand="1">random</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sK">Key width</label>
+          <span class="v" id="vK">8<small>B</small></span>
+          <input type="range" id="sK" min="0" max="1" step="1" value="0" aria-label="bytes per key">
+        </div>
+        <div class="dial">
+          <label for="sF">fillfactor</label>
+          <span class="v" id="vF">90<small>%</small></span>
+          <input type="range" id="sF" min="10" max="100" step="10" value="90" aria-label="how full leaf pages are packed">
+        </div>
+        <div class="dial">
+          <label for="sN">Rows</label>
+          <span class="v" id="vN">10M<small> rows</small></span>
+          <input type="range" id="sN" min="0" max="4" step="1" value="2" aria-label="rows in the index">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->10M rows · 8B key (20B per entry) · 408 slots per page · fillfactor 90% — index 212.9MB<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">How full one leaf page gets</span>
+      <div class="board">
+        <div class="fills" id="fills"><!--pr--><div class="row  on"><span class="rn">sequential (ff 90)</span><span class="page"><span class="used" style="width:90.00%"></span><span class="ff" style="left:90%"></span></span><span class="rv">367</span></div><div class="row rnd"><span class="rn">random lower (just before split)</span><span class="page"><span class="band" style="left:50%;right:0"></span><span class="used" style="width:100.00%"></span><span class="ff" style="left:90%"></span></span><span class="rv">408</span></div><div class="row rnd"><span class="rn">random average (reference)</span><span class="page"><span class="band" style="left:50%;right:0"></span><span class="used" style="width:69.31%"></span><span class="ff" style="left:90%"></span></span><span class="rv">282</span></div><div class="row rnd"><span class="rn">random upper (just after split)</span><span class="page"><span class="band" style="left:50%;right:0"></span><span class="used" style="width:50.00%"></span><span class="ff" style="left:90%"></span></span><span class="rv">204</span></div><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="seqi"></i>sequential — packed to fillfactor</span>
+          <span><i class="rndi"></i>random — occupancy swings</span>
+          <span><i class="bandi"></i>the 50–100% band the split rule guarantees</span>
+          <span><i class="ffi"></i>fillfactor line</span>
+        </div>
+
+        <div class="sizes" id="sizes"><!--pr--><div class="row base"><span class="rn">bigint sequential (base)</span><span class="bar" style="width:55.6%"></span><span class="rv">212.9MB<em>×1.00</em></span></div><div class="row "><span class="rn">8B key, sequential</span><span class="bar" style="width:55.6%"></span><span class="rv">212.9MB<em>×1.00</em></span></div><div class="row rnd"><span class="rn">random average</span><span class="bar" style="width:72.3%"></span><span class="rv">277.0MB<em>×1.30</em></span></div><div class="row rnd"><span class="rn">random upper</span><span class="bar" style="width:100.0%"></span><span class="rv">383.0MB<em>×1.80</em></span></div><!--/pr--></div>
+        <table class="four" id="four"><!--pr--><tr><th>case</th><th>occupancy</th><th>per page</th><th>pages</th><th>size</th><th>vs sequential</th></tr><tr class="on"><td>sequential (ff 90)</td><td>90.0%</td><td>367</td><td>27,248</td><td>212.9MB</td><td class="good">×1.00</td></tr><tr class=""><td>random lower (just before split)</td><td>100.0%</td><td>408</td><td>24,510</td><td>191.5MB</td><td class="good">×0.90</td></tr><tr class=""><td>random average (reference)</td><td>69.3%</td><td>282</td><td>35,461</td><td>277.0MB</td><td class="bad">×1.30</td></tr><tr class=""><td>random upper (just after split)</td><td>50.0%</td><td>204</td><td>49,020</td><td>383.0MB</td><td class="bad">×1.80</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m "><span class="k">per entry</span><span class="n">20<small>B</small></span></div><div class="m "><span class="k">slots per page</span><span class="n">408</span></div><div class="m "><span class="k">pages</span><span class="n">27,248</span></div><div class="m good"><span class="k">index size</span><span class="n">212.9MB</span></div><div class="m "><span class="k">random/sequential</span><span class="n">×1.30</span></div><div class="m "><span class="k">vs bigint sequential</span><span class="n">×1.00</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>Only the right edge grows — packed to exactly fillfactor 90%.</b> 367 per page · 212.9MB<br><span class="at">the key-width effect alone is ×1.00 — nothing to do with splits</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">Previous</button>
+        <button id="btnStep">Next step</button>
+        <button id="btnReset">Reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Work the dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What it changes</th></tr>
+    <tr><td>Insertion order</td><td><strong>Sequential</strong> means every key is the new largest (a bigint sequence, UUIDv7, a time-ordered ULID). <strong>Random</strong> is UUIDv4 — landing anywhere.</td></tr>
+    <tr><td>Key width</td><td><strong>8</strong> is bigint, <strong>16</strong> is uuid. This dial grows the index <em>independently of occupancy</em> — separating the two is the whole point of this page.</td></tr>
+    <tr><td>fillfactor</td><td>How full leaf pages are packed. The default is <strong>90</strong>. <strong>Switch to random and turn this dial</strong> — nothing happens at all.</td></tr>
+    <tr><td>Rows</td><td>Rows in the index. <strong>The ratio does not depend on it</strong> — only the absolute size grows, linearly.</td></tr>
+  </table>
+
+  <p>Block 8,192 bytes, page header 24, line pointer 4, index-tuple header 8, keys aligned to 8. <strong>Every number here is deduced from documented rules</strong> — no randomness and no samples.</p>
+
+  <h2>Things to try</h2>
+
+  <div class="recipe">
+    <h4>1. bigint, sequential — the baseline</h4>
+    <div class="seq">8B key · sequential · fillfactor 90 · 10M rows
+<em>20B</em> per entry · <em>367</em> of <em>408</em> slots used per page
+<em>27,248</em> pages · index <em>212.9MB</em></div>
+    <p class="why">Every key is the new largest, so <strong>only the rightmost page grows.</strong> The documentation calls this case out specifically — <em>"leaf pages are filled to this percentage during initial index builds, and also <strong>when extending the index at the right</strong> (adding new largest key values)."</em> So occupancy is exactly the fillfactor.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Change only the key to uuid — 1.41×</h4>
+    <div class="seq">Key 8 → <em>16B</em> (still sequential)
+Per entry 20 → <em>28B</em> · slots per page 408 → <em>291</em>
+Index 212.9 → <em>299.3MB</em> (<em>×1.41</em>)</div>
+    <p class="why">Insertion order was not touched. <strong>Eight extra bytes of key alone give 1.41×.</strong> One entry goes from 20 to 28 bytes (tuple header 8 + key + line pointer 4) and that many fewer fit on a page. <strong>None of this has anything to do with splits.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Switch to random — 1.30× at the same width</h4>
+    <div class="seq">Order sequential → <em>random</em> (key still 16B)
+Occupancy 90% → <em>69.3%</em> (average) · pages 38,315 → <em>49,752</em>
+Index 299.3 → <em>388.7MB</em> (<em>×1.30</em>) · versus bigint sequential <em>×1.83</em></div>
+    <p class="why">This is the heart of the page. <strong>The share caused by splitting is 1.30×</strong>, and the commonly quoted near-double, 1.83×, is <strong>that multiplied by the 1.41× of key width</strong>. Two causes had been folded into one number. <strong>Moving UUIDv4 → UUIDv7 recovers only the 1.30×</strong> — the key stays 16 bytes wide.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Push fillfactor to 100 — sequential shrinks</h4>
+    <div class="seq">fillfactor 90 → <em>100</em> (uuid, sequential)
+Slots used 261 → <em>291</em> · index 299.3 → <em>268.5MB</em></div>
+    <p class="why">Packing the right edge completely needs fewer pages. The documentation does not recommend it — <em>"You should only consider this when you are completely sure that the table is static … A fillfactor setting of 100 otherwise risks <strong>harming</strong> performance: even a few updates or inserts will cause a sudden flood of page splits."</em> <strong>You buy space and sell split risk.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Turn fillfactor with random insertions — nothing happens</h4>
+    <div class="seq">fillfactor 100 · <em>random</em>
+Occupancy <em>still 69.3%</em> · index <em>still 388.7MB</em></div>
+    <p class="why">Drop fillfactor to 10 or raise it to 100 and <strong>the random case does not move.</strong> The documentation states its scope exactly: <em>initial builds</em> and <em>extending at the right</em>. <strong>Insertions landing mid-page never read that value.</strong> What sets occupancy there is the split rule, not the fillfactor.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. bigint, random — the same 1.30×</h4>
+    <div class="seq">Key 16 → <em>8B</em> · random · fillfactor 90
+Index 212.9 → <em>277.0MB</em> (versus bigint sequential <em>×1.30</em>)</div>
+    <p class="why">Narrow the key and <strong>the ratio splitting creates is still 1.30×</strong>. The two causes only <em>multiply</em>; neither affects the other. Which is why the fixes are separate too — <strong>narrowing the key recovers 1.41×, ordering the key recovers 1.30×.</strong> Do both and the whole 1.83× is gone.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. A hundred million rows — the ratio holds</h4>
+    <div class="seq">Rows 10M → <em>100M</em> (uuid, random)
+Index 388.7MB → <em>3.80GB</em> · ratio <em>still ×1.30</em></div>
+    <p class="why">The size grows tenfold and <strong>the ratio does not move one digit</strong>, because occupancy has nothing to do with row count. So the "how many times" story holds at any scale, and <strong>only the point where the absolute size starts to hurt depends on scale</strong> — the moment the index stops fitting in the buffer cache.</p>
+  </div>
+
+  <h2>The two rules the documentation gives</h2>
+
+  <p>Everything this lab computes comes out of the two sentences below. There are no constants of my own.</p>
+
+  <table class="keytable">
+    <tr><th>Source</th><th>Sentence</th></tr>
+    <tr><td><code>CREATE INDEX</code></td><td><em>"B-trees use a default fillfactor of 90 … leaf pages are filled to this percentage during <strong>initial index builds</strong>, and also <strong>when extending the index at the right (adding new largest key values)</strong>."</em></td></tr>
+    <tr><td><code>nbtree/README</code></td><td><em>"When we split a page, we try to equalize the number of <strong>bytes</strong>, not items, assigned to pages."</em></td></tr>
+  </table>
+
+  <p>The first gives <strong>sequential occupancy = fillfactor</strong>. And it hides an important negative: by naming <em>extending at the right</em>, it says <strong>mid-page insertions do not read that value.</strong> That is recipe 5.</p>
+
+  <p>The second gives <strong>the occupancy range for random insertions.</strong> A full page splits its bytes in half, so <strong>both halves sit at 50% right after</strong>, and each fills to 100% before splitting again.</p>
+
+  <div class="callout"><strong>Invariant — with random insertions every leaf page is between 50% and 100% full.</strong> That is deduced from the documented split rule, and it is the basis for the <em>lower and upper bounds</em> this page computes. The index size is somewhere inside them.</div>
+
+  <h2>Where 69.3% comes from — and what it is not</h2>
+
+  <p>The "average" row in the lab sits at <strong>69.3%</strong>. That number is <strong>not in any specification.</strong> It is the <strong>classic analytical result</strong> that the steady-state node occupancy of a B-tree under random insertions is <code>ln 2 ≈ 69.3%</code>.</p>
+
+  <div class="callout">So this lab <strong>displays it rather than computing it.</strong> What it computes is what the documentation implies: the <strong>lower bound (100% packed, 1.00×) and the upper bound (50% packed, 1.80×)</strong>, with 69.3% marked as a reference line between them. Without that distinction, somebody else's analysis would look like my model's output.</div>
+
+  <p>Stated honestly: <strong>the index lands between 1.00× and 1.80×, and around 1.30× is common in a long-running system.</strong> "Double" is past even the upper bound of that range.</p>
+
+  <h2>Separating the two causes</h2>
+
+  <p>"UUIDs double your index" bundles two different things together.</p>
+
+  <table class="keytable">
+    <tr><th>Cause</th><th>Share</th><th>Fix</th></tr>
+    <tr><td>The key is wide (8 → 16 bytes)</td><td><strong>×1.41</strong></td><td>Narrow it — bigint, or at least store UUIDs as <code>uuid</code> and not as text</td></tr>
+    <tr><td>The key has no order (mid-page inserts)</td><td><strong>×1.30</strong></td><td>Order it — UUIDv7, ULID, or a time prefix</td></tr>
+    <tr><td>Both</td><td><strong>×1.83</strong></td><td>This is the number that has been called "double"</td></tr>
+  </table>
+
+  <p>Separated, the fixes differ. <strong>UUIDv4 → UUIDv7 recovers only the 1.30×</strong>, since the key stays as wide. Conversely, <strong>if you were storing UUIDs as <code>text</code></strong> that is 36 bytes plus header, far worse — and switching to the <code>uuid</code> type recovers a large share on its own.</p>
+
+  <h2>The real price is not size</h2>
+
+  <p>This page only computes size. And <strong>1.30× may be the smallest item on the bill.</strong> Sequential and random insertions differ in <em>how many pages they touch</em>, and that weighs far more.</p>
+
+  <table class="keytable">
+    <tr><th>What</th><th>Sequential vs random</th></tr>
+    <tr><td>Pages touched</td><td>Sequential keeps returning to <strong>the same rightmost page</strong>. Random touches a different one per insert. Buffer-cache hit rate diverges right here</td></tr>
+    <tr><td>WAL</td><td>The first touch of a page after a checkpoint writes a <strong>full page image</strong> to WAL. Sequential amortises that over one page; random pays it again per page</td></tr>
+    <tr><td>VACUUM and fragmentation</td><td>Frequent splits break the match between logical and physical order — the documentation's phrase is <em>"fragmentation of the on-disk index structure."</em> Range scans pay for that</td></tr>
+  </table>
+
+  <div class="callout">So do not decide on the size ratio. <strong>"It is only 1.3×, we are fine" and "it is 2×, absolutely not" both rest on the wrong calculation.</strong> Size is merely the easiest item here to measure.</div>
+
+  <h2>What this model assumes</h2>
+
+  <table class="keytable">
+    <tr><th>Assumption</th><th>What breaks if it fails</th></tr>
+    <tr><td>No duplicates</td><td>With many equal keys the documentation describes a split that leaves <em>"the left half of the page mostly full, and the right half mostly empty."</em> That changes the occupancy range</td></tr>
+    <tr><td>No deletes</td><td>Mixed deletes and updates leave dead entries, pushing occupancy lower and running into <a href="/en/mvcc/">no. 1</a>'s VACUUM story</td></tr>
+    <tr><td>Suffix truncation not counted</td><td>PostgreSQL truncates key suffixes in internal pages to save space. Counting leaves only <strong>overstates internal pages</strong> — a small effect, since leaves dominate</td></tr>
+    <tr><td>Internal pages not counted</td><td>Only leaves are computed. With a fan-out in the hundreds, internal pages are under 1% of the total, so the <strong>absolute size is understated</strong> by about that much. The ratio is essentially unaffected</td></tr>
+    <tr><td>69.3% is a citation</td><td>A classic analytical result, not a specification, and workload dependent. What this lab <em>computes</em> is the lower and upper bound</td></tr>
+  </table>
+
+  <h2>In the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>Measuring the real thing</td><td>The <code>pgstattuple</code> extension's <code>pgstatindex()</code> reports actual <code>avg_leaf_density</code>. Read that instead of this page's arithmetic — near 90 means sequential, near 70 means random</td></tr>
+    <tr><td>UUIDs stored as text</td><td>The most common and the most wasteful. <code>text</code>/<code>varchar(36)</code> is 36 bytes plus header, more than double the <code>uuid</code> type's 16. <strong>Start here</strong></td></tr>
+    <tr><td>Moving to UUIDv7</td><td>What you recover is <strong>the ordering share (1.30×) only</strong>. It is still worth doing — but for pages touched, not for size. See the table above</td></tr>
+    <tr><td>Touching fillfactor</td><td>It only affects sequential-insert indexes. <strong>On a random-insert index nothing happens at all</strong> — confirm it in the lab above</td></tr>
+    <tr><td>REINDEX</td><td>Rebuilding takes the <em>initial build</em> path, so pages pack to fillfactor. It shrinks right afterwards and then <strong>drifts back into the range</strong> as random insertions resume. Temporary</td></tr>
+    <tr><td>How to measure</td><td><code>pg_relation_size('idx')</code> for size, read alongside write volume from <code>pg_stat_user_tables</code>. Do not read the ratio alone — watch <strong>whether it still fits in the buffer cache</strong>. Crossing that line is where it actually hurts</td></tr>
+  </table>
+
+  <p>If <a href="/en/mvcc/">no. 1</a> was about why deleting does not shrink anything, this page is about why inserting alone costs this much. And the answer not being "double" is this edition's conclusion — <strong>correcting an overstatement is also arithmetic.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/mvcc/"><span class="no">01</span><span><span class="t">Why your table never shrinks after DELETE</span><span class="why">Mixed deletes and updates push occupancy lower still — which is what VACUUM is for.</span></span></a></li>
+      <li><a href="/en/stampede/"><span class="no">16</span><span><span class="t">The moment the TTL ends</span><span class="why">The moment the index outgrows the buffer cache is where it actually hurts.</span></span></a></li>
+      <li><a href="/en/genericplan/"><span class="no">13</span><span><span class="t">Slow from the sixth execution</span><span class="why">The same index from the optimiser side — stale statistics split the plan.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">Index</a> · <a href="/pagesplit/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uB:'B', uMb:'MB', uGb:'GB', uRows:' rows', uMan:'M', uEok:'M', uEntries:'',
+  divMid:1000000, divBig:1000000,
+  hint:'$1 rows · $2B key ($3B per entry) · $4 slots per page · fillfactor $5% — index $6',
+  rSeq:'sequential (ff $1)', rBest:'random lower (just before split)', rAvg:'random average (reference)', rWorst:'random upper (just after split)',
+  zBase:'bigint sequential (base)', zSeq:'$1B key, sequential', zAvg:'random average', zWorst:'random upper',
+  tCase:'case', tFill:'occupancy', tEach:'per page', tPages:'pages', tSize:'size', tRatio:'vs sequential',
+  mEntry:'per entry', mCap:'slots per page', mPages:'pages',
+  mSize:'index size', mVsSeq:'random/sequential', mVsBase:'vs bigint sequential',
+  vSeq:'<b>Only the right edge grows — packed to exactly fillfactor $1%.</b> $2 per page · $3<br><span class="at">the key-width effect alone is $4 — nothing to do with splits</span>',
+  vRnd:'<b>At the same width, random is $1 — not double.</b> Worst case (just after a split) is $2.<br>Versus bigint sequential, $3 · $4 <span class="at">— that is the figure that has been called double</span>',
+  vRndSame:'<b>Same key width as the base, so only the split share is left — $1.</b> Worst case $2 · $3<br><span class="at">the ratio is independent of key width — the two causes only multiply</span>',
+  scene:[
+    'Start with bigint inserted sequentially. Every key is the new largest, so only the rightmost page grows — and the documentation names this case: leaf pages fill to the fillfactor during initial builds and when extending the index at the right. So occupancy is exactly 90%. 367 of 408 slots per page, index 212.9MB. That is the baseline.',
+    'Leave the order alone and widen the key to 16 bytes. An entry goes from 20 to 28 bytes and slots per page fall from 408 to 291. The index becomes 299.3MB — 1.41 times. Splitting played no part in that at all; it is purely the wider key.',
+    'Now switch to random. Occupancy drops from 90% to 69.3% and the index becomes 388.7MB: 1.30 times at the same key width. Against bigint sequential it is 1.83 times. That 1.83 is the commonly quoted "double", and as you can see it had two causes folded into it — key width 1.41 multiplied by splitting 1.30.',
+    'Push fillfactor to 100, back on sequential. Packing the right edge completely fits all 291 slots and the index falls to 268.5MB. The documentation does not recommend it: only consider it when you are completely sure the table is static, because otherwise even a few inserts cause a flood of page splits.',
+    'Keep fillfactor at 100 and switch to random. Look at the occupancy — still 69.3%, and the size is still 388.7MB. Drop fillfactor to 10 and the same thing. The documentation states the scope exactly: initial builds and extending at the right. Insertions landing mid-page never read that value.',
+    'Narrow the key back to 8 bytes and keep random. 277.0MB, 1.30 times bigint sequential. Even with a narrow key the ratio splitting creates is still 1.30. The two causes only multiply; neither affects the other. Which is why the fixes separate — narrowing recovers 1.41, ordering recovers 1.30.',
+    'Finally push to a hundred million rows. The size becomes 3.80GB, ten times larger, and the ratio does not move off 1.30 — occupancy has nothing to do with row count. So the "how many times" story holds at any scale, and what depends on scale is only where the absolute size starts to hurt: the moment the index stops fitting in the buffer cache.'
+  ],
+};
+</script>
+<script src="/shared/pagesplit-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "How much bigger does a random key make the index",
+  "description": "People say a UUID primary key doubles the index. Work it out from the documented rules and it is 1.30× at the same key width, 1.80× at worst. The number close to two only appears once you multiply the key width in as well — 1.83×.",
+  "url": "https://lab.vermilion19.com/en/pagesplit/",
+  "inLanguage": "en",
+  "datePublished": "2026-08-25",
+  "dateModified": "2026-08-25",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "How much bigger does a random key make the index"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>
