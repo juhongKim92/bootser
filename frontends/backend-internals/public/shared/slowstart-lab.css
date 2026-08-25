@@ -1,0 +1,119 @@
+/* ============================================================
+   26. 파일이 1바이트 커졌는데 왕복이 한 번 더 든다 — 슬로 스타트
+   ============================================================ */
+
+.lab{margin:32px 0 8px;border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);overflow:hidden}
+.lab section{border-bottom:1px solid var(--rule);padding:16px 18px}
+.lab section:last-child{border-bottom:none}
+.cap{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;display:block}
+
+/* --- 손잡이 --- */
+.dials{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end}
+.dial label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
+.dial input[type=range]{width:124px;max-width:42vw;accent-color:var(--horizon);vertical-align:middle}
+.dial .v{font-family:var(--mono);font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums;min-width:64px;display:inline-block}
+.dial .v small{font-size:11px;color:var(--ink-3)}
+.seg{display:flex;gap:0;border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+.seg button{border:none;border-right:1px solid var(--rule);border-radius:0;padding:6px 12px;font-size:11px;white-space:nowrap}
+.seg button:last-child{border-right:none}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.seg.reuse button[aria-pressed="true"]{background:var(--horizon);color:var(--paper)}
+.hint{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:8px;min-height:14px}
+.hint.warn{color:var(--blocked)}
+
+.board{border:1px solid var(--rule);border-radius:3px;background:var(--paper);padding:13px 14px 10px}
+
+/* --- 왕복 타임라인 -----------------------------------------------------
+   가로가 시간(왕복). 왕복마다 그때 보낸 세그먼트가 막대 하나다. */
+.trip{display:flex;gap:6px;align-items:flex-end;height:104px;margin-bottom:3px}
+.trip .rt{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;position:relative}
+.trip .bar{width:100%;background:var(--live);border-radius:1px 1px 0 0;min-height:2px}
+.trip .rt.hs .bar{background:repeating-linear-gradient(135deg,var(--ink-3) 0 2px,transparent 2px 5px);border:1px solid var(--rule)}
+.trip .rt.over .bar{background:var(--blocked)}
+.trip .rt .seg-n{font-family:var(--mono);font-size:9px;color:var(--ink-3);margin-bottom:2px;white-space:nowrap}
+.trip .rt.over .seg-n{color:var(--blocked)}
+.tripx{display:flex;gap:6px;margin-top:5px}
+.tripx span{flex:1;text-align:center;font-family:var(--mono);font-size:9px;color:var(--ink-3)}
+
+/* --- 크기에 따른 계단 ---------------------------------------------------
+   x 축이 응답 크기, y 축이 왕복 수. 계단이 이 페이지의 그림이다. */
+.stair{display:flex;align-items:flex-end;gap:2px;height:92px;margin-top:4px}
+.stair .col{flex:1;position:relative;height:100%;display:flex;align-items:flex-end}
+.stair .now{width:100%;background:color-mix(in srgb,var(--horizon) 30%,transparent);border-top:1.5px solid var(--horizon);min-height:1px}
+.stair .cmp{position:absolute;left:0;right:0;bottom:0;border-top:1.5px dashed var(--blocked);min-height:1px}
+.stair .col.here .now{background:color-mix(in srgb,var(--horizon) 55%,transparent)}
+.stair .col.here::after{content:'';position:absolute;left:0;right:0;bottom:-4px;height:2px;background:var(--ink)}
+.stairx{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:9px}
+.stairy{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-bottom:6px}
+
+/* --- 계단 경계 표 --- */
+.edge{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:15px}
+.edge th,.edge td{text-align:right;padding:5px 0 5px 10px;border-bottom:1px solid var(--rule);vertical-align:baseline}
+.edge th{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--ink-3);font-weight:400}
+.edge td{font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.edge th:first-child,.edge td:first-child{text-align:left;padding-left:0;color:var(--ink);white-space:nowrap}
+.edge tr.on td{background:var(--paper-3)}
+.edge tr.on td:first-child{color:var(--horizon)}
+
+/* --- 미터 --- */
+.meters{display:flex;gap:24px;flex-wrap:wrap;margin-top:15px}
+.meters .m{min-width:84px}
+.meters .k{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.meters .n{font-family:var(--mono);font-size:19px;color:var(--ink);font-variant-numeric:tabular-nums}
+.meters .n small{font-size:11px;color:var(--ink-3);margin-left:2px}
+.meters .m.bad .n{color:var(--blocked)}
+.meters .m.good .n{color:var(--live)}
+
+/* --- 판정 --- */
+.verdict{border-left:2px solid var(--rule);background:var(--paper);padding:10px 0 10px 13px;margin-top:14px;
+  font-family:var(--mono);font-size:10.5px;line-height:1.8;color:var(--ink-2)}
+.verdict.stuck{border-left-color:var(--blocked)}
+.verdict.stuck b{color:var(--blocked)}
+.verdict.ok{border-left-color:var(--live)}
+.verdict.ok b{color:var(--live)}
+.verdict b{font-weight:500;color:var(--ink)}
+.verdict .at{color:var(--ink-3)}
+
+/* --- IW 비교 표 --- */
+.cmp-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.cmp-tbl th,.cmp-tbl td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.cmp-tbl th{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.cmp-tbl td:first-child{font-size:12.5px;width:1%;white-space:nowrap;padding-right:16px}
+.cmp-tbl td.num{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
+.cmp-tbl tr.on td{background:var(--paper-3)}
+.cmp-tbl td.bad{color:var(--blocked)}
+.cmp-tbl td.good{color:var(--live)}
+.cmp-tbl td.same{color:var(--ink-3)}
+
+/* --- 조작대 --- */
+.transport{background:var(--paper-3);display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.transport .keys{display:flex;gap:6px;flex-wrap:wrap}
+.narration{flex:1;min-width:240px;font-family:var(--serif);font-size:14.5px;line-height:1.65;color:var(--ink)}
+.narration .n{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-3);display:block;margin-bottom:3px}
+
+/* --- 안내 --- */
+.recipe{border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);padding:14px 16px;margin:14px 0;max-width:68ch}
+.recipe h4{font-family:var(--sans);font-size:14px;font-weight:700;margin:0 0 4px}
+.recipe .seq{font-family:var(--mono);font-size:11px;line-height:1.9;background:var(--paper);border:1px solid var(--rule);
+  border-radius:2px;padding:9px 11px;margin:9px 0;white-space:pre-wrap;color:var(--ink-2)}
+.recipe .seq em{font-style:normal;color:var(--horizon)}
+.recipe .why{font-size:13.5px;color:var(--ink-2);margin:0}
+.keytable{width:100%;border-collapse:collapse;margin:12px 0;max-width:68ch;font-size:13.5px}
+.keytable th,.keytable td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.keytable th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.keytable td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap;width:1%;padding-right:18px;color:var(--ink)}
+
+/* 범례 */
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:11px;font-family:var(--mono);font-size:9.5px;color:var(--ink-3)}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend i{width:16px;height:9px;border-radius:1px;display:block;flex:none}
+.legend i.sent{background:var(--live)}
+.legend i.hs{background:repeating-linear-gradient(135deg,var(--ink-3) 0 2px,transparent 2px 5px);border:1px solid var(--rule)}
+.legend i.now{background:color-mix(in srgb,var(--horizon) 30%,transparent);border-top:1.5px solid var(--horizon)}
+.legend i.cmp{border-top:1.5px dashed var(--blocked);height:1px}
+
+@media (max-width:600px){
+  .trip{height:82px;gap:3px}
+  .trip .rt .seg-n{font-size:8px}
+  .stair{height:74px}
+}

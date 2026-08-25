@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>파일이 1바이트 커졌는데 왕복이 한 번 더 든다 — 슬로 스타트</title>
+<meta name="description" content="14,600바이트 응답은 한 왕복에 갑니다. 14,601바이트는 두 왕복이에요. 전송 시간은 크기에 비례하지 않고 왕복 수의 계단입니다. 그리고 이 식에는 대역폭이 아예 없습니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/slowstart/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/slowstart/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/slowstart/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/slowstart/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="파일이 1바이트 커졌는데 왕복이 한 번 더 든다">
+<meta property="og:description" content="전송 시간은 크기에 비례하지 않습니다. 왕복 수의 계단이에요.">
+<meta property="og:url" content="https://lab.vermilion19.com/slowstart/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="파일이 1바이트 커졌는데 왕복이 한 번 더 든다">
+<meta name="twitter:description" content="100KB 응답이 커널 설정 하나로 800ms 에서 500ms 가 됩니다. 코드는 한 줄도 안 고칩니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/slowstart-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/slowstart/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>파일이 1바이트 커졌는데 왕복이 한 번 더 든다</h1>
+  <p class="lede">14,600바이트짜리 응답은 한 왕복에 갑니다. <strong>14,601바이트는 두 왕복이에요.</strong> 한 바이트가 왕복 하나 값입니다. TCP 는 처음부터 회선을 다 쓰지 않고 조금씩 늘려가거든요 — 그래서 전송 시간은 크기에 비례하지 않고 <strong>왕복 수의 계단</strong>입니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sSize">응답 크기</label>
+          <span class="v" id="vSize">14,600<small>B</small></span>
+          <input type="range" id="sSize" min="0" max="9" step="1" value="2" aria-label="한 번에 내려보낼 응답의 크기">
+        </div>
+        <div class="dial">
+          <label for="sIw">초기 혼잡 창</label>
+          <span class="v" id="vIw">10<small>세그먼트</small></span>
+          <input type="range" id="sIw" min="0" max="2" step="1" value="1" aria-label="첫 왕복에 보낼 수 있는 세그먼트 수">
+        </div>
+        <div class="dial">
+          <label for="sRtt">왕복 시간</label>
+          <span class="v" id="vRtt">100<small>ms</small></span>
+          <input type="range" id="sRtt" min="10" max="300" step="10" value="100" aria-label="한 왕복에 걸리는 시간">
+        </div>
+        <div class="dial">
+          <label>커넥션</label>
+          <div class="seg reuse" id="segReuse" role="group" aria-label="새 커넥션인가 재사용인가">
+            <button data-reuse="0" aria-pressed="true">새로 연다</button>
+            <button data-reuse="1">재사용</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>지연 ACK</label>
+          <div class="seg" id="segAck" role="group" aria-label="수신자가 ACK 를 묶어 보내는가">
+            <button data-ack="1" aria-pressed="true">켬</button>
+            <button data-ack="0">끔</button>
+          </div>
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->14,600B (10세그먼트) · 초기 창 10 — 1왕복, 총 200ms<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">왕복마다 실제로 나간 세그먼트</span>
+      <div class="board">
+        <div class="trip" id="trip"><!--pr--><div class="rt hs"><span class="seg-n">핸드셰이크</span><span class="bar" style="height:14%"></span></div><div class="rt"><span class="seg-n">10</span><span class="bar" style="height:100.0%"></span></div><!--/pr--></div>
+        <div class="tripx" id="tripX"><!--pr--><span>악수</span><span>1왕복</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="sent"></i>그 왕복에 보낸 세그먼트</span>
+          <span><i class="hs"></i>TCP 핸드셰이크</span>
+          <span><i class="now"></i>지금 설정의 왕복 수</span>
+          <span><i class="cmp"></i>비교 대상 IW</span>
+        </div>
+
+        <div class="stairy" id="stairY"><!--pr-->세로 = 왕복 수 (최대 10) · 채운 것이 초기 창 10, 점선이 3<!--/pr--></div>
+        <div class="stair" id="stair"><!--pr--><div class="col here" title="12,800B — 지금 설정 1왕복 · 비교 3왕복"><div class="now" style="height:10.0%"></div><div class="cmp" style="height:30.0%"></div></div><div class="col" title="25,600B — 지금 설정 2왕복 · 비교 4왕복"><div class="now" style="height:20.0%"></div><div class="cmp" style="height:40.0%"></div></div><div class="col" title="38,400B — 지금 설정 3왕복 · 비교 5왕복"><div class="now" style="height:30.0%"></div><div class="cmp" style="height:50.0%"></div></div><div class="col" title="51,200B — 지금 설정 3왕복 · 비교 6왕복"><div class="now" style="height:30.0%"></div><div class="cmp" style="height:60.0%"></div></div><div class="col" title="64,000B — 지금 설정 3왕복 · 비교 6왕복"><div class="now" style="height:30.0%"></div><div class="cmp" style="height:60.0%"></div></div><div class="col" title="76,800B — 지금 설정 4왕복 · 비교 6왕복"><div class="now" style="height:40.0%"></div><div class="cmp" style="height:60.0%"></div></div><div class="col" title="89,600B — 지금 설정 4왕복 · 비교 7왕복"><div class="now" style="height:40.0%"></div><div class="cmp" style="height:70.0%"></div></div><div class="col" title="102,400B — 지금 설정 4왕복 · 비교 7왕복"><div class="now" style="height:40.0%"></div><div class="cmp" style="height:70.0%"></div></div><div class="col" title="115,200B — 지금 설정 4왕복 · 비교 7왕복"><div class="now" style="height:40.0%"></div><div class="cmp" style="height:70.0%"></div></div><div class="col" title="128,000B — 지금 설정 5왕복 · 비교 8왕복"><div class="now" style="height:50.0%"></div><div class="cmp" style="height:80.0%"></div></div><div class="col" title="140,800B — 지금 설정 5왕복 · 비교 8왕복"><div class="now" style="height:50.0%"></div><div class="cmp" style="height:80.0%"></div></div><div class="col" title="153,600B — 지금 설정 5왕복 · 비교 8왕복"><div class="now" style="height:50.0%"></div><div class="cmp" style="height:80.0%"></div></div><div class="col" title="166,400B — 지금 설정 5왕복 · 비교 8왕복"><div class="now" style="height:50.0%"></div><div class="cmp" style="height:80.0%"></div></div><div class="col" title="179,200B — 지금 설정 5왕복 · 비교 8왕복"><div class="now" style="height:50.0%"></div><div class="cmp" style="height:80.0%"></div></div><div class="col" title="192,000B — 지금 설정 6왕복 · 비교 9왕복"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:90.0%"></div></div><div class="col" title="204,800B — 지금 설정 6왕복 · 비교 9왕복"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:90.0%"></div></div><div class="col" title="217,600B — 지금 설정 6왕복 · 비교 9왕복"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:90.0%"></div></div><div class="col" title="230,400B — 지금 설정 6왕복 · 비교 9왕복"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:90.0%"></div></div><div class="col" title="243,200B — 지금 설정 6왕복 · 비교 9왕복"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:90.0%"></div></div><div class="col" title="256,000B — 지금 설정 6왕복 · 비교 9왕복"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:90.0%"></div></div><div class="col" title="268,800B — 지금 설정 6왕복 · 비교 9왕복"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:90.0%"></div></div><div class="col" title="281,600B — 지금 설정 6왕복 · 비교 10왕복"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:100.0%"></div></div><div class="col" title="294,400B — 지금 설정 6왕복 · 비교 10왕복"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:100.0%"></div></div><div class="col" title="307,200B — 지금 설정 7왕복 · 비교 10왕복"><div class="now" style="height:70.0%"></div><div class="cmp" style="height:100.0%"></div></div><!--/pr--></div>
+        <div class="stairx" id="stairX"><!--pr--><span>0B</span><span>150.0KB</span><span>300.0KB</span><!--/pr--></div>
+
+        <table class="edge" id="edge"><!--pr--><tr><th>왕복</th><th>여기까지 보낼 수 있다</th><th>총 시간</th></tr><tr class="on"><td>1왕복</td><td>14,600B</td><td>200ms</td></tr><tr class=""><td>2왕복</td><td>36,500B</td><td>300ms</td></tr><tr class=""><td>3왕복</td><td>68,620B</td><td>400ms</td></tr><tr class=""><td>4왕복</td><td>116,800B</td><td>500ms</td></tr><tr class=""><td>5왕복</td><td>188,340B</td><td>600ms</td></tr><tr class=""><td>6왕복</td><td>294,920B</td><td>700ms</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">왕복 수</span><span class="n">1<small>회</small></span></div><div class="m "><span class="k">총 시간</span><span class="n">200ms</span></div><div class="m "><span class="k">첫 왕복에 보낼 수 있다</span><span class="n">14,600<small>B</small></span></div><div class="m "><span class="k">이 왕복 수의 상한</span><span class="n">14,600<small>B</small></span></div><div class="m "><span class="k">다음 계단까지</span><span class="n">1<small>B</small></span></div><div class="m "><span class="k">재사용했다면</span><span class="n">100ms</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>첫 왕복에 다 들어갔다.</b> 여기까지는 크기를 줄여도 시간이 안 줄어든다<br><span class="at">14,600바이트까지 같은 왕복 — 1바이트만 더 커지면 왕복이 하나 늘어난다</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">같은 응답을 초기 창만 바꿔 보내면</span>
+      <table class="cmp-tbl" id="cmpTbl"><!--pr--><tr><th>초기 창</th><th>첫 왕복</th><th>왕복 수</th><th>총 시간</th></tr><tr class=""><td>3세그먼트</td><td class="num">4,380B</td><td class="num bad">3왕복</td><td class="num bad">400ms</td></tr><tr class="on"><td>10세그먼트</td><td class="num">14,600B</td><td class="num good">1왕복</td><td class="num good">200ms</td></tr><tr class=""><td>30세그먼트</td><td class="num">43,800B</td><td class="num good">1왕복</td><td class="num good">200ms</td></tr><!--/pr--></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>응답 크기</td><td>한 번에 내려보낼 바이트. <strong>14,600 과 14,601 을 번갈아 보세요</strong> — 이 페이지 전체가 그 한 바이트 이야기입니다.</td></tr>
+    <tr><td>초기 혼잡 창</td><td>첫 왕복에 보낼 수 있는 세그먼트 수. <strong>3</strong> 은 RFC 3390 시절, <strong>10</strong> 은 RFC 6928 이 정한 현재 표준, <strong>30</strong> 은 일부 CDN 이 손으로 올려 쓰는 값입니다.</td></tr>
+    <tr><td>왕복 시간</td><td>한 왕복에 걸리는 시간. 왕복 <em>수</em>는 이 값과 무관합니다 — 계단의 높이만 바뀌고 계단이 생기는 자리는 그대로예요.</td></tr>
+    <tr><td>커넥션</td><td><strong>새로 연다</strong>면 핸드셰이크 한 왕복이 앞에 붙고 창이 초기값에서 시작합니다. <strong>재사용</strong>이면 창이 이미 커져 있어서 계단이 사라집니다.</td></tr>
+    <tr><td>지연 ACK</td><td>수신자가 세그먼트 두 개당 ACK 하나를 보내는가. 켜면 창이 왕복마다 <strong>1.5배</strong>, 끄면 <strong>2배</strong>로 큽니다. 아끼는 대신 느려지는 거래예요.</td></tr>
+  </table>
+
+  <p>세그먼트 하나는 1,460바이트(MSS)로 뒀습니다. 왕복 수는 <strong>크기와 초기 창만의 함수</strong>라서 닫힌 식으로 계산됩니다 — 난수도, 표본도 없습니다.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 14,600바이트 — 한 왕복에 다 간다</h4>
+    <div class="seq">응답 크기 14,600B · 초기 창 10세그먼트 · RTT 100ms
+왕복 <em>1회</em> · 총 <em>200ms</em> (핸드셰이크 100 + 전송 100)
+왕복별 세그먼트 <em>10</em></div>
+    <p class="why">10세그먼트 × 1,460바이트 = <strong>정확히 14,600바이트</strong>입니다. 초기 창에 딱 맞아떨어져요. 여기까지는 크기를 아무리 줄여도 시간이 안 줄어듭니다 — <strong>1,000바이트 응답도 200ms 입니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 한 바이트를 더한다 — 왕복이 하나 늘어난다</h4>
+    <div class="seq">응답 크기 14,600 → <em>14,601B</em>
+왕복 1 → <em>2회</em> · 총 200 → <em>300ms</em>
+왕복별 세그먼트 <em>10 / 1</em></div>
+    <p class="why">두 번째 왕복은 <strong>세그먼트 하나를 보내려고 씁니다.</strong> 100ms 를 통째로 쓰고 1,460바이트 중 1바이트를 나릅니다. 전송 시간이 크기에 비례한다는 감각이 여기서 깨져요 — <strong>계단입니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 100KB 를 옛날 설정으로 — 7왕복</h4>
+    <div class="seq">응답 크기 100,000B (69세그먼트) · 초기 창 <em>3세그먼트</em>
+왕복 <em>7회</em> · 총 <em>800ms</em>
+왕복별 세그먼트 <em>3 / 4 / 6 / 9 / 13 / 19 / 15</em></div>
+    <p class="why">RFC 3390 시절의 초기 창입니다. 창이 <strong>1.5배씩</strong> 커지니 3에서 시작하면 쓸 만해지기까지 다섯 왕복이 걸려요. 첫 세 왕복에 나른 것이 <strong>13세그먼트, 전체의 19%</strong> 입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. 초기 창만 10으로 — 코드는 한 줄도 안 고친다</h4>
+    <div class="seq">초기 창 3 → <em>10세그먼트</em> (크기·RTT 그대로)
+왕복 7 → <em>4회</em> · 총 800 → <em>500ms</em>
+왕복별 세그먼트 <em>10 / 15 / 22 / 22</em></div>
+    <p class="why">애플리케이션도, 응답 크기도, 회선도 그대로입니다. <strong>커널 설정 하나로 300ms.</strong> 이게 RFC 6928 이 표준을 바꾼 이유이고, 구글이 실제로 측정해서 낸 근거이기도 합니다(아래에 인용해뒀습니다).</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 지연 ACK 를 끈다 — 창이 2배씩 큰다</h4>
+    <div class="seq">지연 ACK 켬 → <em>끔</em> (100KB · 초기 창 10)
+왕복 4 → <em>3회</em> · 총 500 → <em>400ms</em>
+왕복별 세그먼트 10 / 15 / 22 / 22 → <em>10 / 20 / 39</em></div>
+    <p class="why">지연 ACK 는 ACK 패킷 수를 절반으로 줄이는 최적화인데, <strong>창이 자라는 속도도 절반으로 줄입니다.</strong> ACK 하나가 창을 1세그먼트 키우니까요. 아낀 것은 ACK 트래픽이고 지불한 것은 <em>초기 전송 속도</em>입니다. 대개는 좋은 거래지만, 첫 응답이 중요한 자리에서는 아닙니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. 커넥션을 재사용한다 — 계단이 통째로 사라진다</h4>
+    <div class="seq">커넥션 새로 연다 → <em>재사용</em> (100KB · 초기 창 10)
+총 500 → <em>100ms</em> (핸드셰이크 없음 · 창이 이미 크다)</div>
+    <p class="why">핸드셰이크 한 왕복이 사라지고, 창이 이미 커져 있어서 슬로 스타트도 없습니다. <strong>keep-alive 와 커넥션 풀이 하는 일이 이겁니다</strong> — 대역폭을 아끼는 게 아니라 <em>계단을 건너뛰는</em> 거예요. <a href="/connpool/">8번</a>이 풀 크기를 다뤘다면 이건 풀이 있어야 하는 이유입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. 1MB 를 보낸다 — 작은 응답일수록 초기 창이 더 중요하다</h4>
+    <div class="seq">응답 크기 1,000,000B (685세그먼트) · 초기 창 10
+왕복 <em>9회</em> · 총 <em>1.00초</em> · 초기 창 3이면 <em>13회</em>
+100KB 에서는 4 vs 7왕복 (<em>1.75배</em>) · 1MB 에서는 9 vs 13 (<em>1.44배</em>)</div>
+    <p class="why">창이 지수로 커지니 큰 파일에서는 초기값 차이가 <strong>상대적으로 묻힙니다.</strong> 반대로 <strong>API 응답처럼 작은 것일수록 초기 창이 전부</strong>예요. 대부분의 백엔드 응답이 이 구간에 있습니다.</p>
+  </div>
+
+  <h2>왜 계단인가</h2>
+
+  <p>TCP 는 회선이 얼마나 굵은지 모른 채 시작합니다. 그래서 <strong>초기 혼잡 창(IW)만큼 보내고 멈춰서 ACK 를 기다립니다.</strong> ACK 가 오면 그만큼 더 보낼 수 있다는 뜻이니 창을 키우고, 다시 보냅니다.</p>
+
+  <p>창이 얼마나 커지는가가 이 페이지의 산수입니다. 슬로 스타트에서 <strong>ACK 하나가 창을 1세그먼트 키웁니다.</strong> 그런데 지연 ACK 가 켜져 있으면 수신자가 세그먼트 두 개당 ACK 를 하나만 보내요. 그래서 한 왕복에 창이 <code>1.5배</code>가 됩니다.</p>
+
+  <div class="callout"><code>창 → 창 + 창/2</code><br>10 → 15 → 22 → 33 → 49 → 73 … 지연 ACK 를 끄면 <code>창 → 창 × 2</code> 라 10 → 20 → 40 이 됩니다.</div>
+
+  <p>그러니 <strong>앞의 <code>r</code> 왕복에 보낼 수 있는 총량이 정해져 있고</strong>, 응답이 그 안에 들어가면 <code>r</code> 왕복, 한 바이트라도 넘으면 <code>r+1</code> 왕복입니다. 초기 창 10에서 그 경계는 이렇습니다.</p>
+
+  <table class="keytable">
+    <tr><th>왕복</th><th>여기까지 보낼 수 있다 (초기 창 10)</th></tr>
+    <tr><td>1</td><td><strong>14,600바이트</strong> — 여기가 첫 계단입니다</td></tr>
+    <tr><td>2</td><td>36,500바이트</td></tr>
+    <tr><td>3</td><td>68,620바이트</td></tr>
+    <tr><td>4</td><td>116,800바이트</td></tr>
+    <tr><td>5</td><td>188,340바이트</td></tr>
+    <tr><td>6</td><td>294,920바이트</td></tr>
+  </table>
+
+  <h2>RFC 가 검산할 표를 같이 준다</h2>
+
+  <p>이 모델을 짜기 전에 확인해야 할 게 있었습니다. <strong>창이 왕복마다 1.5배인가 2배인가.</strong> 처음엔 2배로 잡았어요 — 슬로 스타트를 설명할 때 흔히 그렇게 말하니까요.</p>
+
+  <p>그런데 <strong>RFC 6928 이 왕복 수 표를 직접 줍니다.</strong> 초기 창 10과 3을 비교한 표예요.</p>
+
+  <table class="keytable">
+    <tr><th>보낼 세그먼트</th><th>초기 창 10</th><th>초기 창 3</th></tr>
+    <tr><td>10</td><td>1왕복</td><td>3왕복</td></tr>
+    <tr><td>21</td><td>2왕복</td><td>4왕복</td></tr>
+    <tr><td>78</td><td>4왕복</td><td>7왕복</td></tr>
+  </table>
+
+  <div class="callout"><strong>1.5배로 계산하면 여섯 칸이 전부 맞습니다.</strong> 2배로 두면 21세그먼트·초기 창 3이 3왕복(RFC 는 4), 78세그먼트·초기 창 3이 5왕복(RFC 는 7)으로 <strong>두 칸이 틀립니다.</strong> 명세가 알고리즘을 주고, 같은 문서가 검산할 점을 줬습니다.</div>
+
+  <p>이 표는 실험대에서 그대로 재현됩니다 — 크기를 30,660바이트(21세그먼트)로, 초기 창을 3으로 두면 4왕복이 나옵니다. <strong>모델이 현실과 맞는지를 모델을 짜기 전에 확인할 수 있었던 건 이 표 덕분입니다.</strong></p>
+
+  <p>RFC 6928 은 초기 창을 이렇게 정의합니다 — <code>min(10 × MSS, max(2 × MSS, 14600))</code>. 상한이 <strong>바이트</strong>라서 재미있는 구석이 있어요. MSS 가 8,960인 점보 프레임 환경에서는 이 식이 <strong>17,920바이트, 즉 세그먼트 두 개</strong>를 내놓습니다. 세그먼트를 크게 만들었더니 첫 왕복에 보낼 수 있는 <em>개수</em>가 10에서 2로 줄어드는 겁니다.</p>
+
+  <h2>대역폭은 이 식에 없다</h2>
+
+  <p>왕복 수를 정하는 것은 <strong>응답 크기와 초기 창, 그 둘뿐</strong>입니다. 회선 속도는 식 어디에도 없어요. 1Gbps 로 올려도 14,601바이트는 여전히 두 왕복입니다.</p>
+
+  <div class="callout"><a href="/throughput/">19번</a>이 <em>정상 상태</em>에서 같은 결론에 도착했습니다 — 대역폭을 10배로 올려도 처리량이 1.0배. 이 페이지는 <em>시작할 때</em>가 왜 그런지입니다. 19번이 "슬로 스타트 구간은 다루지 않는다" 고 적어둔 자리예요.</div>
+
+  <p>그래서 이 문제의 처방도 대역폭 쪽에 없습니다. <strong>왕복을 줄이거나(초기 창·커넥션 재사용), 왕복 하나를 싸게 만들거나(RTT — CDN 이 하는 일), 애초에 계단을 안 넘는 크기로 만드는 것</strong>뿐이에요.</p>
+
+  <h2>구글이 실제로 잰 값</h2>
+
+  <p>RFC 6928 에는 표준을 바꾼 근거가 실측으로 들어 있습니다. 초기 창을 3에서 10으로 올렸을 때 —</p>
+
+  <table class="keytable">
+    <tr><th>어디서</th><th>평균 지연 감소</th></tr>
+    <tr><td>평균적인 데이터센터</td><td><strong>11.7%</strong> (68ms)</td></tr>
+    <tr><td>대역폭이 낮은 데이터센터</td><td><strong>8.7%</strong> (72ms)</td></tr>
+    <tr><td>RTT 와 BDP 가 큰 경로</td><td>20% 이상</td></tr>
+    <tr><td>RTT 가 낮은 경로</td><td>약 5%</td></tr>
+    <tr><td>대가 — 재전송률</td><td>1.98% → 2.29% · 3.54% → 4.21%</td></tr>
+  </table>
+
+  <div class="callout">위 숫자는 <strong>구글의 실측이지 이 실험대의 출력이 아닙니다.</strong> 실험대가 계산하는 것은 왕복 수와 그 왕복에 걸리는 시간뿐입니다.</div>
+
+  <p>재전송률이 오른 것도 같이 보세요. <strong>공짜가 아닙니다</strong> — 첫 왕복에 더 밀어 넣으니 좁은 경로에서는 더 흘립니다. 그래도 바꾼 이유는 지연 이득이 그보다 컸기 때문이고, 그 판단의 근거가 저 표입니다.</p>
+
+  <h2>이 모델이 가정하는 것</h2>
+
+  <table class="keytable">
+    <tr><th>가정</th><th>깨지면 어떻게 되나</th></tr>
+    <tr><td>손실이 없다</td><td>패킷을 하나라도 잃으면 슬로 스타트를 빠져나와 혼잡 회피로 갑니다. 창이 지수가 아니라 선형으로 커져 <strong>왕복이 훨씬 많아집니다</strong> — <a href="/throughput/">19번</a>의 제곱근 법칙이 그 구간입니다</td></tr>
+    <tr><td>수신 창이 안 막는다</td><td>상대의 수신 버퍼가 작으면 혼잡 창이 아무리 커도 그만큼 못 보냅니다. <strong>둘 중 작은 쪽이 이깁니다</strong> — 19번의 BDP 자리예요</td></tr>
+    <tr><td>보낼 것이 이미 있다</td><td>애플리케이션이 첫 왕복에 보낼 바이트를 <strong>이미 들고 있다</strong>고 봤습니다. 서버가 그때 아직 DB 를 기다리고 있으면 창이 남아도 못 보냅니다</td></tr>
+    <tr><td>재사용은 창이 크다</td><td>"재사용" 은 이전 전송으로 창이 충분히 커져 있다고 본 것입니다. 유휴 시간이 길면 커널이 창을 도로 줄이므로(<code>slow start after idle</code>) 실제로는 계단이 일부 돌아옵니다</td></tr>
+    <tr><td>TLS 는 안 셌다</td><td>핸드셰이크를 TCP 한 왕복으로만 뒀습니다. TLS 1.3 이면 한 왕복, 1.2 면 두 왕복이 더 붙습니다 — <strong>계단 앞에 계단이 하나 더 있는 셈</strong>입니다</td></tr>
+  </table>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>지금 값 보기</td><td>리눅스에서 <code>ip route show</code> 에 <code>initcwnd</code> 가 안 보이면 기본값(10)입니다. 바꾸려면 라우트 단위로 <code>ip route change … initcwnd 30 initrwnd 30</code> 입니다 — <strong>커널 전역 설정이 아니라 경로별</strong>이라는 게 자주 틀리는 곳이에요</td></tr>
+    <tr><td>첫 응답 크기</td><td><strong>14,600바이트가 마법의 숫자</strong>입니다. 첫 화면에 필요한 것만 이 안에 넣으면 한 왕복입니다. 압축이 여기서 값을 두 배로 합니다 — 바이트를 줄이는 게 아니라 <em>계단을 안 넘게</em> 하는 거예요</td></tr>
+    <tr><td>커넥션 재사용</td><td>가장 큰 이득입니다. HTTP 클라이언트의 keep-alive 가 실제로 살아 있는지, 풀이 매 요청마다 새로 열고 있지는 않은지 보세요. <a href="/connpool/">8번</a>의 풀이 여기서 값을 합니다</td></tr>
+    <tr><td>유휴 후 리셋</td><td>리눅스는 유휴 뒤 창을 되돌립니다. <code>net.ipv4.tcp_slow_start_after_idle=0</code> 으로 끌 수 있어요. <strong>커넥션은 살아 있는데 창은 초기값</strong>인 상태가 흔합니다</td></tr>
+    <tr><td>프록시 뒤</td><td>초기 창은 <strong>홉마다 따로</strong>입니다. 프록시가 TLS 를 종단하면 커넥션이 둘로 쪼개지고 각자 슬로 스타트를 합니다 — <a href="/tcpclose/">21번</a>에서 순서 보장이 홉 단위였던 것과 같은 구조예요</td></tr>
+    <tr><td>측정</td><td>대역폭이 아니라 <strong>왕복 수</strong>를 세세요. <code>tcpdump</code> 로 첫 응답의 세그먼트가 몇 덩이로 나뉘어 나가는지 보면 바로 보입니다. 응답 시간 그래프에 <strong>계단이 보이면 이 문제</strong>입니다</td></tr>
+    <tr><td>QUIC 도 같다</td><td>HTTP/3 도 슬로 스타트를 합니다. 고치는 것은 핸드셰이크 왕복(0-RTT · 1-RTT)이지 창이 자라는 방식이 아니에요</td></tr>
+  </table>
+
+  <p><a href="/throughput/">19번</a>이 <em>정상 상태에서 왜 회선을 다 못 쓰는가</em>였다면, 이 페이지는 <em>시작할 때는 아예 다 쓸 생각이 없다</em>는 이야기입니다. 그리고 백엔드 응답은 대부분 <strong>정상 상태에 도달하기 전에 끝납니다.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/throughput/"><span class="no">19</span><span><span class="t">대역폭은 남는데 처리량이 안 나온다</span><span class="why">정상 상태로 넘어가면 이번엔 손실률이 처리량을 정합니다 — 거기도 대역폭은 식에 없습니다.</span></span></a></li>
+      <li><a href="/connpool/"><span class="no">08</span><span><span class="t">17밀리초 쿼리가 커넥션 풀을 말린다</span><span class="why">계단을 건너뛰려면 커넥션이 살아 있어야 합니다. 그 풀을 얼마나 잡아야 하는가.</span></span></a></li>
+      <li><a href="/fanout/"><span class="no">24</span><span><span class="t">서버는 안 느려졌는데 사용자는 느려졌다</span><span class="why">왕복 하나가 계단이라면, 그 호출이 100개로 늘어나면 어떻게 되는가.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/slowstart/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uMs:'ms', uSec:'초', uB:'B', uKb:'KB', uMb:'MB', uSeg:'세그먼트', uTimes:'회',
+  tHand:'핸드셰이크', tHandShort:'악수', tRound:'$1왕복',
+  hint:'$1 ($2세그먼트) · 초기 창 $3 — $4왕복, 총 $5',
+  stY:'세로 = 왕복 수 (최대 $1) · 채운 것이 초기 창 $2, 점선이 $3',
+  stTip:'$1 — 지금 설정 $2왕복 · 비교 $3왕복',
+  eRound:'왕복', eUpto:'여기까지 보낼 수 있다', eTime:'총 시간',
+  mRounds:'왕복 수', mTime:'총 시간', mFirst:'첫 왕복에 보낼 수 있다',
+  mUpto:'이 왕복 수의 상한', mToNext:'다음 계단까지', mSaved:'재사용했다면',
+  cIw:'초기 창', cIwVal:'$1세그먼트', cFirst:'첫 왕복', cRounds:'왕복 수', cTime:'총 시간',
+  vOne:'<b>첫 왕복에 다 들어갔다.</b> 여기까지는 크기를 줄여도 시간이 안 줄어든다<br><span class="at">$1바이트까지 같은 왕복 — $2바이트만 더 커지면 왕복이 하나 늘어난다</span>',
+  vSteps:'<b>$1왕복, 총 $2.</b> 크기에 비례하지 않는다 — 계단이다.<br>$3바이트만 줄이면 왕복이 하나 준다 <span class="at">· $4바이트만 더 커지면 하나 늘어난다</span>',
+  vReuse:'<b>계단이 사라졌다 — $1.</b> 새로 열었다면 $2 ($3왕복) 였다.<br><span class="at">핸드셰이크도 없고 창도 이미 크다 — keep-alive 가 사는 것이 이것이다</span>',
+  scene:[
+    '응답이 정확히 14,600바이트입니다. 초기 창 10세그먼트 × 1,460바이트와 딱 맞아떨어져요. 왕복 하나에 다 나가고, 핸드셰이크까지 200ms 입니다. 여기까지는 크기를 아무리 줄여도 시간이 안 줄어듭니다 — 1,000바이트짜리 응답도 똑같이 200ms 예요.',
+    '한 바이트를 더했습니다. 14,601바이트요. 왕복이 하나 늘어서 300ms 가 됐습니다. 두 번째 왕복이 하는 일을 보세요 — 세그먼트 하나를 나릅니다. 100ms 를 통째로 쓰고 1,460바이트 중 1바이트를요. 전송 시간이 크기에 비례한다는 감각이 여기서 깨집니다.',
+    '이번엔 100,000바이트, 69세그먼트를 보냅니다. 초기 창을 옛날 값인 3으로 뒀어요. 7왕복, 800ms 입니다. 왕복별 세그먼트가 3, 4, 6, 9, 13, 19, 15 로 자랍니다. 창이 1.5배씩 커지니 3에서 시작하면 쓸 만해지기까지 다섯 왕복이 걸려요. 첫 세 왕복에 나른 것이 전체의 19% 뿐입니다.',
+    '초기 창만 10으로 올렸습니다. 응답도 회선도 코드도 그대로예요. 7왕복이 4왕복으로, 800ms 가 500ms 가 됩니다. 커널 설정 하나로 300ms 입니다. 이게 RFC 6928 이 표준을 바꾼 이유이고, 구글이 실제로 재서 낸 근거입니다.',
+    '지연 ACK 를 껐습니다. 수신자가 세그먼트마다 ACK 를 보내니 창이 왕복마다 두 배로 커져요 — 10, 20, 39. 4왕복이 3왕복이 됩니다. 지연 ACK 는 ACK 트래픽을 절반으로 줄이는 최적화인데 창이 자라는 속도도 절반으로 줄입니다. 아낀 것과 지불한 것이 다른 항목이에요.',
+    '커넥션을 재사용합니다. 핸드셰이크 한 왕복이 사라지고, 창이 이미 커져 있어서 슬로 스타트도 없습니다. 500ms 가 100ms 가 됐어요. keep-alive 와 커넥션 풀이 하는 일이 이겁니다 — 대역폭을 아끼는 게 아니라 계단을 통째로 건너뛰는 겁니다.',
+    '마지막으로 1MB, 685세그먼트를 보냅니다. 초기 창 10에서 9왕복이고, 3이면 13왕복이에요. 비율을 보세요 — 100KB 에서는 4 대 7로 1.75배였는데 1MB 에서는 9 대 13으로 1.44배입니다. 창이 지수로 커지니 큰 파일에서는 초기값 차이가 묻혀요. 반대로 말하면 API 응답처럼 작은 것일수록 초기 창이 전부입니다.'
+  ],
+};
+</script>
+<script src="/shared/slowstart-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "파일이 1바이트 커졌는데 왕복이 한 번 더 든다",
+  "description": "14,600바이트 응답은 한 왕복에 갑니다. 14,601바이트는 두 왕복이에요. 전송 시간은 크기에 비례하지 않고 왕복 수의 계단입니다. 그리고 이 식에는 대역폭이 아예 없습니다.",
+  "url": "https://lab.vermilion19.com/slowstart/",
+  "inLanguage": "ko",
+  "datePublished": "2026-08-25",
+  "dateModified": "2026-08-25",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "파일이 1바이트 커졌는데 왕복이 한 번 더 든다"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

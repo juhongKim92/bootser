@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>One byte bigger and it costs another round trip — slow start</title>
+<meta name="description" content="A 14,600-byte response goes in one round trip. 14,601 bytes takes two. Transfer time does not scale with size — it is a staircase of round trips. And bandwidth does not appear in the formula at all.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/slowstart/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/slowstart/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/slowstart/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/slowstart/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="One byte bigger and it costs another round trip">
+<meta property="og:description" content="Transfer time does not scale with size. It is a staircase of round trips.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/slowstart/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="One byte bigger and it costs another round trip">
+<meta name="twitter:description" content="A 100KB response goes from 800ms to 500ms with one kernel setting. Not a line of application code changes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/slowstart-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/slowstart/" hreflang="ko" lang="ko">KO</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>One byte bigger and it costs another round trip</h1>
+  <p class="lede">A 14,600-byte response goes out in one round trip. <strong>14,601 bytes takes two.</strong> One byte is worth an entire round trip. TCP does not use the whole line from the start — it feels its way up. So transfer time does not scale with size; it is a <strong>staircase of round trips</strong>.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sSize">Response size</label>
+          <span class="v" id="vSize">14,600<small>B</small></span>
+          <input type="range" id="sSize" min="0" max="9" step="1" value="2" aria-label="size of the response sent in one go">
+        </div>
+        <div class="dial">
+          <label for="sIw">Initial window</label>
+          <span class="v" id="vIw">10<small> seg</small></span>
+          <input type="range" id="sIw" min="0" max="2" step="1" value="1" aria-label="segments that may be sent in the first round trip">
+        </div>
+        <div class="dial">
+          <label for="sRtt">Round-trip time</label>
+          <span class="v" id="vRtt">100<small>ms</small></span>
+          <input type="range" id="sRtt" min="10" max="300" step="10" value="100" aria-label="time for one round trip">
+        </div>
+        <div class="dial">
+          <label>Connection</label>
+          <div class="seg reuse" id="segReuse" role="group" aria-label="new connection or reused">
+            <button data-reuse="0" aria-pressed="true">new</button>
+            <button data-reuse="1">reused</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>Delayed ACK</label>
+          <div class="seg" id="segAck" role="group" aria-label="does the receiver batch its ACKs">
+            <button data-ack="1" aria-pressed="true">on</button>
+            <button data-ack="0">off</button>
+          </div>
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->14,600B (10 segments) · initial window 10 — 1 round trips, 200ms total<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">Segments actually sent in each round trip</span>
+      <div class="board">
+        <div class="trip" id="trip"><!--pr--><div class="rt hs"><span class="seg-n">handshake</span><span class="bar" style="height:14%"></span></div><div class="rt"><span class="seg-n">10</span><span class="bar" style="height:100.0%"></span></div><!--/pr--></div>
+        <div class="tripx" id="tripX"><!--pr--><span>hs</span><span>1 RTT</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="sent"></i>segments sent that round</span>
+          <span><i class="hs"></i>TCP handshake</span>
+          <span><i class="now"></i>round trips at this setting</span>
+          <span><i class="cmp"></i>the comparison window</span>
+        </div>
+
+        <div class="stairy" id="stairY"><!--pr-->vertical = round trips (max 10) · filled is initial window 10, dashed is 3<!--/pr--></div>
+        <div class="stair" id="stair"><!--pr--><div class="col here" title="12,800B — 1 round trips here · 3 for the comparison"><div class="now" style="height:10.0%"></div><div class="cmp" style="height:30.0%"></div></div><div class="col" title="25,600B — 2 round trips here · 4 for the comparison"><div class="now" style="height:20.0%"></div><div class="cmp" style="height:40.0%"></div></div><div class="col" title="38,400B — 3 round trips here · 5 for the comparison"><div class="now" style="height:30.0%"></div><div class="cmp" style="height:50.0%"></div></div><div class="col" title="51,200B — 3 round trips here · 6 for the comparison"><div class="now" style="height:30.0%"></div><div class="cmp" style="height:60.0%"></div></div><div class="col" title="64,000B — 3 round trips here · 6 for the comparison"><div class="now" style="height:30.0%"></div><div class="cmp" style="height:60.0%"></div></div><div class="col" title="76,800B — 4 round trips here · 6 for the comparison"><div class="now" style="height:40.0%"></div><div class="cmp" style="height:60.0%"></div></div><div class="col" title="89,600B — 4 round trips here · 7 for the comparison"><div class="now" style="height:40.0%"></div><div class="cmp" style="height:70.0%"></div></div><div class="col" title="102,400B — 4 round trips here · 7 for the comparison"><div class="now" style="height:40.0%"></div><div class="cmp" style="height:70.0%"></div></div><div class="col" title="115,200B — 4 round trips here · 7 for the comparison"><div class="now" style="height:40.0%"></div><div class="cmp" style="height:70.0%"></div></div><div class="col" title="128,000B — 5 round trips here · 8 for the comparison"><div class="now" style="height:50.0%"></div><div class="cmp" style="height:80.0%"></div></div><div class="col" title="140,800B — 5 round trips here · 8 for the comparison"><div class="now" style="height:50.0%"></div><div class="cmp" style="height:80.0%"></div></div><div class="col" title="153,600B — 5 round trips here · 8 for the comparison"><div class="now" style="height:50.0%"></div><div class="cmp" style="height:80.0%"></div></div><div class="col" title="166,400B — 5 round trips here · 8 for the comparison"><div class="now" style="height:50.0%"></div><div class="cmp" style="height:80.0%"></div></div><div class="col" title="179,200B — 5 round trips here · 8 for the comparison"><div class="now" style="height:50.0%"></div><div class="cmp" style="height:80.0%"></div></div><div class="col" title="192,000B — 6 round trips here · 9 for the comparison"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:90.0%"></div></div><div class="col" title="204,800B — 6 round trips here · 9 for the comparison"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:90.0%"></div></div><div class="col" title="217,600B — 6 round trips here · 9 for the comparison"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:90.0%"></div></div><div class="col" title="230,400B — 6 round trips here · 9 for the comparison"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:90.0%"></div></div><div class="col" title="243,200B — 6 round trips here · 9 for the comparison"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:90.0%"></div></div><div class="col" title="256,000B — 6 round trips here · 9 for the comparison"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:90.0%"></div></div><div class="col" title="268,800B — 6 round trips here · 9 for the comparison"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:90.0%"></div></div><div class="col" title="281,600B — 6 round trips here · 10 for the comparison"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:100.0%"></div></div><div class="col" title="294,400B — 6 round trips here · 10 for the comparison"><div class="now" style="height:60.0%"></div><div class="cmp" style="height:100.0%"></div></div><div class="col" title="307,200B — 7 round trips here · 10 for the comparison"><div class="now" style="height:70.0%"></div><div class="cmp" style="height:100.0%"></div></div><!--/pr--></div>
+        <div class="stairx" id="stairX"><!--pr--><span>0B</span><span>150.0KB</span><span>300.0KB</span><!--/pr--></div>
+
+        <table class="edge" id="edge"><!--pr--><tr><th>round trips</th><th>can send up to</th><th>total</th></tr><tr class="on"><td>1 RTT</td><td>14,600B</td><td>200ms</td></tr><tr class=""><td>2 RTT</td><td>36,500B</td><td>300ms</td></tr><tr class=""><td>3 RTT</td><td>68,620B</td><td>400ms</td></tr><tr class=""><td>4 RTT</td><td>116,800B</td><td>500ms</td></tr><tr class=""><td>5 RTT</td><td>188,340B</td><td>600ms</td></tr><tr class=""><td>6 RTT</td><td>294,920B</td><td>700ms</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">round trips</span><span class="n">1</span></div><div class="m "><span class="k">total time</span><span class="n">200ms</span></div><div class="m "><span class="k">first round trip carries</span><span class="n">14,600<small>B</small></span></div><div class="m "><span class="k">ceiling for this count</span><span class="n">14,600<small>B</small></span></div><div class="m "><span class="k">to the next step</span><span class="n">1<small>B</small></span></div><div class="m "><span class="k">if reused</span><span class="n">100ms</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>It all fit in the first round trip.</b> Below this, shrinking the response buys nothing<br><span class="at">same round trip up to 14,600B — just 1B more and it costs another one</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section>
+      <span class="cap">Same response, only the initial window changed</span>
+      <table class="cmp-tbl" id="cmpTbl"><!--pr--><tr><th>initial window</th><th>first round trip</th><th>round trips</th><th>total</th></tr><tr class=""><td>3 seg</td><td class="num">4,380B</td><td class="num bad">3 RTT</td><td class="num bad">400ms</td></tr><tr class="on"><td>10 seg</td><td class="num">14,600B</td><td class="num good">1 RTT</td><td class="num good">200ms</td></tr><tr class=""><td>30 seg</td><td class="num">43,800B</td><td class="num good">1 RTT</td><td class="num good">200ms</td></tr><!--/pr--></table>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">Previous</button>
+        <button id="btnStep">Next step</button>
+        <button id="btnReset">Reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Work the dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What it changes</th></tr>
+    <tr><td>Response size</td><td>Bytes sent in one go. <strong>Flip between 14,600 and 14,601</strong> — this whole page is about that one byte.</td></tr>
+    <tr><td>Initial window</td><td>Segments allowed in the first round trip. <strong>3</strong> is the RFC 3390 era, <strong>10</strong> is what RFC 6928 made standard, <strong>30</strong> is what some CDNs raise it to by hand.</td></tr>
+    <tr><td>Round-trip time</td><td>How long one round trip takes. The <em>number</em> of round trips does not depend on it — only the height of each step changes, never where the steps fall.</td></tr>
+    <tr><td>Connection</td><td><strong>New</strong> adds a handshake round trip and starts the window at its initial value. <strong>Reused</strong> means the window is already large, so the staircase disappears.</td></tr>
+    <tr><td>Delayed ACK</td><td>Whether the receiver sends one ACK per two segments. On, the window grows <strong>1.5×</strong> per round trip; off, <strong>2×</strong>. Saving ACKs costs growth.</td></tr>
+  </table>
+
+  <p>One segment is 1,460 bytes (MSS). The round-trip count is a function of <strong>size and initial window only</strong>, so it comes out of a closed-form expression — no randomness and no samples.</p>
+
+  <h2>Things to try</h2>
+
+  <div class="recipe">
+    <h4>1. 14,600 bytes — one round trip</h4>
+    <div class="seq">Response size 14,600B · initial window 10 · RTT 100ms
+Round trips <em>1</em> · total <em>200ms</em> (100 handshake + 100 transfer)
+Segments per round <em>10</em></div>
+    <p class="why">10 segments × 1,460 bytes is <strong>exactly 14,600</strong>. It lands precisely on the initial window. Below this point shrinking the response buys nothing — <strong>a 1,000-byte response also takes 200ms.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Add one byte — one more round trip</h4>
+    <div class="seq">Response size 14,600 → <em>14,601B</em>
+Round trips 1 → <em>2</em> · total 200 → <em>300ms</em>
+Segments per round <em>10 / 1</em></div>
+    <p class="why">The second round trip exists <strong>to carry a single segment</strong> — it spends a whole 100ms delivering 1 byte out of a possible 1,460. This is where the intuition that transfer time scales with size breaks: <strong>it is a staircase.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 100KB on the old setting — seven round trips</h4>
+    <div class="seq">Response size 100,000B (69 segments) · initial window <em>3</em>
+Round trips <em>7</em> · total <em>800ms</em>
+Segments per round <em>3 / 4 / 6 / 9 / 13 / 19 / 15</em></div>
+    <p class="why">The RFC 3390-era initial window. The window grows <strong>1.5× per round</strong>, so starting at 3 it takes five round trips to become useful. The first three rounds carry <strong>13 segments — 19% of the response.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Raise the initial window to 10 — no application change</h4>
+    <div class="seq">Initial window 3 → <em>10</em> (size and RTT unchanged)
+Round trips 7 → <em>4</em> · total 800 → <em>500ms</em>
+Segments per round <em>10 / 15 / 22 / 22</em></div>
+    <p class="why">Same application, same response, same line. <strong>300ms from one kernel setting.</strong> This is why RFC 6928 changed the standard, and Google measured it before proposing the change — those numbers are quoted below.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Turn delayed ACK off — the window doubles instead</h4>
+    <div class="seq">Delayed ACK on → <em>off</em> (100KB · initial window 10)
+Round trips 4 → <em>3</em> · total 500 → <em>400ms</em>
+Segments per round 10 / 15 / 22 / 22 → <em>10 / 20 / 39</em></div>
+    <p class="why">Delayed ACK halves the number of ACK packets — and <strong>halves how fast the window grows</strong>, because each ACK opens the window by one segment. What it saves is ACK traffic; what it pays is early throughput. Usually a good trade, but not where the first response matters.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Reuse the connection — the staircase disappears</h4>
+    <div class="seq">Connection new → <em>reused</em> (100KB · initial window 10)
+Total 500 → <em>100ms</em> (no handshake, window already large)</div>
+    <p class="why">The handshake round trip is gone and there is no slow start left to do. <strong>This is what keep-alive and connection pools actually buy you</strong> — not bandwidth, but <em>skipping the staircase</em>. If <a href="/en/connpool/">no. 8</a> was about pool size, this is why the pool exists.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. Send 1MB — the smaller the response, the more the window matters</h4>
+    <div class="seq">Response size 1,000,000B (685 segments) · initial window 10
+Round trips <em>9</em> · total <em>1.00s</em> · with window 3 it is <em>13</em>
+At 100KB it was 4 vs 7 (<em>1.75×</em>) · at 1MB it is 9 vs 13 (<em>1.44×</em>)</div>
+    <p class="why">The window grows exponentially, so on big transfers the starting value gets <strong>washed out</strong>. Put the other way round: <strong>the smaller the response, the more the initial window is everything</strong> — and most backend responses live down there.</p>
+  </div>
+
+  <h2>Why it is a staircase</h2>
+
+  <p>TCP starts without knowing how fat the pipe is. So it <strong>sends one initial window and stops to wait for ACKs.</strong> An ACK means that much got through, so it opens the window and sends again.</p>
+
+  <p>How much it opens is the arithmetic of this page. In slow start, <strong>one ACK opens the window by one segment.</strong> But with delayed ACK the receiver only sends one ACK per two segments — so per round trip the window becomes <code>1.5×</code>.</p>
+
+  <div class="callout"><code>window → window + window/2</code><br>10 → 15 → 22 → 33 → 49 → 73 … With delayed ACK off it is <code>window → window × 2</code>, so 10 → 20 → 40.</div>
+
+  <p>Which means <strong>there is a fixed amount you can send in the first <code>r</code> round trips.</strong> Fit inside it and you pay <code>r</code>; exceed it by one byte and you pay <code>r+1</code>. With an initial window of 10 the boundaries are these.</p>
+
+  <table class="keytable">
+    <tr><th>Round trips</th><th>You can send up to (initial window 10)</th></tr>
+    <tr><td>1</td><td><strong>14,600 bytes</strong> — the first step</td></tr>
+    <tr><td>2</td><td>36,500 bytes</td></tr>
+    <tr><td>3</td><td>68,620 bytes</td></tr>
+    <tr><td>4</td><td>116,800 bytes</td></tr>
+    <tr><td>5</td><td>188,340 bytes</td></tr>
+    <tr><td>6</td><td>294,920 bytes</td></tr>
+  </table>
+
+  <h2>The RFC hands you a table to check against</h2>
+
+  <p>One thing had to be settled before writing this model: <strong>does the window grow 1.5× or 2× per round trip?</strong> The first draft assumed 2× — that is how slow start usually gets described.</p>
+
+  <p>But <strong>RFC 6928 prints a round-trip table</strong> comparing initial windows of 10 and 3.</p>
+
+  <table class="keytable">
+    <tr><th>Segments to send</th><th>Initial window 10</th><th>Initial window 3</th></tr>
+    <tr><td>10</td><td>1 round trip</td><td>3 round trips</td></tr>
+    <tr><td>21</td><td>2</td><td>4</td></tr>
+    <tr><td>78</td><td>4</td><td>7</td></tr>
+  </table>
+
+  <div class="callout"><strong>Compute with 1.5× and all six cells match.</strong> Compute with 2× and 21 segments at window 3 comes out at 3 (the RFC says 4) and 78 segments at window 3 comes out at 5 (the RFC says 7) — <strong>two cells wrong.</strong> The spec gave the algorithm, and the same document gave a point to check it against.</div>
+
+  <p>The lab reproduces that table directly — set the size to 30,660 bytes (21 segments) with an initial window of 3 and it returns 4 round trips. <strong>Being able to check the model against reality before building it is entirely thanks to that table.</strong></p>
+
+  <p>RFC 6928 defines the initial window as <code>min(10 × MSS, max(2 × MSS, 14600))</code>. The cap is in <strong>bytes</strong>, which has an odd consequence: on a jumbo-frame path with an MSS of 8,960 the formula returns <strong>17,920 bytes — two segments.</strong> Make your segments bigger and the <em>count</em> you may send in the first round trip drops from 10 to 2.</p>
+
+  <h2>Bandwidth is not in this formula</h2>
+
+  <p>What sets the round-trip count is <strong>the response size and the initial window, and nothing else.</strong> Line speed does not appear anywhere. Move to 1Gbps and 14,601 bytes still takes two round trips.</p>
+
+  <div class="callout"><a href="/en/throughput/">No. 19</a> arrives at the same conclusion for the <em>steady state</em> — ten times the bandwidth, 1.0× the throughput. This page is why the <em>start</em> behaves that way. It is the gap no. 19 marked when it said it does not cover the slow-start phase.</div>
+
+  <p>So the fix is not on the bandwidth side either. You can <strong>remove round trips (initial window, connection reuse), make a round trip cheaper (RTT — what a CDN sells), or keep the response under the step.</strong> That is the whole list.</p>
+
+  <h2>What Google actually measured</h2>
+
+  <p>RFC 6928 carries the evidence that changed the standard. Raising the initial window from 3 to 10 gave:</p>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>Average latency reduction</th></tr>
+    <tr><td>Average datacenter</td><td><strong>11.7%</strong> (68ms)</td></tr>
+    <tr><td>Low-bandwidth datacenter</td><td><strong>8.7%</strong> (72ms)</td></tr>
+    <tr><td>High-RTT, high-BDP paths</td><td>over 20%</td></tr>
+    <tr><td>Low-RTT paths</td><td>about 5%</td></tr>
+    <tr><td>The cost — retransmission rate</td><td>1.98% → 2.29% · 3.54% → 4.21%</td></tr>
+  </table>
+
+  <div class="callout">Those are <strong>Google’s measurements, not this lab’s output.</strong> All the lab computes is the round-trip count and what those round trips cost in time.</div>
+
+  <p>Note the retransmission rate went up too. <strong>It is not free</strong> — pushing more into the first round trip means dropping more on narrow paths. It was still worth changing because the latency gain was larger, and that table is the argument.</p>
+
+  <h2>What this model assumes</h2>
+
+  <table class="keytable">
+    <tr><th>Assumption</th><th>What breaks if it fails</th></tr>
+    <tr><td>No loss</td><td>Lose a single packet and you leave slow start for congestion avoidance, where the window grows linearly instead of exponentially — <strong>many more round trips</strong>. That regime is <a href="/en/throughput/">no. 19</a>’s square-root law</td></tr>
+    <tr><td>The receive window is not the limit</td><td>If the peer’s receive buffer is small, the congestion window does not matter — <strong>the smaller of the two wins.</strong> That is no. 19’s BDP</td></tr>
+    <tr><td>The bytes are ready</td><td>The application is assumed to <strong>already hold</strong> what it will send in the first round trip. If the server is still waiting on the database, an open window sends nothing</td></tr>
+    <tr><td>Reused means warm</td><td>“Reused” assumes earlier transfers already grew the window. After a long idle the kernel shrinks it back (<code>slow start after idle</code>), so in practice part of the staircase returns</td></tr>
+    <tr><td>TLS is not counted</td><td>The handshake here is one TCP round trip only. TLS 1.3 adds one more and TLS 1.2 adds two — <strong>a staircase in front of the staircase</strong></td></tr>
+  </table>
+
+  <h2>In the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>Reading the current value</td><td>On Linux, no <code>initcwnd</code> in <code>ip route show</code> means the default (10). Change it with <code>ip route change … initcwnd 30 initrwnd 30</code> — note it is <strong>per route, not a global sysctl</strong>, which is the part people get wrong</td></tr>
+    <tr><td>First response size</td><td><strong>14,600 bytes is the magic number.</strong> Fit what the first screen needs inside it and you pay one round trip. Compression earns double here — not by saving bytes but by <em>staying under the step</em></td></tr>
+    <tr><td>Connection reuse</td><td>The biggest win available. Check that keep-alive is genuinely alive and that the pool is not opening a fresh connection per request. This is where <a href="/en/connpool/">no. 8</a>’s pool pays for itself</td></tr>
+    <tr><td>Reset after idle</td><td>Linux shrinks the window after an idle period; <code>net.ipv4.tcp_slow_start_after_idle=0</code> turns that off. <strong>A live connection with a cold window</strong> is a common state</td></tr>
+    <tr><td>Behind a proxy</td><td>The initial window is <strong>per hop</strong>. A TLS-terminating proxy splits the connection in two and each half slow-starts on its own — the same shape as ordering being per hop in <a href="/en/tcpclose/">no. 21</a></td></tr>
+    <tr><td>Measuring</td><td>Count <strong>round trips</strong>, not bandwidth. <code>tcpdump</code> shows how many bursts the first response leaves in. If your latency graph has <strong>visible steps</strong>, this is it</td></tr>
+    <tr><td>QUIC too</td><td>HTTP/3 also slow-starts. What it fixes is handshake round trips (0-RTT, 1-RTT), not how the window grows</td></tr>
+  </table>
+
+  <p>If <a href="/en/throughput/">no. 19</a> was about why the steady state never fills the line, this page is about the start not even trying to. And most backend responses <strong>finish before the steady state arrives.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/throughput/"><span class="no">19</span><span><span class="t">The bandwidth is there and the throughput is not</span><span class="why">Once the steady state arrives, loss rate sets the throughput — and bandwidth is not in that formula either.</span></span></a></li>
+      <li><a href="/en/connpool/"><span class="no">08</span><span><span class="t">A 17-millisecond query drains the pool</span><span class="why">Skipping the staircase needs a live connection — and how big that pool has to be.</span></span></a></li>
+      <li><a href="/en/fanout/"><span class="no">24</span><span><span class="t">The servers did not get slower. The users did</span><span class="why">If one round trip is a step, what happens when the call fans out to a hundred?</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">Index</a> · <a href="/slowstart/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uMs:'ms', uSec:'s', uB:'B', uKb:'KB', uMb:'MB', uSeg:' seg', uTimes:'',
+  tHand:'handshake', tHandShort:'hs', tRound:'$1 RTT',
+  hint:'$1 ($2 segments) · initial window $3 — $4 round trips, $5 total',
+  stY:'vertical = round trips (max $1) · filled is initial window $2, dashed is $3',
+  stTip:'$1 — $2 round trips here · $3 for the comparison',
+  eRound:'round trips', eUpto:'can send up to', eTime:'total',
+  mRounds:'round trips', mTime:'total time', mFirst:'first round trip carries',
+  mUpto:'ceiling for this count', mToNext:'to the next step', mSaved:'if reused',
+  cIw:'initial window', cIwVal:'$1 seg', cFirst:'first round trip', cRounds:'round trips', cTime:'total',
+  vOne:'<b>It all fit in the first round trip.</b> Below this, shrinking the response buys nothing<br><span class="at">same round trip up to $1B — just $2B more and it costs another one</span>',
+  vSteps:'<b>$1 round trips, $2 total.</b> It does not scale with size — it is a staircase.<br>Trim $3B and you drop a round trip <span class="at">· add $4B and you gain one</span>',
+  vReuse:'<b>The staircase is gone — $1.</b> Opening a new connection would have been $2 ($3 round trips).<br><span class="at">no handshake and the window is already large — this is what keep-alive buys</span>',
+  scene:[
+    'The response is exactly 14,600 bytes: 10 segments of 1,460, which is precisely the initial window. It goes out in one round trip, 200ms including the handshake. Below this point, shrinking the response buys nothing at all — a 1,000-byte response also takes 200ms.',
+    'Add one byte. 14,601. That costs another round trip: 300ms. Look at what the second round trip does — it carries one segment. It spends a full 100ms delivering 1 byte out of a possible 1,460. This is where the intuition that transfer time scales with size falls apart.',
+    'Now 100,000 bytes, 69 segments, with the initial window at the old value of 3. Seven round trips, 800ms. The per-round segments grow 3, 4, 6, 9, 13, 19, 15. The window only grows 1.5× per round, so starting at 3 it takes five round trips to become useful — the first three carry just 19% of the response.',
+    'Raise only the initial window, to 10. Same response, same line, same code. Seven round trips become four and 800ms becomes 500ms. Three hundred milliseconds from one kernel setting. This is why RFC 6928 changed the standard, and Google measured it before proposing the change.',
+    'Turn delayed ACK off. The receiver now ACKs every segment, so the window doubles each round instead: 10, 20, 39. Four round trips become three. Delayed ACK halves ACK traffic and halves window growth at the same time — what it saves and what it costs are different line items.',
+    'Reuse the connection. The handshake round trip is gone and there is no slow start left to do: 500ms becomes 100ms. This is what keep-alive and connection pools actually buy — not bandwidth, but skipping the staircase outright.',
+    'Finally, one megabyte: 685 segments. Nine round trips at window 10, thirteen at window 3. Look at the ratio — at 100KB it was 4 against 7, a factor of 1.75; at 1MB it is 9 against 13, a factor of 1.44. The window grows exponentially, so on big transfers the starting value washes out. Which means the smaller the response, the more the initial window is everything.'
+  ],
+};
+</script>
+<script src="/shared/slowstart-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "One byte bigger and it costs another round trip",
+  "description": "A 14,600-byte response goes in one round trip. 14,601 bytes takes two. Transfer time does not scale with size — it is a staircase of round trips. And bandwidth does not appear in the formula at all.",
+  "url": "https://lab.vermilion19.com/en/slowstart/",
+  "inLanguage": "en",
+  "datePublished": "2026-08-25",
+  "dateModified": "2026-08-25",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "One byte bigger and it costs another round trip"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

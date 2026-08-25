@@ -17,7 +17,7 @@ export const NO = {
   keepalive: '07', connpool: '08', jobclaim: '09', retryloop: '10', backpressure: '11',
   correlation: '12', genericplan: '13', retrystorm: '14', writeskew: '15', stampede: '16',
   timeout: '17', lockttl: '18', throughput: '19', rebalance: '20', tcpclose: '21',
-  aggregate: '22', alignment: '23', fanout: '24', omission: '25'
+  aggregate: '22', alignment: '23', fanout: '24', omission: '25', slowstart: '26'
 };
 
 /* slug → [{ to, ko, en }] */
@@ -64,7 +64,8 @@ export const RELATED = {
     { to: 'retrystorm', ko: '그 큐가 부하를 걷어내도 안 비는 지점.', en: 'The point where that queue will not drain even after the load is gone.' },
     { to: 'timeout', ko: '타임아웃을 늘리면 점유가 늘어 용량이 줍니다 — 같은 리틀의 법칙입니다.', en: 'Raise the timeout and occupancy rises, so capacity falls — the same Little’s law.' },
     { to: 'throughput', ko: '같은 식이 네트워크에서는 바이트 단위로 나타납니다. 풀 크기 대신 띄운 바이트입니다.', en: 'The same formula in bytes on the network — bytes in flight instead of pool size.' },
-    { to: 'mvcc', ko: '트랜잭션을 오래 열어두는 또 다른 대가.', en: 'The other price of holding a transaction open.' }
+    { to: 'mvcc', ko: '트랜잭션을 오래 열어두는 또 다른 대가.', en: 'The other price of holding a transaction open.' },
+    { to: 'slowstart', ko: '풀이 커넥션을 살려두는 진짜 이득 — 대역폭이 아니라 왕복 계단을 건너뜁니다.', en: 'What keeping a connection alive really buys — not bandwidth but skipping the round-trip staircase.' }
   ],
   jobclaim: [
     { to: 'lockttl', ko: '제대로 잡은 락이 일하는 중에 사라지면 어떻게 되는가.', en: 'What happens when a correctly claimed lock disappears mid-flight.' },
@@ -127,7 +128,8 @@ export const RELATED = {
   throughput: [
     { to: 'connpool', ko: '같은 식을 커넥션 풀에서 만납니다 — 동시성 = 처리량 × 지연.', en: 'The same formula met at the connection pool — concurrency = throughput × latency.' },
     { to: 'mqtt', ko: 'Receive Maximum 이 그 식의 또 다른 단위입니다.', en: 'Receive Maximum is that formula in yet another unit.' },
-    { to: 'timeout', ko: '같은 RTT 가 처리량도 정하고 타임아웃 예산도 먹습니다.', en: 'The same RTT sets your throughput and eats your timeout budget.' }
+    { to: 'timeout', ko: '같은 RTT 가 처리량도 정하고 타임아웃 예산도 먹습니다.', en: 'The same RTT sets your throughput and eats your timeout budget.' },
+    { to: 'slowstart', ko: '이 페이지가 미뤄둔 구간 — 정상 상태에 닿기 전에 끝나는 전송은 어떻게 되는가.', en: 'The phase this page set aside — what happens to transfers that end before the steady state.' }
   ],
   aggregate: [
     { to: 'writeskew', ko: '예외도 로그도 없이 숫자만 틀리는 같은 종류 — 저쪽은 동시성입니다.', en: 'The same species of silent wrong number — that one comes from concurrency.' },
@@ -144,7 +146,8 @@ export const RELATED = {
     { to: 'alignment', ko: '도착한 바이트를 읽는 쪽 — 오프셋을 손으로 더하면 그 뒤가 전부 밀립니다.', en: 'The reading side — add offsets by hand and everything after shifts.' },
     { to: 'keepalive', ko: '반대편 — 이쪽은 정상적으로 끊었는데 유실되고, 7 번은 끊겼는데 살아있다고 믿습니다.', en: 'The mirror — here a proper close loses data; in no. 7 a dead connection looks alive.' },
     { to: 'mqtt', ko: 'TCP 순서 보장이 홉 단위인 것이 QoS 가 홉 단위인 것과 같은 구조입니다.', en: 'TCP ordering being per hop is the same structure as QoS being per hop.' },
-    { to: 'rebalance', ko: '"정상 종료" 처럼 "살아 있다" 도 계층마다 다른 뜻입니다 — 하트비트는 정상인데 그룹에서 빠집니다.', en: 'Like “clean shutdown”, “alive” also means different things per layer — heartbeats fine, dropped from the group.' }
+    { to: 'rebalance', ko: '"정상 종료" 처럼 "살아 있다" 도 계층마다 다른 뜻입니다 — 하트비트는 정상인데 그룹에서 빠집니다.', en: 'Like “clean shutdown”, “alive” also means different things per layer — heartbeats fine, dropped from the group.' },
+    { to: 'slowstart', ko: '같은 홉 단위 이야기 — 프록시를 넘으면 초기 창도 처음부터 다시 시작합니다.', en: 'The same per-hop story — cross a proxy and the initial window starts over too.' }
   ],
   fanout: [
     { to: 'timeout', ko: '취소가 전파되지 않으면 사본의 추가 부하가 계산보다 커집니다 — 아무도 안 기다리는 일이 남습니다.', en: 'If cancellation does not propagate, the copy costs more than the number says — work nobody waits for is left running.' },
@@ -156,6 +159,11 @@ export const RELATED = {
     { to: 'fanout', ko: '측정을 고치고 나면 볼 것 — 개별 서버의 꼬리가 사용자에게 몇 배로 도착하는가.', en: 'Once the measurement is fixed: how one server’s tail arrives magnified at the user.' },
     { to: 'aggregate', ko: '같은 사건이 두 숫자가 되는 다른 이유 — 이쪽은 둘 다 맞습니다.', en: 'The other way one event becomes two numbers — there, both are right.' },
     { to: 'connpool', ko: '큐와 풀에서 기다린 시간이 응답시간에서 사라지는 자리.', en: 'Where time spent waiting in the queue and the pool drops out of the latency number.' }
+  ],
+  slowstart: [
+    { to: 'throughput', ko: '정상 상태로 넘어가면 이번엔 손실률이 처리량을 정합니다 — 거기도 대역폭은 식에 없습니다.', en: 'Once the steady state arrives, loss rate sets the throughput — and bandwidth is not in that formula either.' },
+    { to: 'connpool', ko: '계단을 건너뛰려면 커넥션이 살아 있어야 합니다. 그 풀을 얼마나 잡아야 하는가.', en: 'Skipping the staircase needs a live connection — and how big that pool has to be.' },
+    { to: 'fanout', ko: '왕복 하나가 계단이라면, 그 호출이 100개로 늘어나면 어떻게 되는가.', en: 'If one round trip is a step, what happens when the call fans out to a hundred?' }
   ],
   rebalance: [
     { to: 'connpool', ko: '바쁨과 진행을 구별하지 못해서 생기는 같은 사고 — CPU 사용률은 진행률이 아닙니다.', en: 'The same accident from confusing busy with progressing — CPU utilisation is not a progress bar.' },
