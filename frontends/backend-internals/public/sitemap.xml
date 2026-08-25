@@ -309,6 +309,22 @@
   </url>
 
   <url>
+    <loc>https://lab.vermilion19.com/quorum/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/quorum/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/quorum/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/quorum/"/>
+    <lastmod>2026-08-25</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/quorum/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/quorum/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/quorum/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/quorum/"/>
+    <lastmod>2026-08-25</lastmod>
+  </url>
+
+  <url>
     <loc>https://lab.vermilion19.com/raft/</loc>
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/raft/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/raft/"/>
@@ -449,6 +465,22 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/timeout/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/timeout/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/timeout/"/>
+    <lastmod>2026-08-25</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/usl/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/usl/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/usl/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/usl/"/>
+    <lastmod>2026-08-25</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/usl/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/usl/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/usl/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/usl/"/>
     <lastmod>2026-08-25</lastmod>
   </url>
 

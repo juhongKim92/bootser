@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>Adding threads made it slower — Amdahl and the USL</title>
+<meta name="description" content="Going from 31 threads to 256 drops throughput from 9.04 to 3.24 — a factor of 2.79. But response time becomes 23 times worse, which is the part a throughput graph never shows.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/usl/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/usl/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/usl/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/usl/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="Adding threads made it slower">
+<meta property="og:description" content="Past the peak, throughput falls. Response time falls apart much faster.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/usl/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Adding threads made it slower">
+<meta name="twitter:description" content="Look only at Amdahl and adding threads always looks like a win. Where the two curves diverge is this page.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/usl-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/usl/" hreflang="ko" lang="ko">KO</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>Adding threads made it slower</h1>
+  <p class="lede">Going from 31 threads to 256 drops throughput <strong>from 9.04 to 3.24</strong> — a factor of 2.79. But response time is far worse than that: <strong>23 times</strong>. On a throughput graph this reads as "slightly worse". What users experience is the other number.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sN">Threads <em>n</em></label>
+          <span class="v" id="vN">1<small> thr</small></span>
+          <input type="range" id="sN" min="1" max="256" step="1" value="1" aria-label="concurrent threads">
+        </div>
+        <div class="dial">
+          <label for="sS">Serial fraction <em>σ</em></label>
+          <span class="v" id="vS">5<small>%</small></span>
+          <input type="range" id="sS" min="0" max="4" step="1" value="2" aria-label="fraction that cannot be parallelised">
+        </div>
+        <div class="dial">
+          <label for="sK">Coherency cost <em>κ</em></label>
+          <span class="v" id="vK">0.001</span>
+          <input type="range" id="sK" min="0" max="4" step="1" value="3" aria-label="cost of threads coordinating with each other">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->1 threads · serial 5.0% · coherency 0 — throughput 1.00 · response ×1.00<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">Two curves — throughput against thread count</span>
+      <div class="board">
+        <div class="curvey" id="curveY"><!--pr-->vertical = throughput (relative to one thread) · dashed line is the Amdahl ceiling ×20.0<!--/pr--></div>
+        <div class="curve" id="curve"><!--pr--><div class="col here" style="left:0.00%" title="1 threads — USL 1.00 · Amdahl 1.00"><div class="am" style="height:4.81%"></div><div class="us" style="height:4.81%"></div></div><div class="col here" style="left:1.67%" title="1 threads — USL 1.00 · Amdahl 1.00"><div class="am" style="height:4.81%"></div><div class="us" style="height:4.81%"></div></div><div class="col here" style="left:3.33%" title="1 threads — USL 1.00 · Amdahl 1.00"><div class="am" style="height:4.81%"></div><div class="us" style="height:4.81%"></div></div><div class="col here" style="left:5.00%" title="1 threads — USL 1.00 · Amdahl 1.00"><div class="am" style="height:4.81%"></div><div class="us" style="height:4.81%"></div></div><div class="col here" style="left:6.67%" title="2 threads — USL 1.90 · Amdahl 1.90"><div class="am" style="height:9.16%"></div><div class="us" style="height:9.16%"></div></div><div class="col here" style="left:8.33%" title="2 threads — USL 1.90 · Amdahl 1.90"><div class="am" style="height:9.16%"></div><div class="us" style="height:9.16%"></div></div><div class="col here" style="left:10.00%" title="2 threads — USL 1.90 · Amdahl 1.90"><div class="am" style="height:9.16%"></div><div class="us" style="height:9.16%"></div></div><div class="col here" style="left:11.67%" title="2 threads — USL 1.90 · Amdahl 1.90"><div class="am" style="height:9.16%"></div><div class="us" style="height:9.16%"></div></div><div class="col here" style="left:13.33%" title="2 threads — USL 1.90 · Amdahl 1.90"><div class="am" style="height:9.16%"></div><div class="us" style="height:9.16%"></div></div><div class="col" style="left:15.00%" title="3 threads — USL 2.73 · Amdahl 2.73"><div class="am" style="height:13.11%"></div><div class="us" style="height:13.11%"></div></div><div class="col" style="left:16.67%" title="3 threads — USL 2.73 · Amdahl 2.73"><div class="am" style="height:13.11%"></div><div class="us" style="height:13.11%"></div></div><div class="col" style="left:18.33%" title="3 threads — USL 2.73 · Amdahl 2.73"><div class="am" style="height:13.11%"></div><div class="us" style="height:13.11%"></div></div><div class="col" style="left:20.00%" title="3 threads — USL 2.73 · Amdahl 2.73"><div class="am" style="height:13.11%"></div><div class="us" style="height:13.11%"></div></div><div class="col" style="left:21.67%" title="4 threads — USL 3.48 · Amdahl 3.48"><div class="am" style="height:16.72%"></div><div class="us" style="height:16.72%"></div></div><div class="col" style="left:23.33%" title="4 threads — USL 3.48 · Amdahl 3.48"><div class="am" style="height:16.72%"></div><div class="us" style="height:16.72%"></div></div><div class="col" style="left:25.00%" title="4 threads — USL 3.48 · Amdahl 3.48"><div class="am" style="height:16.72%"></div><div class="us" style="height:16.72%"></div></div><div class="col" style="left:26.67%" title="5 threads — USL 4.17 · Amdahl 4.17"><div class="am" style="height:20.03%"></div><div class="us" style="height:20.03%"></div></div><div class="col" style="left:28.33%" title="5 threads — USL 4.17 · Amdahl 4.17"><div class="am" style="height:20.03%"></div><div class="us" style="height:20.03%"></div></div><div class="col" style="left:30.00%" title="6 threads — USL 4.80 · Amdahl 4.80"><div class="am" style="height:23.08%"></div><div class="us" style="height:23.08%"></div></div><div class="col" style="left:31.67%" title="6 threads — USL 4.80 · Amdahl 4.80"><div class="am" style="height:23.08%"></div><div class="us" style="height:23.08%"></div></div><div class="col" style="left:33.33%" title="7 threads — USL 5.38 · Amdahl 5.38"><div class="am" style="height:25.89%"></div><div class="us" style="height:25.89%"></div></div><div class="col" style="left:35.00%" title="8 threads — USL 5.93 · Amdahl 5.93"><div class="am" style="height:28.49%"></div><div class="us" style="height:28.49%"></div></div><div class="col" style="left:36.67%" title="8 threads — USL 5.93 · Amdahl 5.93"><div class="am" style="height:28.49%"></div><div class="us" style="height:28.49%"></div></div><div class="col" style="left:38.33%" title="9 threads — USL 6.43 · Amdahl 6.43"><div class="am" style="height:30.91%"></div><div class="us" style="height:30.91%"></div></div><div class="col" style="left:40.00%" title="10 threads — USL 6.90 · Amdahl 6.90"><div class="am" style="height:33.16%"></div><div class="us" style="height:33.16%"></div></div><div class="col" style="left:41.67%" title="11 threads — USL 7.33 · Amdahl 7.33"><div class="am" style="height:35.26%"></div><div class="us" style="height:35.26%"></div></div><div class="col" style="left:43.33%" title="12 threads — USL 7.74 · Amdahl 7.74"><div class="am" style="height:37.22%"></div><div class="us" style="height:37.22%"></div></div><div class="col" style="left:45.00%" title="13 threads — USL 8.13 · Amdahl 8.13"><div class="am" style="height:39.06%"></div><div class="us" style="height:39.06%"></div></div><div class="col" style="left:46.67%" title="15 threads — USL 8.82 · Amdahl 8.82"><div class="am" style="height:42.42%"></div><div class="us" style="height:42.42%"></div></div><div class="col" style="left:48.33%" title="16 threads — USL 9.14 · Amdahl 9.14"><div class="am" style="height:43.96%"></div><div class="us" style="height:43.96%"></div></div><div class="col" style="left:50.00%" title="18 threads — USL 9.73 · Amdahl 9.73"><div class="am" style="height:46.78%"></div><div class="us" style="height:46.78%"></div></div><div class="col" style="left:51.67%" title="19 threads — USL 10.00 · Amdahl 10.00"><div class="am" style="height:48.08%"></div><div class="us" style="height:48.08%"></div></div><div class="col" style="left:53.33%" title="21 threads — USL 10.50 · Amdahl 10.50"><div class="am" style="height:50.48%"></div><div class="us" style="height:50.48%"></div></div><div class="col" style="left:55.00%" title="23 threads — USL 10.95 · Amdahl 10.95"><div class="am" style="height:52.66%"></div><div class="us" style="height:52.66%"></div></div><div class="col" style="left:56.67%" title="25 threads — USL 11.36 · Amdahl 11.36"><div class="am" style="height:54.63%"></div><div class="us" style="height:54.63%"></div></div><div class="col" style="left:58.33%" title="28 threads — USL 11.91 · Amdahl 11.91"><div class="am" style="height:57.28%"></div><div class="us" style="height:57.28%"></div></div><div class="col" style="left:60.00%" title="31 threads — USL 12.40 · Amdahl 12.40"><div class="am" style="height:59.62%"></div><div class="us" style="height:59.62%"></div></div><div class="col" style="left:61.67%" title="34 threads — USL 12.83 · Amdahl 12.83"><div class="am" style="height:61.68%"></div><div class="us" style="height:61.68%"></div></div><div class="col" style="left:63.33%" title="37 threads — USL 13.21 · Amdahl 13.21"><div class="am" style="height:63.53%"></div><div class="us" style="height:63.53%"></div></div><div class="col" style="left:65.00%" title="40 threads — USL 13.56 · Amdahl 13.56"><div class="am" style="height:65.19%"></div><div class="us" style="height:65.19%"></div></div><div class="col" style="left:66.67%" title="44 threads — USL 13.97 · Amdahl 13.97"><div class="am" style="height:67.16%"></div><div class="us" style="height:67.16%"></div></div><div class="col" style="left:68.33%" title="49 threads — USL 14.41 · Amdahl 14.41"><div class="am" style="height:69.29%"></div><div class="us" style="height:69.29%"></div></div><div class="col" style="left:70.00%" title="53 threads — USL 14.72 · Amdahl 14.72"><div class="am" style="height:70.78%"></div><div class="us" style="height:70.78%"></div></div><div class="col" style="left:71.67%" title="58 threads — USL 15.06 · Amdahl 15.06"><div class="am" style="height:72.43%"></div><div class="us" style="height:72.43%"></div></div><div class="col" style="left:73.33%" title="64 threads — USL 15.42 · Amdahl 15.42"><div class="am" style="height:74.14%"></div><div class="us" style="height:74.14%"></div></div><div class="col" style="left:75.00%" title="70 threads — USL 15.73 · Amdahl 15.73"><div class="am" style="height:75.63%"></div><div class="us" style="height:75.63%"></div></div><div class="col" style="left:76.67%" title="77 threads — USL 16.04 · Amdahl 16.04"><div class="am" style="height:77.12%"></div><div class="us" style="height:77.12%"></div></div><div class="col" style="left:78.33%" title="84 threads — USL 16.31 · Amdahl 16.31"><div class="am" style="height:78.42%"></div><div class="us" style="height:78.42%"></div></div><div class="col" style="left:80.00%" title="93 threads — USL 16.61 · Amdahl 16.61"><div class="am" style="height:79.84%"></div><div class="us" style="height:79.84%"></div></div><div class="col" style="left:81.67%" title="102 threads — USL 16.86 · Amdahl 16.86"><div class="am" style="height:81.06%"></div><div class="us" style="height:81.06%"></div></div><div class="col" style="left:83.33%" title="111 threads — USL 17.08 · Amdahl 17.08"><div class="am" style="height:82.10%"></div><div class="us" style="height:82.10%"></div></div><div class="col" style="left:85.00%" title="122 threads — USL 17.30 · Amdahl 17.30"><div class="am" style="height:83.20%"></div><div class="us" style="height:83.20%"></div></div><div class="col" style="left:86.67%" title="134 threads — USL 17.52 · Amdahl 17.52"><div class="am" style="height:84.21%"></div><div class="us" style="height:84.21%"></div></div><div class="col" style="left:88.33%" title="147 threads — USL 17.71 · Amdahl 17.71"><div class="am" style="height:85.15%"></div><div class="us" style="height:85.15%"></div></div><div class="col" style="left:90.00%" title="161 threads — USL 17.89 · Amdahl 17.89"><div class="am" style="height:86.00%"></div><div class="us" style="height:86.00%"></div></div><div class="col" style="left:91.67%" title="177 threads — USL 18.06 · Amdahl 18.06"><div class="am" style="height:86.83%"></div><div class="us" style="height:86.83%"></div></div><div class="col" style="left:93.33%" title="194 threads — USL 18.22 · Amdahl 18.22"><div class="am" style="height:87.58%"></div><div class="us" style="height:87.58%"></div></div><div class="col" style="left:95.00%" title="213 threads — USL 18.36 · Amdahl 18.36"><div class="am" style="height:88.28%"></div><div class="us" style="height:88.28%"></div></div><div class="col" style="left:96.67%" title="233 threads — USL 18.49 · Amdahl 18.49"><div class="am" style="height:88.90%"></div><div class="us" style="height:88.90%"></div></div><div class="col" style="left:98.33%" title="256 threads — USL 18.62 · Amdahl 18.62"><div class="am" style="height:89.51%"></div><div class="us" style="height:89.51%"></div></div><div class="cap" style="bottom:96.15%"></div><div class="caplbl" style="bottom:97.65%">ceiling ×20.0</div><!--/pr--></div>
+        <div class="curvex" id="curveX"><!--pr--><span>1</span><span>16</span><span>256</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="ami"></i>Amdahl — keeps rising</span>
+          <span><i class="usi"></i>USL — bends at the peak</span>
+          <span><i class="peaki"></i>peak n*</span>
+          <span><i class="capi"></i>Amdahl ceiling 1/σ</span>
+        </div>
+
+        <div class="lat" id="lat"><!--pr--><div class="row  on"><span class="rn">1 thr</span><span class="bar" style="width:7.3%"></span><span class="rv">×1.00</span></div><div class="row "><span class="rn">8 thr</span><span class="bar" style="width:9.8%"></span><span class="rv">×1.35</span></div><div class="row "><span class="rn">16 thr</span><span class="bar" style="width:12.7%"></span><span class="rv">×1.75</span></div><div class="row "><span class="rn">32 thr</span><span class="bar" style="width:18.5%"></span><span class="rv">×2.55</span></div><div class="row "><span class="rn">64 thr</span><span class="bar" style="width:30.2%"></span><span class="rv">×4.15</span></div><div class="row "><span class="rn">128 thr</span><span class="bar" style="width:53.5%"></span><span class="rv">×7.35</span></div><div class="row "><span class="rn">256 thr</span><span class="bar" style="width:100.0%"></span><span class="rv">×13.75</span></div><!--/pr--></div>
+        <table class="four" id="four"><!--pr--><tr><th>threads</th><th>USL</th><th>Amdahl</th><th>response</th><th>Amdahl/USL</th></tr><tr class="on"><td>1</td><td class="good">1.00</td><td>1.00</td><td class="">×1.00</td><td>1.00</td></tr><tr class=""><td>8</td><td class="good">5.93</td><td>5.93</td><td class="">×1.35</td><td>1.00</td></tr><tr class=""><td>16</td><td class="good">9.14</td><td>9.14</td><td class="">×1.75</td><td>1.00</td></tr><tr class=""><td>32</td><td class="good">12.55</td><td>12.55</td><td class="">×2.55</td><td>1.00</td></tr><tr class=""><td>64</td><td class="good">15.42</td><td>15.42</td><td class="">×4.15</td><td>1.00</td></tr><tr class=""><td>128</td><td class="good">17.41</td><td>17.41</td><td class="">×7.35</td><td>1.00</td></tr><tr class=""><td>256</td><td class="good">18.62</td><td>18.62</td><td class="">×13.75</td><td>1.00</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">throughput</span><span class="n">1.00</span></div><div class="m "><span class="k">Amdahl ceiling</span><span class="n">×20.0</span></div><div class="m "><span class="k">peak n*</span><span class="n">∞</span></div><div class="m "><span class="k">throughput at peak</span><span class="n">—</span></div><div class="m "><span class="k">response time</span><span class="n">×1.00</span></div><div class="m "><span class="k">if Amdahl</span><span class="n">1.00</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>With zero coherency cost there is no retrograde region.</b> It merely converges on ×20.0.<br>Throughput 1.00 · response ×1.00 <span class="at">— adding threads never becomes a loss</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">Previous</button>
+        <button id="btnStep">Next step</button>
+        <button id="btnReset">Reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Three symbols</h2>
+
+  <table class="keytable">
+    <tr><th>Symbol</th><th>Meaning</th></tr>
+    <tr><td><strong>n</strong></td><td><strong>Concurrency.</strong> Thread-pool size, worker count, in-flight requests — however many of the thing you are increasing</td></tr>
+    <tr><td><strong>σ</strong> (sigma)</td><td><strong>Serial fraction.</strong> The share that only ever passes <em>one at a time</em> no matter how many threads there are: locks, a single connection, an ordered queue</td></tr>
+    <tr><td><strong>κ</strong> (kappa)</td><td><strong>Coherency cost.</strong> What threads spend coordinating with <em>each other</em> — cache-line invalidation, lock contention, coherency traffic. It grows with the number of thread <em>pairs</em>, so it enters as <code>n(n−1)</code></td></tr>
+  </table>
+
+  <p>σ and κ are <strong>dials, not constants I picked</strong>. Your system's values have to be fitted from load tests — what this page does is show you <em>what shape follows once those two are known</em>.</p>
+
+  <h2>Things to try</h2>
+
+  <div class="recipe">
+    <h4>1. One thread — the starting point</h4>
+    <div class="seq">n=1 · σ=5% · κ=none (0)
+Throughput <em>1.00</em> · response time <em>×1.00</em></div>
+    <p class="why">The baseline. With κ at zero the USL becomes exactly Amdahl — the two curves overlap. <strong>Zero κ means no retrograde region.</strong> Adding threads is always a gain, or at worst not a loss.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Push to 256 (κ=0) — you hit the ceiling</h4>
+    <div class="seq">n 1 → <em>256</em> (κ still 0)
+Throughput 1.00 → <em>18.62</em> · Amdahl ceiling <em>×20.0</em>
+Response time <em>×13.75</em></div>
+    <p class="why">256 times the threads for 18.62 times the throughput. <strong>With σ=5% the ceiling is 1/0.05 = 20×</strong> and no amount of threads passes it. That is Amdahl's law — <strong>diminishing returns, never negative ones.</strong> Response time is already 13.75× though.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Switch on the coherency cost — throughput falls to 3.24</h4>
+    <div class="seq">κ 0 → <em>0.001</em> (n still 256)
+Throughput 18.62 → <em>3.24</em> · Amdahl still says 18.62
+Peak <em>n*=31</em> · response time <em>×79.03</em></div>
+    <p class="why">Same thread count, <strong>5.7× less throughput.</strong> κ is paid per <em>pair</em> of threads, so it enters as <code>n(n−1)</code> and dominates the denominator as n grows. <strong>The Amdahl curve (blue) keeps climbing while the USL (green) has already bent and come back down.</strong> Watch where the two diverge.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Come down to the peak — 8× fewer threads, 2.8× the throughput</h4>
+    <div class="seq">n 256 → <em>31</em> (= the peak n*)
+Throughput 3.24 → <em>9.04</em> (<em>2.79×</em>)
+Response time 79.03 → <em>×3.43</em> (<em>23×</em> better)</div>
+    <p class="why"><strong>Removing</strong> threads multiplied throughput by 2.79. And response time improved <strong>23-fold</strong>. This is the heart of the page — <strong>the peak is <code>n* = √((1−σ)/κ)</code></strong>. With σ=5% and κ=0.001 that is √(0.95/0.001) = 30.82.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Overshoot slightly — throughput barely moves</h4>
+    <div class="seq">n 31 → <em>64</em>
+Throughput 9.04 → <em>7.82</em> (−13%)
+Response time 3.43 → <em>×8.18</em> (<em>2.4× worse</em>)</div>
+    <p class="why">Throughput fell only 13%. <strong>A throughput dashboard will not flag that.</strong> Response time, meanwhile, went up 2.4×. <strong>Near the peak the two metrics come apart</strong> — throughput bends gently while latency climbs steeply. Little's law is why (below).</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Halve the serial fraction — the ceiling moves, the peak does not</h4>
+    <div class="seq">σ 5% → <em>2%</em> (n=31 · κ=0.001)
+Amdahl ceiling ×20.0 → <em>×50.0</em>
+Peak n* 30.82 → <em>31.30</em> (barely moves)</div>
+    <p class="why">Halving the serial section is major work, and the ceiling went up two and a half times. <strong>But the peak moved from 30.82 to 31.30 — half a thread.</strong> σ only appears inside <code>(1−σ)</code> in the peak formula. <strong>What sets how far you can scale is not σ but κ.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. Five times the coherency cost — the peak halves and more</h4>
+    <div class="seq">κ 0.001 → <em>0.005</em> (σ=5%)
+Peak n* 30.82 → <em>13.78</em> · best throughput 9.04 → <em>5.47</em></div>
+    <p class="why">Five times κ shrinks the peak by <strong>√5</strong>. So 14 threads is the best you get and anything beyond is a loss. <strong>Reducing κ comes before adding threads</strong> — removing shared state, sharding, splitting locks is that work.</p>
+  </div>
+
+  <h2>The two formulas</h2>
+
+  <div class="callout"><strong>Amdahl</strong> — <code>S(n) = n / (1 + σ(n−1))</code><br>With a serial fraction σ you never pass <code>1/σ</code>. <em>Returns diminish; they do not go negative.</em></div>
+
+  <div class="callout"><strong>USL</strong> — <code>C(n) = n / (1 + σ(n−1) + κn(n−1))</code><br>Add <code>κn(n−1)</code>: a cost per pair of threads, growing as n². <strong>Past some point the denominator outruns the numerator.</strong></div>
+
+  <p>That point is the peak. Differentiate, set to zero, and <code>n* = √((1−σ)/κ)</code>. Turn the dials and the "peak" meter always agrees with that formula.</p>
+
+  <table class="keytable">
+    <tr><th>κ</th><th>Peak n* (σ=5%)</th><th>Throughput there</th></tr>
+    <tr><td>0 (none)</td><td>∞ — no retrograde region</td><td>converges on ×20.0</td></tr>
+    <tr><td>0.0002</td><td>68.9</td><td>12.93</td></tr>
+    <tr><td>0.0005</td><td>43.6</td><td>10.74</td></tr>
+    <tr><td>0.001</td><td>30.8</td><td>9.04</td></tr>
+    <tr><td>0.005</td><td>13.8</td><td>5.47</td></tr>
+  </table>
+
+  <h2>Response time breaks first</h2>
+
+  <p>Throughput and response time are tied by <strong>Little's law</strong>: with n in flight and throughput C(n), one request takes <code>n / C(n)</code>.</p>
+
+  <p>That is where the asymmetry comes from. Past the peak <strong>the numerator keeps growing while the denominator shrinks</strong>, so latency degrades from both ends at once.</p>
+
+  <table class="keytable">
+    <tr><th>Threads</th><th>Throughput</th><th>Response time</th></tr>
+    <tr><td>16</td><td>8.04</td><td>×1.99</td></tr>
+    <tr><td><strong>31 (peak)</strong></td><td><strong>9.04</strong></td><td><strong>×3.43</strong></td></tr>
+    <tr><td>64</td><td>7.82 (−13%)</td><td>×8.18 (2.4×)</td></tr>
+    <tr><td>128</td><td>5.42 (−40%)</td><td>×23.61 (6.9×)</td></tr>
+    <tr><td>256</td><td>3.24 (−64%)</td><td>×79.03 (23×)</td></tr>
+  </table>
+
+  <div class="callout"><strong>−64% throughput, 23× latency.</strong> Which is why watching only the throughput dashboard reads this state as "a bit off". Users are experiencing something else entirely.</div>
+
+  <p>Little's law appears on this site for the fourth time — <a href="/en/connpool/">no. 8</a> for pool size, <a href="/en/throughput/">no. 19</a> for window × connections, <a href="/en/mqtt/">no. 5</a> for Receive Maximum, and threads here. <strong>Different units, same formula.</strong></p>
+
+  <h2>This edition's checkpoint is mathematics</h2>
+
+  <p>Other editions on this site had <strong>a checkpoint from outside</strong> — a second example in a paper, a table printed in an RFC, a total stated in a man page. This one is different.</p>
+
+  <div class="callout">The USL is not a specification but a <strong>fitted model</strong>. σ and κ are values you fit from measurements, not values I get to choose. So the coefficients are <strong>exposed as dials</strong>, and what gets verified is not <em>the coefficients</em> but <em>the two points the formulas produce</em>.</div>
+
+  <table class="keytable">
+    <tr><th>What is checked</th><th>How</th></tr>
+    <tr><td>The Amdahl ceiling</td><td><code>1/σ</code>. That no n ever passes it — checked across every combination</td></tr>
+    <tr><td>The USL peak</td><td><code>√((1−σ)/κ)</code>. That the rounded integer really is the maximum — checked exhaustively from 1 to 256</td></tr>
+    <tr><td>With κ=0</td><td>The USL must equal Amdahl <strong>exactly</strong></td></tr>
+  </table>
+
+  <p>So read this page as <strong>"if σ and κ look like this, the shape looks like that"</strong> — not as "my throughput is 9.04". You take away a shape, not a number.</p>
+
+  <h2>What this model assumes</h2>
+
+  <table class="keytable">
+    <tr><th>Assumption</th><th>What breaks if it fails</th></tr>
+    <tr><td>Steady state</td><td>Load is assumed constant. Bursts are <a href="/en/backlog/">no. 27</a>; not recovering afterwards is <a href="/en/retrystorm/">no. 14</a></td></tr>
+    <tr><td>σ and κ are constants</td><td>In reality they shift with load — lock contention changes character as threads grow, caches fall off a cliff once the working set grows. <strong>Do not extrapolate outside the fitted range</strong></td></tr>
+    <tr><td>Threads are homogeneous</td><td>Every thread is assumed to do the same work. Mixed workloads have no single σ</td></tr>
+    <tr><td>The measurement is honest</td><td>Throughput and latency are assumed measured correctly. On a closed-loop load generator, <a href="/en/omission/">no. 25</a> stacks on top of this — you may not be able to <strong>see</strong> the past-the-peak state at all</td></tr>
+  </table>
+
+  <h2>In the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>Measure first</td><td>Vary the thread count <strong>across several values</strong> and record throughput. Three points are enough to fit σ and κ. Measuring one point and then scaling up is how this starts</td></tr>
+    <tr><td>Am I past the peak?</td><td><strong>Try removing threads.</strong> If throughput goes up, you were past it. The test takes five minutes and almost nobody runs it</td></tr>
+    <tr><td>Which metric</td><td><strong>Response time</strong>, not throughput. Near the peak throughput bends gently and latency climbs steeply — watch the one that breaks first</td></tr>
+    <tr><td>Reducing κ</td><td>Remove shared state, shard, split locks, go thread-local. <strong>Halve κ and the peak rises by √2</strong> — do this before adding threads</td></tr>
+    <tr><td>Virtual threads</td><td>Creation cost goes to nearly zero but <strong>σ and κ are unchanged</strong>. If anything concurrency now grows so easily that overshooting the peak is easier — which is why putting a limit back with a semaphore or a connection pool becomes the answer (<a href="/en/connpool/">no. 8</a>)</td></tr>
+    <tr><td>Pool size</td><td>The same curve. Growing the pool raises κ on the database side and lowers the peak. <a href="/en/connpool/">No. 8</a>'s "a smaller pool is faster" is this formula in other words</td></tr>
+    <tr><td>No extrapolating</td><td>Do not measure 16, 32, 64 and predict 1024. <strong>κ is not constant across that range.</strong> Use the fit to decide where to measure next, not to predict</td></tr>
+  </table>
+
+  <p>If <a href="/en/connpool/">no. 8</a> was about why a smaller pool is faster, this page is about whether that optimum can be computed. The answer — <strong>yes, but only after you measure.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/connpool/"><span class="no">08</span><span><span class="t">A 17-millisecond query drains the pool</span><span class="why">The same curve as pool size — Little’s law for the third time.</span></span></a></li>
+      <li><a href="/en/omission/"><span class="no">25</span><span><span class="t">The load test never counted the 30 seconds it was frozen</span><span class="why">To measure whether you are past the peak, the measurement has to be honest first.</span></span></a></li>
+      <li><a href="/en/backpressure/"><span class="no">11</span><span><span class="t">Rejection is a signal, not a bug</span><span class="why">What to do with the requests that arrive past the peak.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">Index</a> · <a href="/usl/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uThreads:' thr', uNone:'none',
+  hint:'$1 threads · serial $2% · coherency $3 — throughput $4 · response ×$5',
+  cvY:'vertical = throughput (relative to one thread) · dashed line is the Amdahl ceiling ×$1',
+  cvCap:'ceiling ×$1', cvPeak:'peak n*=$1',
+  cvTip:'$1 threads — USL $2 · Amdahl $3',
+  lThreads:'$1 thr', lPeak:'(peak)',
+  tN:'threads', tUsl:'USL', tAm:'Amdahl', tLat:'response', tVs:'Amdahl/USL',
+  mNow:'throughput', mCap:'Amdahl ceiling', mPeak:'peak n*',
+  mBest:'throughput at peak', mLat:'response time', mAm:'if Amdahl',
+  vAmdahl:'<b>With zero coherency cost there is no retrograde region.</b> It merely converges on ×$1.<br>Throughput $2 · response ×$3 <span class="at">— adding threads never becomes a loss</span>',
+  vUnder:'<b>Still below the peak — $1 threads, peak is $2.</b> Throughput $3 (at the peak, $4)<br><span class="at">adding threads still pays here. The ceiling is ×$5</span>',
+  vAt:'<b>At the peak — $1 threads.</b> Throughput $2 · response ×$3<br><span class="at">adding more lowers throughput. The ceiling is ×$4 and is unreachable</span>',
+  vPast:'<b>Past the peak — $1 threads, peak is $2.</b> Throughput fell $3 → $4, a factor of <b>$5</b>.<br>Response time is <b>$6×</b> worse <span class="at">— a throughput graph will not show this</span>',
+  scene:[
+    'Start with a single thread. Coherency cost is zero, so the USL equals Amdahl exactly and the two curves overlap. There is no retrograde region in this state — adding threads never becomes a loss.',
+    'Push to 256. Throughput is 18.62 for 256 times the threads. With a serial fraction of 5% the ceiling is one over 0.05, twenty times, and no amount of threads passes it. That is Amdahl’s law: diminishing returns, never negative ones. Response time is already 13.75 times, though.',
+    'Now switch on a coherency cost of 0.001. The same 256 threads, and throughput drops from 18.62 to 3.24 — 5.7 times lower. That term is paid per pair of threads, so it enters as n times n minus one and dominates the denominator as n grows. Look at the curves: blue Amdahl keeps climbing while green USL has already bent and come back down.',
+    'Bring the thread count down to the peak, 31. Removing threads took throughput from 3.24 to 9.04 — 2.79 times. And response time went from 79.03 to 3.43, twenty-three times better. The peak is the square root of one minus sigma over kappa: root of 0.95 over 0.001, which is 30.82.',
+    'Overshoot slightly, to 64. Throughput only falls from 9.04 to 7.82, thirteen percent — a throughput dashboard will not flag it. But response time goes from 3.43 to 8.18, 2.4 times. Near the peak the two metrics come apart: throughput bends gently, latency climbs steeply.',
+    'Halve the serial fraction, from 5% to 2%. Major work, and the ceiling goes from twenty to fifty times. But look at the peak — it moved from 30.82 to 31.30, half a thread. Sigma only appears inside one-minus-sigma in the peak formula. What sets how far you can scale is not sigma but kappa.',
+    'Finally raise the coherency cost five-fold to 0.005. The peak shrinks from 30.82 to 13.78 — by root five. So fourteen threads is the best available and anything more is a loss. Reducing kappa before adding threads is the conclusion of this dial: removing shared state, sharding, splitting locks.'
+  ],
+};
+</script>
+<script src="/shared/usl-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Adding threads made it slower",
+  "description": "Going from 31 threads to 256 drops throughput from 9.04 to 3.24 — a factor of 2.79. But response time becomes 23 times worse, which is the part a throughput graph never shows.",
+  "url": "https://lab.vermilion19.com/en/usl/",
+  "inLanguage": "en",
+  "datePublished": "2026-08-25",
+  "dateModified": "2026-08-25",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Adding threads made it slower"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

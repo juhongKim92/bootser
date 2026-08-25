@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>스레드를 늘렸더니 느려졌다 — Amdahl 과 USL</title>
+<meta name="description" content="스레드를 31개에서 256개로 늘리면 처리량이 9.04 에서 3.24 로 떨어집니다. 2.79배 하락이에요. 그런데 응답시간은 23배가 됩니다 — 처리량 그래프만 보면 안 보이는 쪽입니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/usl/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/usl/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/usl/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/usl/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="스레드를 늘렸더니 느려졌다">
+<meta property="og:description" content="정점을 넘으면 처리량이 줄어듭니다. 응답시간은 그보다 훨씬 빨리 나빠져요.">
+<meta property="og:url" content="https://lab.vermilion19.com/usl/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="스레드를 늘렸더니 느려졌다">
+<meta name="twitter:description" content="Amdahl 만 보면 늘리는 게 언제나 이득으로 보입니다. 두 곡선이 갈리는 자리가 이 페이지입니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/usl-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/usl/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>스레드를 늘렸더니 느려졌다</h1>
+  <p class="lede">스레드를 31개에서 256개로 늘리면 처리량이 <strong>9.04 에서 3.24 로 떨어집니다.</strong> 2.79배 하락이에요. 그런데 응답시간은 그보다 훨씬 나쁩니다 — <strong>23배</strong>가 됩니다. 처리량 그래프만 보면 "조금 나빠졌네" 인데, 사용자가 겪는 것은 뒤쪽입니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sN">동시 스레드 <em>n</em></label>
+          <span class="v" id="vN">1<small>개</small></span>
+          <input type="range" id="sN" min="1" max="256" step="1" value="1" aria-label="동시에 도는 스레드 수">
+        </div>
+        <div class="dial">
+          <label for="sS">직렬 비율 <em>σ</em></label>
+          <span class="v" id="vS">5<small>%</small></span>
+          <input type="range" id="sS" min="0" max="4" step="1" value="2" aria-label="병렬화할 수 없는 구간의 비율">
+        </div>
+        <div class="dial">
+          <label for="sK">일관성 비용 <em>κ</em></label>
+          <span class="v" id="vK">0.001</span>
+          <input type="range" id="sK" min="0" max="4" step="1" value="3" aria-label="스레드끼리 서로 조율하는 비용">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->스레드 1개 · 직렬 5.0% · 일관성 비용 0 — 처리량 1.00 · 응답시간 ×1.00<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">두 곡선 — 스레드 수에 따른 처리량</span>
+      <div class="board">
+        <div class="curvey" id="curveY"><!--pr-->세로 = 처리량 (스레드 1개 대비) · 점선이 Amdahl 상한 ×20.0<!--/pr--></div>
+        <div class="curve" id="curve"><!--pr--><div class="col here" style="left:0.00%" title="스레드 1개 — USL 1.00 · Amdahl 1.00"><div class="am" style="height:4.81%"></div><div class="us" style="height:4.81%"></div></div><div class="col here" style="left:1.67%" title="스레드 1개 — USL 1.00 · Amdahl 1.00"><div class="am" style="height:4.81%"></div><div class="us" style="height:4.81%"></div></div><div class="col here" style="left:3.33%" title="스레드 1개 — USL 1.00 · Amdahl 1.00"><div class="am" style="height:4.81%"></div><div class="us" style="height:4.81%"></div></div><div class="col here" style="left:5.00%" title="스레드 1개 — USL 1.00 · Amdahl 1.00"><div class="am" style="height:4.81%"></div><div class="us" style="height:4.81%"></div></div><div class="col here" style="left:6.67%" title="스레드 2개 — USL 1.90 · Amdahl 1.90"><div class="am" style="height:9.16%"></div><div class="us" style="height:9.16%"></div></div><div class="col here" style="left:8.33%" title="스레드 2개 — USL 1.90 · Amdahl 1.90"><div class="am" style="height:9.16%"></div><div class="us" style="height:9.16%"></div></div><div class="col here" style="left:10.00%" title="스레드 2개 — USL 1.90 · Amdahl 1.90"><div class="am" style="height:9.16%"></div><div class="us" style="height:9.16%"></div></div><div class="col here" style="left:11.67%" title="스레드 2개 — USL 1.90 · Amdahl 1.90"><div class="am" style="height:9.16%"></div><div class="us" style="height:9.16%"></div></div><div class="col here" style="left:13.33%" title="스레드 2개 — USL 1.90 · Amdahl 1.90"><div class="am" style="height:9.16%"></div><div class="us" style="height:9.16%"></div></div><div class="col" style="left:15.00%" title="스레드 3개 — USL 2.73 · Amdahl 2.73"><div class="am" style="height:13.11%"></div><div class="us" style="height:13.11%"></div></div><div class="col" style="left:16.67%" title="스레드 3개 — USL 2.73 · Amdahl 2.73"><div class="am" style="height:13.11%"></div><div class="us" style="height:13.11%"></div></div><div class="col" style="left:18.33%" title="스레드 3개 — USL 2.73 · Amdahl 2.73"><div class="am" style="height:13.11%"></div><div class="us" style="height:13.11%"></div></div><div class="col" style="left:20.00%" title="스레드 3개 — USL 2.73 · Amdahl 2.73"><div class="am" style="height:13.11%"></div><div class="us" style="height:13.11%"></div></div><div class="col" style="left:21.67%" title="스레드 4개 — USL 3.48 · Amdahl 3.48"><div class="am" style="height:16.72%"></div><div class="us" style="height:16.72%"></div></div><div class="col" style="left:23.33%" title="스레드 4개 — USL 3.48 · Amdahl 3.48"><div class="am" style="height:16.72%"></div><div class="us" style="height:16.72%"></div></div><div class="col" style="left:25.00%" title="스레드 4개 — USL 3.48 · Amdahl 3.48"><div class="am" style="height:16.72%"></div><div class="us" style="height:16.72%"></div></div><div class="col" style="left:26.67%" title="스레드 5개 — USL 4.17 · Amdahl 4.17"><div class="am" style="height:20.03%"></div><div class="us" style="height:20.03%"></div></div><div class="col" style="left:28.33%" title="스레드 5개 — USL 4.17 · Amdahl 4.17"><div class="am" style="height:20.03%"></div><div class="us" style="height:20.03%"></div></div><div class="col" style="left:30.00%" title="스레드 6개 — USL 4.80 · Amdahl 4.80"><div class="am" style="height:23.08%"></div><div class="us" style="height:23.08%"></div></div><div class="col" style="left:31.67%" title="스레드 6개 — USL 4.80 · Amdahl 4.80"><div class="am" style="height:23.08%"></div><div class="us" style="height:23.08%"></div></div><div class="col" style="left:33.33%" title="스레드 7개 — USL 5.38 · Amdahl 5.38"><div class="am" style="height:25.89%"></div><div class="us" style="height:25.89%"></div></div><div class="col" style="left:35.00%" title="스레드 8개 — USL 5.93 · Amdahl 5.93"><div class="am" style="height:28.49%"></div><div class="us" style="height:28.49%"></div></div><div class="col" style="left:36.67%" title="스레드 8개 — USL 5.93 · Amdahl 5.93"><div class="am" style="height:28.49%"></div><div class="us" style="height:28.49%"></div></div><div class="col" style="left:38.33%" title="스레드 9개 — USL 6.43 · Amdahl 6.43"><div class="am" style="height:30.91%"></div><div class="us" style="height:30.91%"></div></div><div class="col" style="left:40.00%" title="스레드 10개 — USL 6.90 · Amdahl 6.90"><div class="am" style="height:33.16%"></div><div class="us" style="height:33.16%"></div></div><div class="col" style="left:41.67%" title="스레드 11개 — USL 7.33 · Amdahl 7.33"><div class="am" style="height:35.26%"></div><div class="us" style="height:35.26%"></div></div><div class="col" style="left:43.33%" title="스레드 12개 — USL 7.74 · Amdahl 7.74"><div class="am" style="height:37.22%"></div><div class="us" style="height:37.22%"></div></div><div class="col" style="left:45.00%" title="스레드 13개 — USL 8.13 · Amdahl 8.13"><div class="am" style="height:39.06%"></div><div class="us" style="height:39.06%"></div></div><div class="col" style="left:46.67%" title="스레드 15개 — USL 8.82 · Amdahl 8.82"><div class="am" style="height:42.42%"></div><div class="us" style="height:42.42%"></div></div><div class="col" style="left:48.33%" title="스레드 16개 — USL 9.14 · Amdahl 9.14"><div class="am" style="height:43.96%"></div><div class="us" style="height:43.96%"></div></div><div class="col" style="left:50.00%" title="스레드 18개 — USL 9.73 · Amdahl 9.73"><div class="am" style="height:46.78%"></div><div class="us" style="height:46.78%"></div></div><div class="col" style="left:51.67%" title="스레드 19개 — USL 10.00 · Amdahl 10.00"><div class="am" style="height:48.08%"></div><div class="us" style="height:48.08%"></div></div><div class="col" style="left:53.33%" title="스레드 21개 — USL 10.50 · Amdahl 10.50"><div class="am" style="height:50.48%"></div><div class="us" style="height:50.48%"></div></div><div class="col" style="left:55.00%" title="스레드 23개 — USL 10.95 · Amdahl 10.95"><div class="am" style="height:52.66%"></div><div class="us" style="height:52.66%"></div></div><div class="col" style="left:56.67%" title="스레드 25개 — USL 11.36 · Amdahl 11.36"><div class="am" style="height:54.63%"></div><div class="us" style="height:54.63%"></div></div><div class="col" style="left:58.33%" title="스레드 28개 — USL 11.91 · Amdahl 11.91"><div class="am" style="height:57.28%"></div><div class="us" style="height:57.28%"></div></div><div class="col" style="left:60.00%" title="스레드 31개 — USL 12.40 · Amdahl 12.40"><div class="am" style="height:59.62%"></div><div class="us" style="height:59.62%"></div></div><div class="col" style="left:61.67%" title="스레드 34개 — USL 12.83 · Amdahl 12.83"><div class="am" style="height:61.68%"></div><div class="us" style="height:61.68%"></div></div><div class="col" style="left:63.33%" title="스레드 37개 — USL 13.21 · Amdahl 13.21"><div class="am" style="height:63.53%"></div><div class="us" style="height:63.53%"></div></div><div class="col" style="left:65.00%" title="스레드 40개 — USL 13.56 · Amdahl 13.56"><div class="am" style="height:65.19%"></div><div class="us" style="height:65.19%"></div></div><div class="col" style="left:66.67%" title="스레드 44개 — USL 13.97 · Amdahl 13.97"><div class="am" style="height:67.16%"></div><div class="us" style="height:67.16%"></div></div><div class="col" style="left:68.33%" title="스레드 49개 — USL 14.41 · Amdahl 14.41"><div class="am" style="height:69.29%"></div><div class="us" style="height:69.29%"></div></div><div class="col" style="left:70.00%" title="스레드 53개 — USL 14.72 · Amdahl 14.72"><div class="am" style="height:70.78%"></div><div class="us" style="height:70.78%"></div></div><div class="col" style="left:71.67%" title="스레드 58개 — USL 15.06 · Amdahl 15.06"><div class="am" style="height:72.43%"></div><div class="us" style="height:72.43%"></div></div><div class="col" style="left:73.33%" title="스레드 64개 — USL 15.42 · Amdahl 15.42"><div class="am" style="height:74.14%"></div><div class="us" style="height:74.14%"></div></div><div class="col" style="left:75.00%" title="스레드 70개 — USL 15.73 · Amdahl 15.73"><div class="am" style="height:75.63%"></div><div class="us" style="height:75.63%"></div></div><div class="col" style="left:76.67%" title="스레드 77개 — USL 16.04 · Amdahl 16.04"><div class="am" style="height:77.12%"></div><div class="us" style="height:77.12%"></div></div><div class="col" style="left:78.33%" title="스레드 84개 — USL 16.31 · Amdahl 16.31"><div class="am" style="height:78.42%"></div><div class="us" style="height:78.42%"></div></div><div class="col" style="left:80.00%" title="스레드 93개 — USL 16.61 · Amdahl 16.61"><div class="am" style="height:79.84%"></div><div class="us" style="height:79.84%"></div></div><div class="col" style="left:81.67%" title="스레드 102개 — USL 16.86 · Amdahl 16.86"><div class="am" style="height:81.06%"></div><div class="us" style="height:81.06%"></div></div><div class="col" style="left:83.33%" title="스레드 111개 — USL 17.08 · Amdahl 17.08"><div class="am" style="height:82.10%"></div><div class="us" style="height:82.10%"></div></div><div class="col" style="left:85.00%" title="스레드 122개 — USL 17.30 · Amdahl 17.30"><div class="am" style="height:83.20%"></div><div class="us" style="height:83.20%"></div></div><div class="col" style="left:86.67%" title="스레드 134개 — USL 17.52 · Amdahl 17.52"><div class="am" style="height:84.21%"></div><div class="us" style="height:84.21%"></div></div><div class="col" style="left:88.33%" title="스레드 147개 — USL 17.71 · Amdahl 17.71"><div class="am" style="height:85.15%"></div><div class="us" style="height:85.15%"></div></div><div class="col" style="left:90.00%" title="스레드 161개 — USL 17.89 · Amdahl 17.89"><div class="am" style="height:86.00%"></div><div class="us" style="height:86.00%"></div></div><div class="col" style="left:91.67%" title="스레드 177개 — USL 18.06 · Amdahl 18.06"><div class="am" style="height:86.83%"></div><div class="us" style="height:86.83%"></div></div><div class="col" style="left:93.33%" title="스레드 194개 — USL 18.22 · Amdahl 18.22"><div class="am" style="height:87.58%"></div><div class="us" style="height:87.58%"></div></div><div class="col" style="left:95.00%" title="스레드 213개 — USL 18.36 · Amdahl 18.36"><div class="am" style="height:88.28%"></div><div class="us" style="height:88.28%"></div></div><div class="col" style="left:96.67%" title="스레드 233개 — USL 18.49 · Amdahl 18.49"><div class="am" style="height:88.90%"></div><div class="us" style="height:88.90%"></div></div><div class="col" style="left:98.33%" title="스레드 256개 — USL 18.62 · Amdahl 18.62"><div class="am" style="height:89.51%"></div><div class="us" style="height:89.51%"></div></div><div class="cap" style="bottom:96.15%"></div><div class="caplbl" style="bottom:97.65%">상한 ×20.0</div><!--/pr--></div>
+        <div class="curvex" id="curveX"><!--pr--><span>1</span><span>16</span><span>256</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="ami"></i>Amdahl — 계속 오른다</span>
+          <span><i class="usi"></i>USL — 정점에서 꺾인다</span>
+          <span><i class="peaki"></i>정점 n*</span>
+          <span><i class="capi"></i>Amdahl 상한 1/σ</span>
+        </div>
+
+        <div class="lat" id="lat"><!--pr--><div class="row  on"><span class="rn">1개</span><span class="bar" style="width:7.3%"></span><span class="rv">×1.00</span></div><div class="row "><span class="rn">8개</span><span class="bar" style="width:9.8%"></span><span class="rv">×1.35</span></div><div class="row "><span class="rn">16개</span><span class="bar" style="width:12.7%"></span><span class="rv">×1.75</span></div><div class="row "><span class="rn">32개</span><span class="bar" style="width:18.5%"></span><span class="rv">×2.55</span></div><div class="row "><span class="rn">64개</span><span class="bar" style="width:30.2%"></span><span class="rv">×4.15</span></div><div class="row "><span class="rn">128개</span><span class="bar" style="width:53.5%"></span><span class="rv">×7.35</span></div><div class="row "><span class="rn">256개</span><span class="bar" style="width:100.0%"></span><span class="rv">×13.75</span></div><!--/pr--></div>
+        <table class="four" id="four"><!--pr--><tr><th>스레드</th><th>USL</th><th>Amdahl</th><th>응답시간</th><th>Amdahl/USL</th></tr><tr class="on"><td>1</td><td class="good">1.00</td><td>1.00</td><td class="">×1.00</td><td>1.00</td></tr><tr class=""><td>8</td><td class="good">5.93</td><td>5.93</td><td class="">×1.35</td><td>1.00</td></tr><tr class=""><td>16</td><td class="good">9.14</td><td>9.14</td><td class="">×1.75</td><td>1.00</td></tr><tr class=""><td>32</td><td class="good">12.55</td><td>12.55</td><td class="">×2.55</td><td>1.00</td></tr><tr class=""><td>64</td><td class="good">15.42</td><td>15.42</td><td class="">×4.15</td><td>1.00</td></tr><tr class=""><td>128</td><td class="good">17.41</td><td>17.41</td><td class="">×7.35</td><td>1.00</td></tr><tr class=""><td>256</td><td class="good">18.62</td><td>18.62</td><td class="">×13.75</td><td>1.00</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">처리량</span><span class="n">1.00</span></div><div class="m "><span class="k">Amdahl 상한</span><span class="n">×20.0</span></div><div class="m "><span class="k">정점 n*</span><span class="n">∞</span></div><div class="m "><span class="k">정점의 처리량</span><span class="n">—</span></div><div class="m "><span class="k">응답시간</span><span class="n">×1.00</span></div><div class="m "><span class="k">Amdahl 이면</span><span class="n">1.00</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>일관성 비용이 0 이면 역행이 없다.</b> 상한 ×20.0 에 수렴할 뿐이다.<br>지금 처리량 1.00 · 응답시간 ×1.00 <span class="at">— 늘리는 것이 손해가 되지는 않는다</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>기호 세 개</h2>
+
+  <table class="keytable">
+    <tr><th>기호</th><th>뜻</th></tr>
+    <tr><td><strong>n</strong></td><td><strong>동시 스레드 수.</strong> 스레드 풀 크기, 워커 수, 동시 요청 수 — 무엇을 늘리고 있는지 그 개수입니다</td></tr>
+    <tr><td><strong>σ</strong> (시그마)</td><td><strong>직렬 비율.</strong> 아무리 스레드를 늘려도 <em>한 번에 하나씩</em>만 통과하는 구간의 비율. 락, 단일 커넥션, 순서 보장 큐 같은 것들이에요</td></tr>
+    <tr><td><strong>κ</strong> (카파)</td><td><strong>일관성 비용.</strong> 스레드끼리 <em>서로</em> 조율하는 비용입니다 — 캐시 라인 무효화, 락 경합, 코히런시 트래픽. 스레드 쌍의 수만큼 늘어나서 <code>n(n−1)</code> 로 들어갑니다</td></tr>
+  </table>
+
+  <p>σ 와 κ 는 <strong>제가 고른 상수가 아니라 손잡이</strong>입니다. 당신 시스템의 값은 부하 시험으로 적합시켜야 해요 — 이 페이지가 하는 일은 <em>그 두 값이 정해지면 무슨 모양이 나오는가</em>를 보여주는 것입니다.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 스레드 1개 — 출발점</h4>
+    <div class="seq">n=1 · σ=5% · κ=없음(0)
+처리량 <em>1.00</em> · 응답시간 <em>×1.00</em></div>
+    <p class="why">기준점입니다. κ 를 0 으로 두면 USL 이 Amdahl 과 정확히 같아져요 — 두 곡선이 겹칩니다. <strong>κ 가 0 이면 역행이 없습니다.</strong> 스레드를 늘리는 것이 언제나 이득이거나, 최소한 손해는 아닙니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 256개까지 늘린다 (κ=0) — 상한에 부딪힌다</h4>
+    <div class="seq">n 1 → <em>256</em> (κ=0 그대로)
+처리량 1.00 → <em>18.62</em> · Amdahl 상한 <em>×20.0</em>
+응답시간 <em>×13.75</em></div>
+    <p class="why">스레드를 256배로 늘렸는데 처리량은 18.62배입니다. <strong>σ=5% 면 상한이 1/0.05 = 20배</strong>이고, 스레드를 무한히 늘려도 그 값을 못 넘어요. 여기까지가 Amdahl 의 법칙입니다 — <strong>수익이 줄어들 뿐, 마이너스는 아닙니다.</strong> 응답시간은 이미 13.75배가 됐지만요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 일관성 비용을 켠다 — 처리량이 3.24로 떨어진다</h4>
+    <div class="seq">κ 0 → <em>0.001</em> (n=256 그대로)
+처리량 18.62 → <em>3.24</em> · Amdahl 은 여전히 18.62
+정점 <em>n*=31</em> · 응답시간 <em>×79.03</em></div>
+    <p class="why">같은 스레드 수인데 처리량이 <strong>5.7배 낮습니다.</strong> κ 는 스레드 <em>쌍</em>의 수만큼 드는 비용이라 <code>n(n−1)</code> 로 들어가고, n 이 커지면 이 항이 분모를 지배합니다. <strong>Amdahl 곡선(파란색)은 계속 오르고 USL(초록색)은 이미 꺾여 내려온 상태예요.</strong> 두 곡선이 갈리는 것을 보세요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. 정점으로 내린다 — 스레드를 8배 줄이고 처리량 2.8배</h4>
+    <div class="seq">n 256 → <em>31</em> (= 정점 n*)
+처리량 3.24 → <em>9.04</em> (<em>2.79배</em>)
+응답시간 79.03 → <em>×3.43</em> (<em>23배</em> 개선)</div>
+    <p class="why">스레드를 <strong>줄여서</strong> 처리량이 2.79배가 됐습니다. 그리고 응답시간은 <strong>23배</strong> 좋아졌어요. 이게 이 페이지의 핵심입니다 — <strong>정점은 <code>n* = √((1−σ)/κ)</code> 로 계산됩니다.</strong> σ=5%, κ=0.001 이면 √(0.95/0.001) = 30.82 예요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 정점을 조금 넘겨본다 — 처리량은 거의 그대로인데</h4>
+    <div class="seq">n 31 → <em>64</em>
+처리량 9.04 → <em>7.82</em> (13% 하락)
+응답시간 3.43 → <em>×8.18</em> (<em>2.4배 악화</em>)</div>
+    <p class="why">처리량은 13% 밖에 안 떨어졌습니다. <strong>처리량 대시보드만 보면 눈에 안 띄어요.</strong> 그런데 응답시간은 2.4배가 됐습니다. <strong>정점 근처에서 두 지표가 어긋나기 시작합니다</strong> — 처리량은 완만하게 꺾이고 응답시간은 급하게 오릅니다. 리틀의 법칙 때문이에요(아래).</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. 직렬 비율을 반으로 — 상한만 오르고 정점은 그대로</h4>
+    <div class="seq">σ 5% → <em>2%</em> (n=31 · κ=0.001)
+Amdahl 상한 ×20.0 → <em>×50.0</em>
+정점 n* 30.82 → <em>31.30</em> (거의 안 움직인다)</div>
+    <p class="why">직렬 구간을 반으로 줄이는 것은 큰 작업입니다. 상한은 두 배 반이 됐어요. <strong>그런데 정점은 30.82 에서 31.30 으로 0.5 밖에 안 움직입니다.</strong> 정점 식에서 σ 는 <code>(1−σ)</code> 안에만 들어가니까요. <strong>몇 개까지 늘릴 수 있는가를 정하는 것은 σ 가 아니라 κ 입니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. 일관성 비용을 5배로 — 정점이 절반 아래로</h4>
+    <div class="seq">κ 0.001 → <em>0.005</em> (σ=5%)
+정점 n* 30.82 → <em>13.78</em> · 최대 처리량 9.04 → <em>5.47</em></div>
+    <p class="why">κ 가 5배가 되면 정점은 <strong>√5 배 작아집니다</strong>(제곱근이니까요). 그래서 14개 스레드가 최선이고, 그 이상은 손해예요. <strong>κ 를 줄이는 것이 스레드를 늘리는 것보다 먼저입니다</strong> — 공유 상태를 없애거나, 샤딩하거나, 락을 쪼개는 일이 그것입니다.</p>
+  </div>
+
+  <h2>두 식</h2>
+
+  <p>이 페이지는 식 두 개만 씁니다.</p>
+
+  <div class="callout"><strong>Amdahl</strong> — <code>S(n) = n / (1 + σ(n−1))</code><br>직렬 구간이 σ 면 아무리 늘려도 <code>1/σ</code> 를 못 넘는다. <em>수익이 줄어들 뿐 마이너스는 아니다.</em></div>
+
+  <div class="callout"><strong>USL</strong> — <code>C(n) = n / (1 + σ(n−1) + κn(n−1))</code><br>여기에 <code>κn(n−1)</code> 이 붙는다. 스레드 <em>쌍</em>의 수만큼 드는 비용이라 n² 로 자라고, <strong>어느 지점부터 분모가 분자를 앞지른다.</strong></div>
+
+  <p>그 지점이 정점입니다. 미분해서 0 이 되는 곳을 풀면 <code>n* = √((1−σ)/κ)</code> 가 나와요. 손잡이를 돌려 보면 미터의 "정점" 값이 항상 이 식과 맞습니다.</p>
+
+  <table class="keytable">
+    <tr><th>κ</th><th>정점 n* (σ=5%)</th><th>그때 처리량</th></tr>
+    <tr><td>0 (없음)</td><td>∞ — 역행이 없다</td><td>상한 ×20.0 에 수렴</td></tr>
+    <tr><td>0.0002</td><td>68.9</td><td>12.93</td></tr>
+    <tr><td>0.0005</td><td>43.6</td><td>10.74</td></tr>
+    <tr><td>0.001</td><td>30.8</td><td>9.04</td></tr>
+    <tr><td>0.005</td><td>13.8</td><td>5.47</td></tr>
+  </table>
+
+  <h2>응답시간이 먼저 무너진다</h2>
+
+  <p>처리량과 응답시간은 <strong>리틀의 법칙</strong>으로 묶여 있습니다 — 동시에 n 개가 돌고 있고 처리량이 C(n) 이면, 하나가 걸리는 시간은 <code>n / C(n)</code> 입니다.</p>
+
+  <p>여기서 비대칭이 생깁니다. 정점을 넘어가면 <strong>분자 n 은 계속 커지는데 분모 C(n) 은 줄어듭니다.</strong> 그래서 응답시간은 두 배로 나빠져요.</p>
+
+  <table class="keytable">
+    <tr><th>스레드</th><th>처리량</th><th>응답시간</th></tr>
+    <tr><td>16</td><td>8.04</td><td>×1.99</td></tr>
+    <tr><td><strong>31 (정점)</strong></td><td><strong>9.04</strong></td><td><strong>×3.43</strong></td></tr>
+    <tr><td>64</td><td>7.82 (−13%)</td><td>×8.18 (2.4배)</td></tr>
+    <tr><td>128</td><td>5.42 (−40%)</td><td>×23.61 (6.9배)</td></tr>
+    <tr><td>256</td><td>3.24 (−64%)</td><td>×79.03 (23배)</td></tr>
+  </table>
+
+  <div class="callout"><strong>처리량 −64% 에 응답시간 23배.</strong> 그래서 처리량 대시보드만 보고 있으면 이 상태를 "약간 나쁨" 으로 읽습니다. 사용자는 전혀 다른 것을 겪고 있어요.</div>
+
+  <p>리틀의 법칙이 이 사이트에 네 번째로 나옵니다 — <a href="/connpool/">8번</a>은 커넥션 풀 크기, <a href="/throughput/">19번</a>은 창×커넥션, <a href="/mqtt/">5번</a>은 Receive Maximum, 이 편은 스레드입니다. <strong>단위만 다르고 식은 같습니다.</strong></p>
+
+  <h2>이 편의 검산점은 수학이다</h2>
+
+  <p>이 사이트의 다른 편들은 <strong>바깥에서 온 검산점</strong>이 있었습니다 — 논문의 두 번째 예시, RFC 가 인쇄한 표, man page 의 합계 같은 것들이요. 이 편은 다릅니다.</p>
+
+  <div class="callout">USL 은 명세가 아니라 <strong>적합 모델</strong>입니다. σ 와 κ 는 실측으로 적합시키는 값이고, 제가 정할 수 있는 게 아닙니다. 그래서 <strong>계수를 손잡이로 내놓고</strong>, 검증하는 대상을 <em>계수</em>가 아니라 <em>식이 만드는 두 지점</em>으로 뒀습니다.</div>
+
+  <table class="keytable">
+    <tr><th>무엇을 검산하나</th><th>어떻게</th></tr>
+    <tr><td>Amdahl 상한</td><td><code>1/σ</code>. n 을 아무리 키워도 이 값을 넘지 않는지 — 전 조합에서 확인합니다</td></tr>
+    <tr><td>USL 정점</td><td><code>√((1−σ)/κ)</code>. 그 정수 근처가 실제로 최댓값인지 — 1부터 256까지 전수로 확인합니다</td></tr>
+    <tr><td>κ=0 이면</td><td>USL 이 Amdahl 과 <strong>정확히</strong> 같아야 합니다</td></tr>
+  </table>
+
+  <p>그러니 이 페이지를 읽을 때 이렇게 보세요 — <strong>"내 시스템의 처리량이 몇이다" 가 아니라 "σ 와 κ 가 이러면 모양이 이렇게 된다"</strong>. 숫자를 가져가는 게 아니라 모양을 가져가는 편입니다.</p>
+
+  <h2>이 모델이 가정하는 것</h2>
+
+  <table class="keytable">
+    <tr><th>가정</th><th>깨지면 어떻게 되나</th></tr>
+    <tr><td>정상 상태</td><td>부하가 일정하다고 봤습니다. 몰리는 구간은 <a href="/backlog/">27번</a>이고, 무너진 뒤 안 돌아오는 것은 <a href="/retrystorm/">14번</a>입니다</td></tr>
+    <tr><td>σ 와 κ 가 상수</td><td>실제로는 부하에 따라 변합니다 — 락 경합은 스레드가 늘면 성질이 바뀌고, 캐시는 워킹셋이 커지면 갑자기 나빠집니다. <strong>적합 구간 밖으로 외삽하면 안 됩니다</strong></td></tr>
+    <tr><td>스레드가 균질</td><td>모든 스레드가 같은 일을 한다고 봤습니다. 섞여 있으면 σ 가 하나로 안 잡힙니다</td></tr>
+    <tr><td>측정이 정직하다</td><td>처리량과 응답시간을 제대로 재고 있다고 봤습니다. 폐루프 부하 생성기로 재고 있다면 <a href="/omission/">25번</a>의 문제가 이 위에 겹칩니다 — <strong>정점을 넘은 상태를 아예 못 볼 수 있습니다</strong></td></tr>
+  </table>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>먼저 재기</td><td>스레드 수를 <strong>여러 값으로 바꿔가며</strong> 처리량을 재세요. 점 세 개면 σ 와 κ 를 적합시킬 수 있습니다. 한 점만 재고 늘리는 것이 이 문제의 시작입니다</td></tr>
+    <tr><td>정점을 넘었는지 보는 법</td><td><strong>스레드를 줄여 보는 것</strong>이 가장 빠릅니다. 줄였는데 처리량이 오르면 넘은 겁니다. 이 검사는 5분이면 되고 대부분 안 해봅니다</td></tr>
+    <tr><td>어느 지표를 보나</td><td>처리량이 아니라 <strong>응답시간</strong>. 정점 근처에서 처리량은 완만하고 응답시간은 급합니다 — 먼저 무너지는 쪽을 봐야 합니다</td></tr>
+    <tr><td>κ 를 줄이는 일</td><td>공유 상태를 없애기, 샤딩, 락 쪼개기, 스레드 로컬. <strong>κ 를 반으로 줄이면 정점이 √2 배 올라갑니다</strong> — 스레드를 늘리기 전에 이쪽이 먼저입니다</td></tr>
+    <tr><td>가상 스레드</td><td>생성 비용은 거의 0 이 되지만 <strong>σ 와 κ 는 그대로</strong>입니다. 오히려 동시성이 쉽게 커져서 정점을 넘기기 쉬워집니다 — 그래서 세마포어나 커넥션 풀로 <em>제한을 도로 거는</em> 것이 답이 됩니다(<a href="/connpool/">8번</a>)</td></tr>
+    <tr><td>커넥션 풀 크기</td><td>같은 곡선입니다. 풀을 키우면 DB 쪽 κ 가 올라가고 정점이 내려옵니다. <a href="/connpool/">8번</a>의 "작은 풀이 더 빠른" 이야기가 이 식의 다른 표현이에요</td></tr>
+    <tr><td>외삽 금지</td><td>16·32·64 를 재고 1024 를 예측하지 마세요. <strong>κ 는 그 구간에서 상수가 아닙니다.</strong> 예측이 아니라 다음에 어디를 재볼지 정하는 데 쓰세요</td></tr>
+  </table>
+
+  <p><a href="/connpool/">8번</a>이 <em>왜 작은 풀이 더 빠른가</em>였다면 이 페이지는 <em>그 최적점이 어디인지 계산할 수 있는가</em>입니다. 답은 — <strong>계산할 수 있지만, 그러려면 먼저 재야 합니다.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/connpool/"><span class="no">08</span><span><span class="t">17밀리초 쿼리가 커넥션 풀을 말린다</span><span class="why">같은 곡선을 커넥션 풀 크기로 — 리틀의 법칙이 세 번째로 나옵니다.</span></span></a></li>
+      <li><a href="/omission/"><span class="no">25</span><span><span class="t">멈춰 있던 30초를 부하 테스트가 세지 않았다</span><span class="why">정점을 넘겼는지 재려면 측정이 먼저 정직해야 합니다.</span></span></a></li>
+      <li><a href="/backpressure/"><span class="no">11</span><span><span class="t">거부는 버그가 아니라 신호다</span><span class="why">정점 위에서 들어오는 요청을 어떻게 할 것인가.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/usl/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uThreads:'개', uNone:'없음',
+  hint:'스레드 $1개 · 직렬 $2% · 일관성 비용 $3 — 처리량 $4 · 응답시간 ×$5',
+  cvY:'세로 = 처리량 (스레드 1개 대비) · 점선이 Amdahl 상한 ×$1',
+  cvCap:'상한 ×$1', cvPeak:'정점 n*=$1',
+  cvTip:'스레드 $1개 — USL $2 · Amdahl $3',
+  lThreads:'$1개', lPeak:'(정점)',
+  tN:'스레드', tUsl:'USL', tAm:'Amdahl', tLat:'응답시간', tVs:'Amdahl/USL',
+  mNow:'처리량', mCap:'Amdahl 상한', mPeak:'정점 n*',
+  mBest:'정점의 처리량', mLat:'응답시간', mAm:'Amdahl 이면',
+  vAmdahl:'<b>일관성 비용이 0 이면 역행이 없다.</b> 상한 ×$1 에 수렴할 뿐이다.<br>지금 처리량 $2 · 응답시간 ×$3 <span class="at">— 늘리는 것이 손해가 되지는 않는다</span>',
+  vUnder:'<b>아직 정점 아래다 — 스레드 $1, 정점은 $2.</b> 처리량 $3 (정점에서 $4)<br><span class="at">여기서는 늘리는 것이 이득이다. 상한은 ×$5</span>',
+  vAt:'<b>정점에 있다 — 스레드 $1.</b> 처리량 $2 · 응답시간 ×$3<br><span class="at">여기서 더 늘리면 처리량이 준다. 상한은 ×$4 이지만 도달할 수 없다</span>',
+  vPast:'<b>정점을 넘었다 — 스레드 $1, 정점은 $2.</b> 처리량 $3 → $4 로 <b>$5배</b> 떨어졌다.<br>응답시간은 <b>$6배</b> 나빠졌다 <span class="at">— 처리량 그래프만 보면 안 보인다</span>',
+  scene:[
+    '스레드 하나에서 시작합니다. 일관성 비용을 0 으로 뒀으니 USL 이 Amdahl 과 정확히 같고, 두 곡선이 겹쳐 보입니다. 이 상태에서는 역행이 없어요 — 스레드를 늘리는 것이 손해가 되지는 않습니다.',
+    '256개까지 늘렸습니다. 처리량이 18.62 인데, 스레드는 256배로 늘렸죠. 직렬 비율이 5% 면 상한이 1 나누기 0.05, 즉 20배이고 아무리 늘려도 그 값을 못 넘습니다. 여기까지가 Amdahl 의 법칙입니다. 수익이 줄어들 뿐 마이너스는 아니에요 — 다만 응답시간은 이미 13.75배가 됐습니다.',
+    '일관성 비용을 0.001 로 켰습니다. 같은 256 스레드인데 처리량이 18.62 에서 3.24 로 떨어집니다. 5.7배 낮아요. 이 항은 스레드 쌍의 수만큼 드는 비용이라 n 곱하기 n 빼기 1 로 들어가고, n 이 커지면 분모를 지배합니다. 곡선을 보세요 — 파란 Amdahl 은 계속 오르고 초록 USL 은 이미 꺾여 내려온 상태입니다.',
+    '이제 스레드를 정점인 31개로 줄입니다. 줄였는데 처리량이 3.24 에서 9.04 로 2.79배가 됐어요. 그리고 응답시간은 79.03 에서 3.43 으로, 23배 좋아졌습니다. 정점은 루트 안에 1 빼기 시그마를 카파로 나눈 값입니다 — 0.95 나누기 0.001 의 제곱근, 30.82 예요.',
+    '정점을 조금 넘겨 64개로 가봅니다. 처리량은 9.04 에서 7.82 로 13% 밖에 안 떨어졌어요. 처리량 대시보드만 보면 눈에 안 띕니다. 그런데 응답시간은 3.43 에서 8.18 로 2.4배가 됐습니다. 정점 근처에서 두 지표가 어긋나기 시작해요 — 처리량은 완만하게 꺾이고 응답시간은 급하게 오릅니다.',
+    '직렬 비율을 5% 에서 2% 로 줄였습니다. 큰 작업이죠. 상한이 20배에서 50배로 두 배 반이 됐습니다. 그런데 정점을 보세요 — 30.82 에서 31.30 으로 0.5 밖에 안 움직였습니다. 정점 식에서 시그마는 1 빼기 시그마 안에만 들어가니까요. 몇 개까지 늘릴 수 있는가를 정하는 것은 시그마가 아니라 카파입니다.',
+    '마지막으로 일관성 비용을 5배인 0.005 로 올렸습니다. 정점이 30.82 에서 13.78 로, 루트 5배 작아졌어요. 그래서 14개 스레드가 최선이고 그 이상은 손해입니다. 카파를 줄이는 것이 스레드를 늘리는 것보다 먼저라는 게 이 손잡이의 결론입니다 — 공유 상태를 없애거나 샤딩하거나 락을 쪼개는 일이요.'
+  ],
+};
+</script>
+<script src="/shared/usl-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "스레드를 늘렸더니 느려졌다",
+  "description": "스레드를 31개에서 256개로 늘리면 처리량이 9.04 에서 3.24 로 떨어집니다. 2.79배 하락이에요. 그런데 응답시간은 23배가 됩니다 — 처리량 그래프만 보면 안 보이는 쪽입니다.",
+  "url": "https://lab.vermilion19.com/usl/",
+  "inLanguage": "ko",
+  "datePublished": "2026-08-25",
+  "dateModified": "2026-08-25",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "스레드를 늘렸더니 느려졌다"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

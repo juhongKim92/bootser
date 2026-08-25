@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>R + W > N 을 지켰는데 왜 위험한가 — 정족수의 산수</title>
+<meta name="description" content="복제본 3대에서 R=W=2 는 겹침을 보장합니다. 그런데 한 대만 죽어도 쓰기가 실패해요. R=W=1 로 내리면 2대까지 견디는데 겹칠 확률은 33% 입니다. 부등식이 저절로 깨지는 게 아니라, 살아남으려고 등급을 낮추는 그 순간 깨집니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/quorum/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/quorum/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/quorum/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/quorum/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="R + W > N 을 지켰는데 왜 위험한가">
+<meta property="og:description" content="부등식이 사는 것은 겹침이고, 지불하는 것은 고장 내구성입니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/quorum/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="R + W > N 을 지켰는데 왜 위험한가">
+<meta name="twitter:description" content="ONE/ONE 은 3대에서 33%, 5대에서 20% 입니다. '대개는 괜찮다' 가 아닙니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/quorum-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/quorum/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>R + W > N 을 지켰는데 왜 위험한가</h1>
+
+  <table class="keytable">
+    <tr><th>기호</th><th>뜻</th></tr>
+    <tr><td><strong>N</strong></td><td><strong>복제본 수.</strong> 같은 데이터 한 조각을 몇 대에 두는가. Cassandra 의 <em>replication factor</em>, 줄여서 RF 입니다</td></tr>
+    <tr><td><strong>W</strong></td><td><strong>쓰기가 기다리는 응답 수.</strong> "몇 대에 쓰나" 가 아닙니다 — 쓰기는 <em>모든</em> 복제본에 나가고, W 는 <strong>몇 개의 응답을 기다린 뒤 성공이라고 할지</strong>입니다</td></tr>
+    <tr><td><strong>R</strong></td><td><strong>읽기가 모으는 응답 수.</strong> 읽을 때 몇 대의 답을 모아서 그중에서 고를지입니다</td></tr>
+  </table>
+
+  <p class="lede">복제본 3대에서 R=W=2 는 겹침을 <strong>보장</strong>합니다. 그런데 <strong>한 대만 죽어도 쓰기가 실패해요.</strong> R=W=1 로 내리면 2대까지 견디는데 겹칠 확률은 <strong>33%</strong> 입니다. 부등식이 저절로 깨지는 게 아닙니다 — <strong>살아남으려고 등급을 낮추는 그 순간</strong> 깨집니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sN">복제본 수 <em>N</em></label>
+          <span class="v" id="vN">3<small>대</small></span>
+          <input type="range" id="sN" min="1" max="7" step="1" value="3" aria-label="같은 데이터를 두는 복제본 수">
+        </div>
+        <div class="dial">
+          <label for="sW">쓰기가 기다리는 <em>W</em></label>
+          <span class="v" id="vW">2<small>개</small></span>
+          <input type="range" id="sW" min="1" max="7" step="1" value="2" aria-label="쓰기가 성공이라고 하기까지 기다리는 응답 수">
+        </div>
+        <div class="dial">
+          <label for="sR">읽기가 모으는 <em>R</em></label>
+          <span class="v" id="vR">2<small>개</small></span>
+          <input type="range" id="sR" min="1" max="7" step="1" value="2" aria-label="읽을 때 모으는 응답 수">
+        </div>
+        <div class="dial">
+          <label for="sD">죽은 노드</label>
+          <span class="v" id="vD">0<small>대</small></span>
+          <input type="range" id="sD" min="0" max="7" step="1" value="0" aria-label="응답할 수 없는 복제본 수">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->복제본 3대 · 쓰기 대기 2 · 읽기 수집 2 — 합 4 → 겹침 보장<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">복제본 — 쓰기가 기다린 칸과 읽기가 모은 칸</span>
+      <div class="board">
+        <div class="nodes" id="nodes"><!--pr--><div class="row"><span class="rn">W 쓰기 대기 2</span><span class="set"><span class="nd w">1</span><span class="nd w">2</span><span class="nd ">3</span></span></div><div class="row"><span class="rn">R 읽기 수집 2</span><span class="set"><span class="nd ">1</span><span class="nd r">2</span><span class="nd r">3</span></span></div><div class="row"><span class="rn">겹침</span><span class="set"><span class="nd w">1</span><span class="nd both">2</span><span class="nd r">3</span></span></div><!--/pr--></div>
+        <div class="nodecap" id="nodeCap"><!--pr-->W 2 + R 2 = 합이 N 3 을 넘으므로 최소 하나가 겹친다 — 지금 겹친 복제본 <b>1</b>대.<!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="wi"></i>W — 쓰기가 기다린 응답</span>
+          <span><i class="ri"></i>R — 읽기가 모은 응답</span>
+          <span><i class="bothi"></i>겹친 복제본</span>
+          <span><i class="deadi"></i>죽은 노드</span>
+        </div>
+
+        <table class="grid2" id="grid2"><!--pr--><tr><th>W \ R</th><th>ONE (1)</th><th>QUORUM (2)</th><th>ALL (3)</th></tr><tr><th>ONE (1)</th><td class="risk">33.3%</td><td class="risk">66.7%</td><td class="safe">보장</td></tr><tr><th>QUORUM (2)</th><td class="risk">66.7%</td><td class="safe on">보장</td><td class="safe">보장</td></tr><tr><th>ALL (3)</th><td class="safe">보장</td><td class="safe">보장</td><td class="safe">보장</td></tr><!--/pr--></table>
+        <table class="four" id="four"><!--pr--><tr><th>W · R</th><th>합</th><th>쓰기 내구</th><th>읽기 내구</th><th>둘 다</th></tr><tr class="on"><td>2 · 2</td><td>4 &gt; 3</td><td>1</td><td>1</td><td class="good">1</td></tr><tr class=""><td>1 · 3</td><td>4 &gt; 3</td><td>2</td><td>0</td><td class="bad">0</td></tr><tr class=""><td>2 · 3</td><td>5 &gt; 3</td><td>1</td><td>0</td><td class="bad">0</td></tr><tr class=""><td>3 · 1</td><td>4 &gt; 3</td><td>0</td><td>2</td><td class="bad">0</td></tr><tr class=""><td>3 · 2</td><td>5 &gt; 3</td><td>0</td><td>1</td><td class="bad">0</td></tr><tr class=""><td>3 · 3</td><td>6 &gt; 3</td><td>0</td><td>0</td><td class="bad">0</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">W+R vs N</span><span class="n">4 vs 3</span></div><div class="m good"><span class="k">겹칠 확률</span><span class="n">보장</span></div><div class="m "><span class="k">QUORUM 값</span><span class="n">2</span></div><div class="m "><span class="k">견디는 고장</span><span class="n">1<small>대</small></span></div><div class="m "><span class="k">보장하며 최대</span><span class="n">1<small>대</small></span></div><div class="m good"><span class="k">지금 상태</span><span class="n">읽기·쓰기 OK</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>W 2 + R 2 &gt; N 3 — 겹침이 보장된다.</b><br>고장 1대까지 견딘다 <span class="at">— 보장하면서 낼 수 있는 최대는 1대다</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>복제본 수 N</td><td>같은 조각을 몇 대에 두나. 3 또는 5 가 흔합니다. <strong>QUORUM 값이 여기서 계산됩니다</strong> — <code>floor(N/2)+1</code>.</td></tr>
+    <tr><td>쓰기가 기다리는 W</td><td>몇 개의 응답을 받으면 쓰기를 성공으로 볼지. <strong>키우면 안전해지고 죽어도 되는 노드 수가 줄어듭니다.</strong></td></tr>
+    <tr><td>읽기가 모으는 R</td><td>읽을 때 몇 대의 답을 모을지. <strong>W 와 더해서 N 을 넘으면</strong> 겹침이 보장됩니다.</td></tr>
+    <tr><td>죽은 노드</td><td>응답할 수 없는 복제본 수. <strong>W 나 R 보다 많이 죽으면 그 연산 자체가 실패합니다</strong> — 겹침 이야기가 무의미해지는 지점이에요.</td></tr>
+  </table>
+
+  <p>격자에서 쓰기는 <strong>앞에서부터</strong>, 읽기는 <strong>뒤에서부터</strong> 잡습니다. 겹침이 가장 적어지는 배치라서요 — <strong>이 배치에서도 겹치면 어떤 배치에서도 겹칩니다.</strong> 그게 부등식이 말하는 것입니다.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. N=3, R=W=2 — 겹침이 보장된다</h4>
+    <div class="seq">복제본 3대 · 쓰기 2개 대기 · 읽기 2개 수집
+W+R = <em>4 &gt; 3</em> → <em>보장</em> · 겹친 복제본 <em>1대</em>
+견디는 고장 <em>1대</em></div>
+    <p class="why">가장 흔한 설정입니다(QUORUM/QUORUM). 4 개를 3 칸에 넣으니 <strong>비둘기집 원리로 최소 하나는 겹칩니다.</strong> 문서의 표현은 <em>"복제본 중 최소 하나가 쓰기와 읽기 <strong>양쪽에</strong> 참여하는 것이 보장된다"</em> 예요. 격자에서 노란 칸이 그 겹친 복제본입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. R=W=1 로 내린다 — 33%</h4>
+    <div class="seq">쓰기 2 → <em>1개</em> · 읽기 2 → <em>1개</em>
+W+R = <em>2 ≤ 3</em> → 보장 없음 · 겹칠 확률 <em>33%</em>
+견디는 고장 1 → <em>2대</em></div>
+    <p class="why">가장 빠르고 가장 잘 버티는 설정이고, 실제로 많이 씁니다. 대가는 <strong>셋 중 둘은 못 겹친다</strong>는 것이에요. "대개는 괜찮다" 가 아닙니다 — <strong>33%</strong> 입니다. (실제 시스템에서는 쓰기가 모든 복제본에 나가 있으니 시간이 조금 지나면 대개 맞습니다. 이 확률은 <em>보장이 없는 그 순간</em>의 값입니다.)</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 한 대를 죽인다 — 아직 버틴다</h4>
+    <div class="seq">R=W=2 로 되돌리고 죽은 노드 <em>1대</em>
+살아있는 복제본 2 · 쓰기 <em>성공</em> · 읽기 <em>성공</em></div>
+    <p class="why">W=2 인데 2대가 살아 있으니 딱 맞습니다. <strong>여유가 정확히 0 이에요.</strong> 여기가 R=W=2 의 한계입니다 — 견디는 고장이 <code>N−W = 1</code> 대라고 미터가 말하고 있었죠.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. 두 대를 죽인다 — 쓰기가 실패한다</h4>
+    <div class="seq">죽은 노드 1 → <em>2대</em> (R=W=2 그대로)
+살아있는 복제본 1 · <em>쓰기 실패</em> · <em>읽기 실패</em></div>
+    <p class="why">부등식은 여전히 4 &gt; 3 입니다. <strong>그런데 아무 일도 할 수 없어요.</strong> W=2 개의 응답을 기다리는데 응답할 수 있는 노드가 1대뿐이니까요. <strong>겹침을 보장한다는 것은 "성공했을 때 겹친다" 는 뜻이고, 성공을 보장하지는 않습니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 살아남으려고 등급을 낮춘다 — 여기가 실제 경로다</h4>
+    <div class="seq">2대 죽은 상태에서 R=W=1 로 내림
+쓰기 <em>성공</em> · 읽기 <em>성공</em> · 겹칠 확률 <em>33%</em></div>
+    <p class="why">장애 중에 QUORUM 을 ONE 으로 내리는 것 — <strong>이게 낡은 값을 읽게 되는 실제 경로입니다.</strong> 부등식이 저절로 깨지는 게 아니라 <em>우리가 손으로 깹니다</em>. 그리고 그건 대개 옳은 판단이에요(안 내리면 아무것도 못 하니까요). 요점은 <strong>그 순간 무엇을 포기했는지 알고 있어야 한다</strong>는 겁니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. 같은 "보장" 안에도 내구성이 다르다 — R=1, W=3</h4>
+    <div class="seq">죽은 노드 0 · 쓰기 <em>3개</em> · 읽기 <em>1개</em>
+W+R = 4 &gt; 3 → <em>보장</em> · 그런데 견디는 고장 <em>0대</em></div>
+    <p class="why">부등식을 만족하는데 <strong>한 대만 죽어도 쓰기가 실패합니다.</strong> 아래 표를 보세요 — 같은 "보장" 안에 내구성 1대짜리(R=W=2)와 0대짜리(R=1,W=3)가 섞여 있습니다. <strong>부등식만 확인하고 끝내면 이 차이를 못 봅니다.</strong> 겹침을 보장하면서 가장 많이 견디는 조합은 언제나 <code>floor((N−1)/2)</code> 대, 즉 다수결 정족수입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. N=5 로 키운다 — 2대까지 견디면서 보장</h4>
+    <div class="seq">복제본 <em>5대</em> · R=W=<em>3</em> (QUORUM) · 죽은 노드 <em>2대</em>
+W+R = 6 &gt; 5 → <em>보장</em> · 쓰기 <em>성공</em> · 읽기 <em>성공</em></div>
+    <p class="why">복제본을 늘리는 것이 사는 방법입니다. N=5 의 QUORUM 은 3 이고, <strong>2대가 죽어도 3대가 남으니 보장을 유지한 채로 버팁니다.</strong> N=3 에서는 1대까지였죠. 대가는 노드 수와 쓰기 지연입니다 — 3개의 응답을 기다려야 하니까요.</p>
+  </div>
+
+  <h2>부등식이 정확히 무엇을 사는가</h2>
+
+  <p>문서가 적는 것은 이것입니다 — <em>"보통 Dynamo 와 같은 용어로 표현된다: <code>W + R &gt; RF</code>. 여기서 W 는 쓰기 일관성 수준, R 은 읽기 일관성 수준, RF 는 복제 인자다."</em> 그리고 그때 <em>"복제본 중 최소 하나가 쓰기와 읽기 양쪽에 참여하는 것이 보장되고, 이것이 정족수가 겹치며 쓴 값이 읽기에 보이는 것을 보장한다."</em></p>
+
+  <div class="callout"><strong>사는 것은 "겹침" 하나입니다.</strong> W 칸과 R 칸을 N 개의 자리에 넣는데 W+R &gt; N 이면 비둘기집 원리로 최소 하나가 겹칩니다. 그 이상도 이하도 아닙니다.</div>
+
+  <p>그래서 부등식이 <em>보장하지 않는</em> 것도 분명합니다.</p>
+
+  <table class="keytable">
+    <tr><th>보장하지 않는 것</th><th>왜</th></tr>
+    <tr><td>연산이 성공한다</td><td>W 개의 응답을 기다리려면 그만큼 살아 있어야 합니다. 레시피 4 가 그 자리예요</td></tr>
+    <tr><td>겹친 노드가 최신을 알아본다</td><td>겹친 노드에 새 값이 있어도 <strong>여러 답 중 어느 것이 최신인지 골라야</strong> 합니다. 타임스탬프로 고르는 구현이라면 시계가 어긋나면 잘못 고릅니다</td></tr>
+    <tr><td>다른 조각도 안전하다</td><td>정족수는 <strong>조각(파티션) 단위</strong>입니다. 한 키에 대해 성립하는 것이 다른 키에 대해 성립하는 것과 별개예요</td></tr>
+  </table>
+
+  <h2>대가는 고장 내구성이다</h2>
+
+  <p>W 개의 응답을 기다린다는 것은 <strong>N−W 대까지만 죽어도 된다</strong>는 뜻입니다. 읽기도 같아서 N−R 대까지고, <strong>둘 다 되려면 작은 쪽</strong>입니다.</p>
+
+  <div class="callout"><code>견디는 고장 = min(N − W, N − R)</code><br>그리고 <code>W + R &gt; N</code> 을 지키면서 이 값을 가장 크게 만드는 조합은 언제나 <strong><code>floor((N−1)/2)</code></strong> — 다수결 정족수입니다.</div>
+
+  <table class="keytable">
+    <tr><th>N</th><th>QUORUM</th><th>보장하면서 견디는 최대 고장</th></tr>
+    <tr><td>3</td><td>2</td><td>1대</td></tr>
+    <tr><td>5</td><td>3</td><td>2대</td></tr>
+    <tr><td>7</td><td>4</td><td>3대</td></tr>
+  </table>
+
+  <p>여기서 <strong>실무의 압력</strong>이 나옵니다. N=3 에서 두 대가 죽으면 QUORUM 으로는 아무것도 못 합니다. 그러면 등급을 ONE 으로 내려요 — <strong>그게 부등식이 깨지는 실제 순간입니다.</strong> 저절로 깨지는 게 아니고, sloppy quorum 같은 장치가 깨는 것도 아닙니다. <em>사람이 가용성을 사려고 손으로 깹니다.</em></p>
+
+  <h2>문서가 말하지 않는 칸</h2>
+
+  <p>실험대의 조합표에서 <strong>초록 칸("보장")은 문서가 말해주는 것</strong>입니다. 나머지 칸은 문서에 없어요 — 그래서 조합론으로 채웠습니다.</p>
+
+  <div class="callout">읽기 R 개가 쓰기 W 개를 <strong>하나도 안 건드릴</strong> 경우의 수는 <code>C(N−W, R)</code> 이고 전체는 <code>C(N, R)</code> 입니다. 그러니<br><code>겹칠 확률 = 1 − C(N−W, R) / C(N, R)</code></div>
+
+  <p>N=3 에서 나오는 값이 이렇습니다.</p>
+
+  <table class="keytable">
+    <tr><th>W · R</th><th>합</th><th>겹칠 확률</th></tr>
+    <tr><td>1 · 1 (ONE/ONE)</td><td>2</td><td><strong>33.3%</strong></td></tr>
+    <tr><td>1 · 2 또는 2 · 1</td><td>3</td><td>66.7%</td></tr>
+    <tr><td>2 · 2 (QUORUM)</td><td>4</td><td>100% — 보장</td></tr>
+  </table>
+
+  <p>N=5 에서는 ONE/ONE 이 <strong>20%</strong> 로 더 나빠집니다. 복제본을 늘리면 <em>보장하는 조합의 내구성</em>은 좋아지고 <em>보장 없는 조합의 확률</em>은 나빠져요 — 같은 방향이 아닙니다.</p>
+
+  <div class="callout">이 확률은 <strong>"보장이 없는 그 순간" 의 값</strong>입니다. 실제 시스템에서는 쓰기가 모든 복제본에 나가 있고 뒤에서 복구도 돌기 때문에, 시간이 조금 지나면 대개 맞습니다 — <strong>부분 정족수가 실제로는 꽤 잘 맞는다</strong>는 측정 연구가 있고(PBS, VLDB 2012), 그쪽은 실측 지연 분포로 낸 값이라 이 실험대가 계산하는 종류가 아닙니다.</div>
+
+  <h2>이 편의 검산점</h2>
+
+  <p>이 페이지는 한 번 <strong>후보에서 탈락시켰던</strong> 주제입니다. 정족수 확률을 실제로 잰 1차 출처가 몬테카를로 시뮬레이션이라 재현할 수 없었고, "sloppy quorum 이 부등식을 깬다" 는 제 가설은 문서와 어긋났거든요(힌트는 일관성 수준을 만족시키지 않습니다).</p>
+
+  <p>다시 올린 이유는 <strong>검산점을 다른 데서 찾았기 때문</strong>입니다. 문서가 조합표를 줍니다.</p>
+
+  <table class="keytable">
+    <tr><th>문서가 주는 것</th><th>모델이 재현해야 하는 것</th></tr>
+    <tr><td><em>"QUORUM: 복제본의 과반(n/2 + 1)이 응답해야 한다"</em></td><td>N=1..7 에서 <code>floor(N/2)+1</code> 이 정확히 나오나</td></tr>
+    <tr><td><em>"<code>W + R &gt; RF</code> … 최소 하나가 양쪽에 참여하는 것이 보장된다"</em></td><td>조합론이 계산한 확률이 그 칸에서 <strong>정확히 1</strong> 인가</td></tr>
+  </table>
+
+  <p>즉 <strong>문서가 "보장" 이라고 말하는 칸과 내 조합론이 100% 를 내는 칸이 완전히 일치해야 합니다.</strong> 그게 맞으면 나머지 칸의 확률도 믿을 수 있고, 그 나머지가 이 페이지가 더하는 값입니다.</p>
+
+  <h2>이 모델이 가정하는 것</h2>
+
+  <table class="keytable">
+    <tr><th>가정</th><th>깨지면 어떻게 되나</th></tr>
+    <tr><td>읽기 집합이 균일하게 뽑힌다</td><td>확률 계산은 R 개를 <strong>무작위로 고른다</strong>고 봤습니다. 실제로는 코디네이터가 가까운 복제본을 선호하므로 편향이 있고, 그러면 이 값과 달라집니다</td></tr>
+    <tr><td>한 조각만 본다</td><td>정족수는 파티션 단위입니다. 여러 키에 걸친 연산은 각 키마다 따로 성립합니다</td></tr>
+    <tr><td>버전을 고를 수 있다</td><td>겹친 노드에서 최신을 <strong>알아본다</strong>고 봤습니다. 실제로는 타임스탬프나 벡터 시계가 그 일을 하고, 그 장치가 틀리면 겹쳐도 잘못 고릅니다</td></tr>
+    <tr><td>복구를 안 셌다</td><td>읽기 복구·힌트 전달·안티엔트로피가 뒤에서 값을 맞춥니다. 그래서 <strong>이 확률은 그 복구가 돌기 전의 순간값</strong>입니다 — 시간이 지나면 좋아집니다</td></tr>
+  </table>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>등급을 코드에서 찾기</td><td>일관성 수준은 <strong>쿼리 단위</strong>로 지정합니다. 기본값이 무엇인지, 그리고 <strong>어디서 ONE 을 쓰고 있는지</strong>를 코드로 찾아보세요. 조사 결과가 대개 놀랍습니다</td></tr>
+    <tr><td>W 를 오해하지 않기</td><td>W=1 이 "한 대에만 쓴다" 가 아닙니다. 쓰기는 모든 복제본에 나가고 <strong>기다리는 응답 수만 1</strong> 입니다. 그래서 W=1 도 대개 결국 맞아요 — 다만 <em>보장</em>이 없습니다</td></tr>
+    <tr><td>장애 대응 절차</td><td>"장애 때 ONE 으로 내린다" 가 절차에 있다면, <strong>그 순간 무엇을 포기하는지</strong>도 절차에 적어두세요. 되돌리는 조건도요 — 내려놓고 잊는 것이 가장 흔합니다</td></tr>
+    <tr><td>N 을 늘릴지</td><td>보장을 유지하면서 내구성을 얻는 유일한 방법입니다(3 → 5 에서 1대 → 2대). 대가는 저장 비용과 쓰기 지연 — QUORUM 이 2 에서 3 으로 늘어납니다</td></tr>
+    <tr><td>여러 데이터센터</td><td><code>LOCAL_QUORUM</code> 은 <strong>자기 DC 안에서만</strong> 과반을 셉니다. DC 를 넘는 보장이 아니라는 뜻이에요 — 이 페이지의 산수를 DC 단위로 다시 해야 합니다</td></tr>
+    <tr><td>시계</td><td>타임스탬프로 최신을 고른다면 <strong>시계 왜곡이 정합성 문제로 바뀝니다.</strong> 겹쳐도 잘못 고를 수 있어요</td></tr>
+  </table>
+
+  <p><a href="/raft/">4번</a>이 <em>합의로 이 문제를 푸는 쪽</em>이었다면, 이 페이지는 <em>확률로 사는 쪽</em>입니다. 그리고 <a href="/writeskew/">15번</a>과도 다릅니다 — 저쪽은 한 노드 안의 격리 수준이고, 이쪽은 노드 사이의 겹침이에요.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/raft/"><span class="no">04</span><span><span class="t">네트워크가 갈라지면 누가 리더가 되는가</span><span class="why">같은 문제를 확률이 아니라 합의로 푸는 쪽.</span></span></a></li>
+      <li><a href="/writeskew/"><span class="no">15</span><span><span class="t">둘 다 확인했고 둘 다 통과했다</span><span class="why">겹쳤는데도 틀리는 경우 — 어느 값이 최신인지 고르는 문제.</span></span></a></li>
+      <li><a href="/backpressure/"><span class="no">11</span><span><span class="t">거부는 버그가 아니라 신호다</span><span class="why">가용성을 위해 등급을 낮추는 그 판단이 거부와 같은 종류입니다.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/quorum/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uNodes:'대', uAck:'개',
+  hint:'복제본 $1대 · 쓰기 대기 $2 · 읽기 수집 $3 — 합 $4 → $5',
+  hGuard:'겹침 보장', hProb:'겹칠 확률 $1%',
+  nW:'W 쓰기 대기 $1', nR:'R 읽기 수집 $1', nBoth:'겹침', nDead:'죽음 $1대',
+  ncSafe:'W $1 + R $2 = 합이 N $3 을 넘으므로 최소 하나가 겹친다 — 지금 겹친 복제본 $4대.',
+  ncRisk:'W $1 + R $2 = 합이 N $3 을 넘지 못한다 — 겹칠 확률 $4 뿐이다.',
+  gWR:'W \\ R', lOne:'ONE', lQuorum:'QUORUM', lAll:'ALL', gSafe:'보장',
+  tPair:'W · R', tSum:'합', tTolW:'쓰기 내구', tTolR:'읽기 내구', tTol:'둘 다',
+  tPairV:'$1 · $2',
+  mSum:'W+R vs N', mProb:'겹칠 확률', mQuorum:'QUORUM 값',
+  mTol:'견디는 고장', mBestTol:'보장하며 최대', mAlive:'지금 상태',
+  mAlways:'보장', mBothOk:'읽기·쓰기 OK', mWriteNo:'쓰기 실패', mReadNo:'읽기 실패',
+  vSafe:'<b>W $1 + R $2 &gt; N $3 — 겹침이 보장된다.</b><br>고장 $4대까지 견딘다 <span class="at">— 보장하면서 낼 수 있는 최대는 $5대다</span>',
+  vZero:'<b>부등식은 만족하는데 여유가 0 이다.</b> W $1 · R $2<br>쓰기는 $3대, 읽기는 $4대까지 — 둘 다 되는 건 0대다 <span class="at">(같은 보장 안에서 최대 $5대까지 가능하다)</span>',
+  vRisk:'<b>W $1 + R $2 는 N $3 을 넘지 못한다 — 보장이 없다.</b><br>겹칠 확률 <b>$4%</b> · 못 겹칠 확률 $5% <span class="at">— "대개 괜찮다" 가 아니다</span>',
+  vDown:'<b>$1대가 죽어 살아있는 복제본이 $2대다 — $3.</b><br>부등식은 그대로인데 아무것도 못 한다 <span class="at">— 이 설정이 견디는 고장은 $4대였다</span>',
+  vDownW:'쓰기가 응답 $1개를 못 모은다', vDownR:'읽기가 응답 $1개를 못 모은다',
+  scene:[
+    '가장 흔한 설정부터 봅니다. 복제본 3대에 쓰기는 2개의 응답을 기다리고 읽기도 2개를 모읍니다. 합이 4 고 N 이 3 이니 비둘기집 원리로 최소 하나가 겹칩니다 — 격자의 노란 칸이 그 겹친 복제본이에요. 문서의 표현으로는 "최소 하나가 쓰기와 읽기 양쪽에 참여하는 것이 보장된다" 입니다.',
+    '둘 다 1 로 내렸습니다. ONE/ONE 이죠. 합이 2 라 N 3 을 못 넘고, 겹칠 확률이 33% 입니다. 대신 견디는 고장이 1대에서 2대로 늘었어요. 가장 빠르고 가장 잘 버티는 설정이고 실제로 많이 쓰는데, 대가가 셋 중 둘은 못 겹친다는 것입니다. "대개 괜찮다" 가 아니라 33% 예요.',
+    'QUORUM 으로 되돌리고 한 대를 죽였습니다. W 가 2 인데 2대가 살아 있으니 딱 맞습니다 — 여유가 정확히 0 이에요. 미터가 처음부터 "견디는 고장 1대" 라고 말하고 있었고, 여기가 그 한계입니다.',
+    '두 대를 죽였습니다. 부등식은 여전히 4 가 3 보다 큽니다. 그런데 아무 일도 할 수 없어요 — 응답 2개를 기다리는데 응답할 수 있는 노드가 1대뿐이니까요. 겹침을 보장한다는 것은 성공했을 때 겹친다는 뜻이고, 성공을 보장하지는 않습니다.',
+    '그래서 등급을 ONE 으로 내립니다. 쓰기도 읽기도 성공하고, 겹칠 확률은 33% 가 됩니다. 이게 낡은 값을 읽게 되는 실제 경로예요 — 부등식이 저절로 깨지는 게 아니라 우리가 손으로 깹니다. 그리고 그건 대개 옳은 판단입니다. 요점은 그 순간 무엇을 포기했는지 알고 있어야 한다는 겁니다.',
+    '노드를 다 살리고, 이번엔 쓰기 3개 읽기 1개로 둡니다. 합이 4 라 여전히 보장이에요. 그런데 견디는 고장이 0대입니다 — 한 대만 죽어도 쓰기가 실패해요. 아래 표를 보세요. 같은 "보장" 안에 내구성 1대짜리와 0대짜리가 섞여 있습니다. 부등식만 확인하고 끝내면 이 차이를 못 봅니다.',
+    '마지막으로 복제본을 5대로 키웁니다. QUORUM 은 3 이고, 두 대가 죽어도 3대가 남으니 보장을 유지한 채로 버팁니다. N=3 에서는 1대까지였죠. 복제본을 늘리는 것이 보장과 내구성을 동시에 얻는 유일한 방법이고, 대가는 저장 비용과 쓰기 지연입니다.'
+  ],
+};
+</script>
+<script src="/shared/quorum-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "R + W > N 을 지켰는데 왜 위험한가",
+  "description": "복제본 3대에서 R=W=2 는 겹침을 보장합니다. 그런데 한 대만 죽어도 쓰기가 실패해요. R=W=1 로 내리면 2대까지 견디는데 겹칠 확률은 33% 입니다. 부등식이 저절로 깨지는 게 아니라, 살아남으려고 등급을 낮추는 그 순간 깨집니다.",
+  "url": "https://lab.vermilion19.com/quorum/",
+  "inLanguage": "ko",
+  "datePublished": "2026-08-25",
+  "dateModified": "2026-08-25",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "R + W > N 을 지켰는데 왜 위험한가"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

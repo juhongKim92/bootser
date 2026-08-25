@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>You satisfied R + W > N — so why is it still risky? Quorum arithmetic</title>
+<meta name="description" content="With three replicas, R=W=2 guarantees overlap. But one dead node and writes fail. Drop to R=W=1 and you survive two failures with a 33% chance of overlap. The inequality does not break on its own — it breaks the moment you lower the level to stay up.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/quorum/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/quorum/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/quorum/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/quorum/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="You satisfied R + W > N — so why is it still risky?">
+<meta property="og:description" content="What the inequality buys is overlap. What it pays is fault tolerance.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/quorum/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="You satisfied R + W > N — so why is it still risky?">
+<meta name="twitter:description" content="ONE/ONE is 33% with three replicas and 20% with five. That is not “usually fine”.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/quorum-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/quorum/" hreflang="ko" lang="ko">KO</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>You satisfied R + W &gt; N — so why is it still risky?</h1>
+
+  <table class="keytable">
+    <tr><th>Symbol</th><th>Meaning</th></tr>
+    <tr><td><strong>N</strong></td><td><strong>Replica count.</strong> How many machines hold one copy of the same piece of data. Cassandra calls it the <em>replication factor</em>, RF</td></tr>
+    <tr><td><strong>W</strong></td><td><strong>Responses a write waits for.</strong> Not "how many we write to" — the write goes to <em>every</em> replica, and W is <strong>how many acknowledgements you wait for before calling it a success</strong></td></tr>
+    <tr><td><strong>R</strong></td><td><strong>Responses a read collects.</strong> How many replicas you gather answers from before picking one</td></tr>
+  </table>
+
+  <p class="lede">With three replicas, R=W=2 <strong>guarantees</strong> overlap. But <strong>one dead node and writes fail.</strong> Drop to R=W=1 and you survive two failures — with a <strong>33%</strong> chance of overlap. The inequality does not break on its own. <strong>It breaks the moment you lower the level to stay up.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sN">Replicas <em>N</em></label>
+          <span class="v" id="vN">3<small> nodes</small></span>
+          <input type="range" id="sN" min="1" max="7" step="1" value="3" aria-label="replicas holding the same data">
+        </div>
+        <div class="dial">
+          <label for="sW">Write waits for <em>W</em></label>
+          <span class="v" id="vW">2<small> acks</small></span>
+          <input type="range" id="sW" min="1" max="7" step="1" value="2" aria-label="acknowledgements a write waits for">
+        </div>
+        <div class="dial">
+          <label for="sR">Read collects <em>R</em></label>
+          <span class="v" id="vR">2<small> acks</small></span>
+          <input type="range" id="sR" min="1" max="7" step="1" value="2" aria-label="responses a read collects">
+        </div>
+        <div class="dial">
+          <label for="sD">Dead nodes</label>
+          <span class="v" id="vD">0<small> nodes</small></span>
+          <input type="range" id="sD" min="0" max="7" step="1" value="0" aria-label="replicas that cannot respond">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->3 replicas · write waits 2 · read collects 2 — sum 4 → overlap guaranteed<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">Replicas — what the write waited on and the read collected</span>
+      <div class="board">
+        <div class="nodes" id="nodes"><!--pr--><div class="row"><span class="rn">W write waits 2</span><span class="set"><span class="nd w">1</span><span class="nd w">2</span><span class="nd ">3</span></span></div><div class="row"><span class="rn">R read collects 2</span><span class="set"><span class="nd ">1</span><span class="nd r">2</span><span class="nd r">3</span></span></div><div class="row"><span class="rn">overlap</span><span class="set"><span class="nd w">1</span><span class="nd both">2</span><span class="nd r">3</span></span></div><!--/pr--></div>
+        <div class="nodecap" id="nodeCap"><!--pr-->W 2 + R 2 exceeds N 3, so at least one must overlap — currently <b>1</b> overlapping.<!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="wi"></i>W — acks the write waited for</span>
+          <span><i class="ri"></i>R — responses the read collected</span>
+          <span><i class="bothi"></i>overlapping replica</span>
+          <span><i class="deadi"></i>dead node</span>
+        </div>
+
+        <table class="grid2" id="grid2"><!--pr--><tr><th>W \ R</th><th>ONE (1)</th><th>QUORUM (2)</th><th>ALL (3)</th></tr><tr><th>ONE (1)</th><td class="risk">33.3%</td><td class="risk">66.7%</td><td class="safe">guar.</td></tr><tr><th>QUORUM (2)</th><td class="risk">66.7%</td><td class="safe on">guar.</td><td class="safe">guar.</td></tr><tr><th>ALL (3)</th><td class="safe">guar.</td><td class="safe">guar.</td><td class="safe">guar.</td></tr><!--/pr--></table>
+        <table class="four" id="four"><!--pr--><tr><th>W · R</th><th>sum</th><th>write tol</th><th>read tol</th><th>both</th></tr><tr class="on"><td>2 · 2</td><td>4 &gt; 3</td><td>1</td><td>1</td><td class="good">1</td></tr><tr class=""><td>1 · 3</td><td>4 &gt; 3</td><td>2</td><td>0</td><td class="bad">0</td></tr><tr class=""><td>2 · 3</td><td>5 &gt; 3</td><td>1</td><td>0</td><td class="bad">0</td></tr><tr class=""><td>3 · 1</td><td>4 &gt; 3</td><td>0</td><td>2</td><td class="bad">0</td></tr><tr class=""><td>3 · 2</td><td>5 &gt; 3</td><td>0</td><td>1</td><td class="bad">0</td></tr><tr class=""><td>3 · 3</td><td>6 &gt; 3</td><td>0</td><td>0</td><td class="bad">0</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">W+R vs N</span><span class="n">4 vs 3</span></div><div class="m good"><span class="k">P(overlap)</span><span class="n">guaranteed</span></div><div class="m "><span class="k">QUORUM is</span><span class="n">2</span></div><div class="m "><span class="k">failures tolerated</span><span class="n">1<small> nodes</small></span></div><div class="m "><span class="k">max while guaranteed</span><span class="n">1<small> nodes</small></span></div><div class="m good"><span class="k">right now</span><span class="n">read+write OK</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>W 2 + R 2 &gt; N 3 — overlap is guaranteed.</b><br>It survives 1 failures <span class="at">— the most any guaranteed pair can do here is 1</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">Previous</button>
+        <button id="btnStep">Next step</button>
+        <button id="btnReset">Reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Work the dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What it changes</th></tr>
+    <tr><td>Replicas N</td><td>How many machines hold the piece. Three or five are common. <strong>QUORUM is computed from this</strong> — <code>floor(N/2)+1</code>.</td></tr>
+    <tr><td>Write waits for W</td><td>How many acks make a write a success. <strong>Raise it and you get safer while tolerating fewer dead nodes.</strong></td></tr>
+    <tr><td>Read collects R</td><td>How many replicas a read gathers. <strong>Add it to W and exceed N</strong> and overlap is guaranteed.</td></tr>
+    <tr><td>Dead nodes</td><td>Replicas that cannot answer. <strong>More dead than W or R and the operation itself fails</strong> — the point where talk of overlap becomes moot.</td></tr>
+  </table>
+
+  <p>In the grid the write takes replicas <strong>from the front</strong> and the read <strong>from the back</strong> — the arrangement that minimises overlap. <strong>If they overlap in this layout they overlap in any layout.</strong> That is what the inequality asserts.</p>
+
+  <h2>Things to try</h2>
+
+  <div class="recipe">
+    <h4>1. N=3, R=W=2 — overlap is guaranteed</h4>
+    <div class="seq">3 replicas · write waits for 2 · read collects 2
+W+R = <em>4 &gt; 3</em> → <em>guaranteed</em> · overlapping replicas <em>1</em>
+Failures tolerated <em>1</em></div>
+    <p class="why">The most common setting (QUORUM/QUORUM). Four picks into three slots means <strong>the pigeonhole principle forces an overlap.</strong> The documentation puts it as <em>"at least one of the replicas is guaranteed to participate in <strong>both</strong> the write and the read request."</em> The amber cell in the grid is that replica.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Drop both to 1 — 33%</h4>
+    <div class="seq">Write 2 → <em>1</em> · read 2 → <em>1</em>
+W+R = <em>2 ≤ 3</em> → no guarantee · overlap probability <em>33%</em>
+Failures tolerated 1 → <em>2</em></div>
+    <p class="why">The fastest and most survivable setting, and widely used. The price is that <strong>two times in three they do not overlap.</strong> That is not "usually fine" — it is <strong>33%</strong>. (In a real system the write went to every replica anyway, so after a moment it is usually right. This probability is the value <em>at the instant there is no guarantee</em>.)</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Kill one node — still holding</h4>
+    <div class="seq">Back to R=W=2, dead nodes <em>1</em>
+Live replicas 2 · write <em>succeeds</em> · read <em>succeeds</em></div>
+    <p class="why">W is 2 and two are alive, so it fits exactly. <strong>The margin is precisely zero.</strong> This is R=W=2's limit — the meter had been reading "failures tolerated: 1" all along.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Kill two — writes fail</h4>
+    <div class="seq">Dead nodes 1 → <em>2</em> (R=W=2 unchanged)
+Live replicas 1 · <em>write fails</em> · <em>read fails</em></div>
+    <p class="why">The inequality still says 4 &gt; 3. <strong>And nothing can be done.</strong> You are waiting for two acks with one node able to answer. <strong>Guaranteeing overlap means "if it succeeds, they overlap" — it does not guarantee success.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Lower the level to stay up — this is the real path</h4>
+    <div class="seq">With two dead, drop to R=W=1
+Write <em>succeeds</em> · read <em>succeeds</em> · overlap probability <em>33%</em></div>
+    <p class="why">Dropping QUORUM to ONE during an incident — <strong>this is how you actually end up reading a stale value.</strong> The inequality does not break by itself; <em>we break it by hand.</em> And that is usually the right call, since otherwise nothing works at all. The point is <strong>knowing what you gave up at that moment.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Same "guaranteed", different tolerance — R=1, W=3</h4>
+    <div class="seq">Dead 0 · write <em>3</em> · read <em>1</em>
+W+R = 4 &gt; 3 → <em>guaranteed</em> · yet failures tolerated <em>0</em></div>
+    <p class="why">It satisfies the inequality and <strong>one dead node breaks writes.</strong> Look at the table below — inside the same "guaranteed" you have a 1-tolerance option (R=W=2) and a 0-tolerance one (R=1, W=3). <strong>Checking the inequality and stopping there hides that difference.</strong> The combination that tolerates the most while still guaranteeing is always <code>floor((N−1)/2)</code> — the majority quorum.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. Go to N=5 — two failures and still guaranteed</h4>
+    <div class="seq"><em>5</em> replicas · R=W=<em>3</em> (QUORUM) · dead <em>2</em>
+W+R = 6 &gt; 5 → <em>guaranteed</em> · write <em>succeeds</em> · read <em>succeeds</em></div>
+    <p class="why">Adding replicas is the way out. QUORUM of five is three, so <strong>two can die and three remain, keeping the guarantee.</strong> At N=3 the limit was one. The price is node count and write latency — you now wait for three acks.</p>
+  </div>
+
+  <h2>What the inequality actually buys</h2>
+
+  <p>The documentation says: <em>"This is typically expressed in the same terms Dynamo does, in that <code>W + R &gt; RF</code>, where W is the write consistency level, R is the read consistency level, and RF is the replication factor."</em> And when it holds, <em>"at least one of the replicas is guaranteed to participate in both the write and the read request, which in turn guarantees that the quorums will overlap and the write will be visible to the read."</em></p>
+
+  <div class="callout"><strong>What it buys is overlap, and only that.</strong> Place W picks and R picks among N slots; if W+R &gt; N the pigeonhole principle forces at least one shared. No more and no less.</div>
+
+  <table class="keytable">
+    <tr><th>What it does not guarantee</th><th>Why</th></tr>
+    <tr><td>That the operation succeeds</td><td>Waiting for W acks needs W nodes alive. Recipe 4 is that spot</td></tr>
+    <tr><td>That the overlapping node is recognised as newest</td><td>Even with the new value present, something has to <strong>pick the newest among several answers</strong>. Implementations that pick by timestamp pick wrong when clocks skew</td></tr>
+    <tr><td>That other keys are safe</td><td>Quorums are <strong>per partition</strong>. Holding for one key says nothing about another</td></tr>
+  </table>
+
+  <h2>The price is fault tolerance</h2>
+
+  <p>Waiting for W acks means <strong>only N−W may die.</strong> Reads are the same at N−R, and <strong>surviving both takes the smaller of the two.</strong></p>
+
+  <div class="callout"><code>failures tolerated = min(N − W, N − R)</code><br>And the combination that maximises it while keeping <code>W + R &gt; N</code> is always <strong><code>floor((N−1)/2)</code></strong> — the majority quorum.</div>
+
+  <table class="keytable">
+    <tr><th>N</th><th>QUORUM</th><th>Max failures while guaranteed</th></tr>
+    <tr><td>3</td><td>2</td><td>1</td></tr>
+    <tr><td>5</td><td>3</td><td>2</td></tr>
+    <tr><td>7</td><td>4</td><td>3</td></tr>
+  </table>
+
+  <p>This is where <strong>operational pressure</strong> comes from. At N=3 with two dead, QUORUM can do nothing. So somebody lowers the level to ONE — <strong>and that is the actual moment the inequality breaks.</strong> Not on its own, and not through some mechanism like sloppy quorum. <em>A person breaks it, buying availability.</em></p>
+
+  <h2>The cells the documentation does not fill</h2>
+
+  <p>In the lab's grid, <strong>the green cells are what the documentation tells you.</strong> The rest are not in it — so they are filled by combinatorics.</p>
+
+  <div class="callout">The number of ways R reads can <strong>miss the write set entirely</strong> is <code>C(N−W, R)</code> out of <code>C(N, R)</code>. So<br><code>P(overlap) = 1 − C(N−W, R) / C(N, R)</code></div>
+
+  <table class="keytable">
+    <tr><th>W · R</th><th>Sum</th><th>P(overlap)</th></tr>
+    <tr><td>1 · 1 (ONE/ONE)</td><td>2</td><td><strong>33.3%</strong></td></tr>
+    <tr><td>1 · 2 or 2 · 1</td><td>3</td><td>66.7%</td></tr>
+    <tr><td>2 · 2 (QUORUM)</td><td>4</td><td>100% — guaranteed</td></tr>
+  </table>
+
+  <p>At N=5 the ONE/ONE case gets worse, <strong>20%</strong>. Adding replicas improves <em>the tolerance of the guaranteed combinations</em> and worsens <em>the probability of the unguaranteed ones</em> — they do not move together.</p>
+
+  <div class="callout">These probabilities are <strong>the value at the instant there is no guarantee.</strong> Real systems send the write to every replica and run repair behind it, so after a moment it is usually right — there is measurement work showing partial quorums are <em>mostly</em> consistent in practice (PBS, VLDB 2012), and those figures come from measured latency distributions, which is not the kind of thing this lab computes.</div>
+
+  <h2>This edition's checkpoint</h2>
+
+  <p>This topic was <strong>rejected once.</strong> The only primary source that measured quorum staleness used Monte Carlo simulation, which cannot be reproduced deterministically, and my hypothesis that "sloppy quorum breaks the inequality" contradicted the documentation (hints do not satisfy a consistency level).</p>
+
+  <p>It came back because <strong>the checkpoint was somewhere else.</strong> The documentation prints a table.</p>
+
+  <table class="keytable">
+    <tr><th>What the documentation gives</th><th>What the model must reproduce</th></tr>
+    <tr><td><em>"QUORUM: A majority (n/2 + 1) of the replicas must respond."</em></td><td>That <code>floor(N/2)+1</code> comes out exactly, for N=1..7</td></tr>
+    <tr><td><em>"<code>W + R &gt; RF</code> … guaranteed to participate in both"</em></td><td>That the combinatorial probability is <strong>exactly 1</strong> in those cells</td></tr>
+  </table>
+
+  <p>In other words, <strong>the cells the documentation calls "guaranteed" and the cells where my combinatorics returns 100% have to coincide completely.</strong> Once they do, the remaining cells are trustworthy — and those remaining cells are what this page adds.</p>
+
+  <h2>What this model assumes</h2>
+
+  <table class="keytable">
+    <tr><th>Assumption</th><th>What breaks if it fails</th></tr>
+    <tr><td>The read set is drawn uniformly</td><td>The probability assumes R replicas chosen <strong>at random</strong>. Real coordinators prefer nearby replicas, which biases the draw and moves the number</td></tr>
+    <tr><td>One partition only</td><td>Quorums are per partition. An operation spanning keys holds per key, separately</td></tr>
+    <tr><td>The newest can be identified</td><td>It is assumed the overlapping node's value is <strong>recognised</strong> as newest. In practice a timestamp or vector clock does that, and if that mechanism is wrong, overlapping does not save you</td></tr>
+    <tr><td>Repair is not counted</td><td>Read repair, hinted handoff and anti-entropy reconcile in the background. So <strong>this probability is the instant before any of that runs</strong> — it improves with time</td></tr>
+  </table>
+
+  <h2>In the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>Find the levels in code</td><td>Consistency level is set <strong>per query</strong>. Find the default, and find <strong>where ONE is being used</strong>. The audit is usually surprising</td></tr>
+    <tr><td>Do not misread W</td><td>W=1 is not "write to one node". The write goes to all replicas and only <strong>the number of acks awaited</strong> is 1. Which is why W=1 usually ends up correct — it just is not <em>guaranteed</em></td></tr>
+    <tr><td>Incident runbooks</td><td>If "drop to ONE during an incident" is in the runbook, write down <strong>what that gives up</strong> too — and the condition for putting it back. Lowering it and forgetting is the common failure</td></tr>
+    <tr><td>Should N grow?</td><td>It is the only way to gain tolerance while keeping the guarantee (3 → 5 takes you from 1 to 2). The price is storage and write latency — QUORUM goes from 2 to 3</td></tr>
+    <tr><td>Multiple datacenters</td><td><code>LOCAL_QUORUM</code> counts a majority <strong>within its own DC only</strong>. That is not a cross-DC guarantee — redo this page's arithmetic per DC</td></tr>
+    <tr><td>Clocks</td><td>If the newest is chosen by timestamp, <strong>clock skew becomes a correctness problem.</strong> You can overlap and still pick wrong</td></tr>
+  </table>
+
+  <p>If <a href="/en/raft/">no. 4</a> solves this problem with consensus, this page is the side that buys it with probability. And it differs from <a href="/en/writeskew/">no. 15</a> too — that is isolation inside one node, this is overlap between nodes.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/raft/"><span class="no">04</span><span><span class="t">Who becomes leader when the network splits</span><span class="why">The same problem solved by consensus instead of probability.</span></span></a></li>
+      <li><a href="/en/writeskew/"><span class="no">15</span><span><span class="t">Both checked, and both passed</span><span class="why">Overlapping and still wrong — the problem of picking which value is newest.</span></span></a></li>
+      <li><a href="/en/backpressure/"><span class="no">11</span><span><span class="t">Rejection is a signal, not a bug</span><span class="why">Lowering the level for availability is the same kind of decision as rejecting.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">Index</a> · <a href="/quorum/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uNodes:' nodes', uAck:' acks',
+  hint:'$1 replicas · write waits $2 · read collects $3 — sum $4 → $5',
+  hGuard:'overlap guaranteed', hProb:'$1% chance of overlap',
+  nW:'W write waits $1', nR:'R read collects $1', nBoth:'overlap', nDead:'dead $1',
+  ncSafe:'W $1 + R $2 exceeds N $3, so at least one must overlap — currently $4 overlapping.',
+  ncRisk:'W $1 + R $2 does not exceed N $3 — only a $4 chance of overlap.',
+  gWR:'W \\ R', lOne:'ONE', lQuorum:'QUORUM', lAll:'ALL', gSafe:'guar.',
+  tPair:'W · R', tSum:'sum', tTolW:'write tol', tTolR:'read tol', tTol:'both',
+  tPairV:'$1 · $2',
+  mSum:'W+R vs N', mProb:'P(overlap)', mQuorum:'QUORUM is',
+  mTol:'failures tolerated', mBestTol:'max while guaranteed', mAlive:'right now',
+  mAlways:'guaranteed', mBothOk:'read+write OK', mWriteNo:'write fails', mReadNo:'read fails',
+  vSafe:'<b>W $1 + R $2 &gt; N $3 — overlap is guaranteed.</b><br>It survives $4 failures <span class="at">— the most any guaranteed pair can do here is $5</span>',
+  vZero:'<b>The inequality holds and the margin is zero.</b> W $1 · R $2<br>Writes survive $3, reads $4 — both, zero <span class="at">(up to $5 is available inside the same guarantee)</span>',
+  vRisk:'<b>W $1 + R $2 does not exceed N $3 — no guarantee.</b><br>Overlap <b>$4%</b> · no overlap $5% <span class="at">— that is not "usually fine"</span>',
+  vDown:'<b>$1 dead, $2 replicas alive — $3.</b><br>The inequality is untouched and nothing can be done <span class="at">— this pair tolerated $4 failures</span>',
+  vDownW:'the write cannot gather $1 acks', vDownR:'the read cannot gather $1 responses',
+  scene:[
+    'Start with the most common setting: three replicas, the write waits for two acks and the read collects two. The sum is four against N of three, so the pigeonhole principle forces an overlap — the amber cell in the grid is that replica. The documentation puts it as "at least one of the replicas is guaranteed to participate in both the write and the read request".',
+    'Drop both to one. ONE/ONE. The sum is two, which does not exceed three, and the chance of overlap is 33%. In exchange, failures tolerated went from one to two. It is the fastest and most survivable setting and it is widely used — the price is that two times in three they do not overlap. Not "usually fine": 33%.',
+    'Back to QUORUM, and kill one node. W is two and two are alive, so it fits exactly — the margin is precisely zero. The meter had been saying "failures tolerated: one" from the start, and this is that limit.',
+    'Kill a second. The inequality still says four is greater than three. And yet nothing can be done: you are waiting for two acks with one node able to answer. Guaranteeing overlap means that if it succeeds they overlap — it does not guarantee success.',
+    'So the level gets lowered to ONE. Writes and reads succeed again, and the chance of overlap is 33%. This is how you actually end up reading a stale value — the inequality does not break by itself, we break it by hand. And that is usually the right call. The point is knowing what was given up at that moment.',
+    'Bring every node back and set the write to three acks with the read at one. The sum is still four, so it is still guaranteed. But failures tolerated is zero — one dead node breaks writes. Look at the table: inside the same "guaranteed" there is a one-tolerance option and a zero-tolerance one. Checking the inequality and stopping there hides that.',
+    'Finally grow to five replicas. QUORUM is three, so two can die and three remain, keeping the guarantee. At three replicas the limit was one. Adding replicas is the only way to get both the guarantee and the tolerance, and the price is storage and write latency.'
+  ],
+};
+</script>
+<script src="/shared/quorum-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "You satisfied R + W &gt; N — so why is it still risky?",
+  "description": "With three replicas, R=W=2 guarantees overlap. But one dead node and writes fail. Drop to R=W=1 and you survive two failures with a 33% chance of overlap. The inequality does not break on its own — it breaks the moment you lower the level to stay up.",
+  "url": "https://lab.vermilion19.com/en/quorum/",
+  "inLanguage": "en",
+  "datePublished": "2026-08-25",
+  "dateModified": "2026-08-25",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "You satisfied R + W &gt; N — so why is it still risky?"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

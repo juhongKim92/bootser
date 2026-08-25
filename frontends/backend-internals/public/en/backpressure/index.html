@@ -347,6 +347,7 @@ void submit(Task task) throws InterruptedException {
       <li><a href="/en/timeout/"><span class="no">17</span><span><span class="t">Everyone got a second and nobody gets to use one</span><span class="why">Rejection as a signal and passing the remaining budget downward are the same idea.</span></span></a></li>
       <li><a href="/en/omission/"><span class="no">25</span><span><span class="t">The load test never counted the 30 seconds it was frozen</span><span class="why">Time spent waiting in the queue never enters server-side latency — it vanishes whole.</span></span></a></li>
       <li><a href="/en/backlog/"><span class="no">27</span><span><span class="t">The kernel drops connections and the application log stays clean</span><span class="why">Growing the queue turns rejection into waiting — the same thing happens inside the kernel.</span></span></a></li>
+      <li><a href="/en/usl/"><span class="no">30</span><span><span class="t">Adding threads made it slower</span><span class="why">Where adding concurrency turns into a loss — the peak is that point.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->

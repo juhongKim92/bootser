@@ -233,7 +233,7 @@
       <summary>
         <span class="arw" aria-hidden="true"></span>
         <h2>How capacity collapses <em>the queries are fast and the system stalls anyway</em></h2>
-        <span class="count">9</span>
+        <span class="count">10</span>
       </summary>
       <div class="glist">
 
@@ -318,6 +318,15 @@
         <span class="tag live">live</span>
       </a>
 
+      <a class="card" href="/en/usl/">
+        <span class="no">30</span>
+        <span>
+          <h2>Adding threads made it slower</h2>
+          <p>Amdahl and the USL. Past the peak throughput falls — and response time falls apart much faster.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
+
       </div>
     </details>
 
@@ -325,7 +334,7 @@
       <summary>
         <span class="arw" aria-hidden="true"></span>
         <h2>Failing quietly <em>no exception, no log — just a wrong result</em></h2>
-        <span class="count">8</span>
+        <span class="count">9</span>
       </summary>
       <div class="glist">
 
@@ -397,6 +406,15 @@
         <span>
           <h2>The kernel drops connections and the application log stays clean</h2>
           <p>The accept queue and SYN retries. 7,372 dropped, zero in the application metrics — the latency is all on the client side.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
+
+      <a class="card" href="/en/quorum/">
+        <span class="no">31</span>
+        <span>
+          <h2>You satisfied R + W &gt; N — so why is it still risky?</h2>
+          <p>Quorum arithmetic. The inequality buys overlap and pays in fault tolerance — one node at N=3.</p>
         </span>
         <span class="tag live">live</span>
       </a>

@@ -18,7 +18,8 @@ export const NO = {
   correlation: '12', genericplan: '13', retrystorm: '14', writeskew: '15', stampede: '16',
   timeout: '17', lockttl: '18', throughput: '19', rebalance: '20', tcpclose: '21',
   aggregate: '22', alignment: '23', fanout: '24', omission: '25', slowstart: '26',
-  backlog: '27', nagle: '28', pagesplit: '29'
+  backlog: '27', nagle: '28', pagesplit: '29', usl: '30',
+  quorum: '31'
 };
 
 /* slug → [{ to, ko, en }] */
@@ -37,11 +38,13 @@ export const RELATED = {
   hashring: [
     { to: 'stampede', ko: '노드가 빠져서 캐시가 무너지는 것이 이 페이지라면, 아무도 빠지지 않았는데 무너지는 것이 16번입니다.', en: 'Here a node leaves and the cache collapses; in no. 16 nobody leaves and it collapses anyway.' },
     { to: 'websocket', ko: '연결이 서버마다 흩어져 있을 때, 메시지를 어느 서버로 보내야 하는가.', en: 'When connections are spread across servers, which one do you send the message to?' },
-    { to: 'raft', ko: '멤버십이 바뀌었다는 것을 누가 합의해 주는가.', en: 'Who agrees that the membership changed?' }
+    { to: 'raft', ko: '멤버십이 바뀌었다는 것을 누가 합의해 주는가.', en: 'Who agrees that the membership changed?' },
+    { to: 'quorum', ko: '조각을 몇 대에 두느냐가 정해지면, 몇 대의 응답을 기다릴지가 다음 문제입니다.', en: 'Once you fix how many nodes hold a piece, how many acks to wait for is the next question.' }
   ],
   raft: [
     { to: 'keepalive', ko: '노드가 죽었다고 판단하는 데 걸리는 시간 — 선거 타임아웃과 같은 저울입니다.', en: 'How long it takes to decide a node is dead — the same dial as the election timeout.' },
-    { to: 'hashring', ko: '멤버가 바뀌면 데이터는 어디로 옮겨가는가.', en: 'When the membership changes, where does the data move?' }
+    { to: 'hashring', ko: '멤버가 바뀌면 데이터는 어디로 옮겨가는가.', en: 'When the membership changes, where does the data move?' },
+    { to: 'quorum', ko: '합의로 푸는 대신 확률로 사는 쪽 — 정족수가 정확히 무엇을 보장하나.', en: 'The side that buys with probability instead of consensus — what a quorum actually guarantees.' }
   ],
   mqtt: [
     { to: 'retrystorm', ko: 'QoS 1 의 재전송이 부하 자체가 되면 어떻게 되는가.', en: 'What happens when QoS 1’s retransmissions become the load itself.' },
@@ -67,7 +70,8 @@ export const RELATED = {
     { to: 'timeout', ko: '타임아웃을 늘리면 점유가 늘어 용량이 줍니다 — 같은 리틀의 법칙입니다.', en: 'Raise the timeout and occupancy rises, so capacity falls — the same Little’s law.' },
     { to: 'throughput', ko: '같은 식이 네트워크에서는 바이트 단위로 나타납니다. 풀 크기 대신 띄운 바이트입니다.', en: 'The same formula in bytes on the network — bytes in flight instead of pool size.' },
     { to: 'mvcc', ko: '트랜잭션을 오래 열어두는 또 다른 대가.', en: 'The other price of holding a transaction open.' },
-    { to: 'slowstart', ko: '풀이 커넥션을 살려두는 진짜 이득 — 대역폭이 아니라 왕복 계단을 건너뜁니다.', en: 'What keeping a connection alive really buys — not bandwidth but skipping the round-trip staircase.' }
+    { to: 'slowstart', ko: '풀이 커넥션을 살려두는 진짜 이득 — 대역폭이 아니라 왕복 계단을 건너뜁니다.', en: 'What keeping a connection alive really buys — not bandwidth but skipping the round-trip staircase.' },
+    { to: 'usl', ko: '작은 풀이 더 빠른 그 최적점을 식으로 계산해 봅니다.', en: 'Computing the optimum behind “a smaller pool is faster”.' }
   ],
   jobclaim: [
     { to: 'lockttl', ko: '제대로 잡은 락이 일하는 중에 사라지면 어떻게 되는가.', en: 'What happens when a correctly claimed lock disappears mid-flight.' },
@@ -84,7 +88,8 @@ export const RELATED = {
     { to: 'connpool', ko: '자라는 큐가 어디서 오는가.', en: 'Where the growing queue comes from.' },
     { to: 'timeout', ko: '거부가 신호라는 것과 남은 예산을 아래로 넘기는 것은 같은 이야기입니다.', en: 'Rejection as a signal and passing the remaining budget downward are the same idea.' },
     { to: 'omission', ko: '큐에서 기다린 시간은 서버가 재는 응답시간에 안 들어갑니다 — 통째로 사라집니다.', en: 'Time spent waiting in the queue never enters server-side latency — it vanishes whole.' },
-    { to: 'backlog', ko: '큐를 키우면 거부가 대기로 바뀌는 일이 커널 안에서도 똑같이 벌어집니다.', en: 'Growing the queue turns rejection into waiting — the same thing happens inside the kernel.' }
+    { to: 'backlog', ko: '큐를 키우면 거부가 대기로 바뀌는 일이 커널 안에서도 똑같이 벌어집니다.', en: 'Growing the queue turns rejection into waiting — the same thing happens inside the kernel.' },
+    { to: 'usl', ko: '동시성을 늘리는 것이 언제부터 손해로 바뀌는가 — 정점이 그 자리입니다.', en: 'Where adding concurrency turns into a loss — the peak is that point.' }
   ],
   correlation: [
     { to: 'timeout', ko: '타임아웃으로 포기한 요청의 응답이 늦게 오면, 그게 다음 요청의 짝이 됩니다.', en: 'When the answer to a timed-out request arrives late, it becomes the next request’s pair.' },
@@ -112,7 +117,8 @@ export const RELATED = {
     { to: 'lockttl', ko: '예외도 로그도 없이 결과만 틀리는 같은 종류가 분산 락에서 나옵니다.', en: 'The same species — no exception, no log, just a wrong result — out of a distributed lock.' },
     { to: 'mvcc', ko: '각자가 보고 있던 스냅숏이 무엇이었는가.', en: 'What the snapshot each of them was reading actually was.' },
     { to: 'aggregate', ko: '이쪽은 동시성 때문에 틀리고, 22 는 정의가 갈려서 값이 둘입니다.', en: 'Here concurrency makes it wrong; in no. 22 the definition splits and there are two values.' },
-    { to: 'pagesplit', ko: '같은 B-tree 를 정확성이 아니라 공간 쪽에서 봅니다.', en: 'The same B-tree seen from space rather than correctness.' }
+    { to: 'pagesplit', ko: '같은 B-tree 를 정확성이 아니라 공간 쪽에서 봅니다.', en: 'The same B-tree seen from space rather than correctness.' },
+    { to: 'quorum', ko: '한 노드 안의 격리가 아니라 노드 사이의 겹침 이야기.', en: 'Not isolation inside one node but overlap between nodes.' }
   ],
   stampede: [
     { to: 'lockttl', ko: '뮤텍스를 분산 락으로 옮기면 락의 TTL 이 새 문제가 됩니다.', en: 'Move the mutex to a distributed lock and the lock’s TTL becomes the new problem.' },
@@ -167,7 +173,8 @@ export const RELATED = {
     { to: 'fanout', ko: '측정을 고치고 나면 볼 것 — 개별 서버의 꼬리가 사용자에게 몇 배로 도착하는가.', en: 'Once the measurement is fixed: how one server’s tail arrives magnified at the user.' },
     { to: 'aggregate', ko: '같은 사건이 두 숫자가 되는 다른 이유 — 이쪽은 둘 다 맞습니다.', en: 'The other way one event becomes two numbers — there, both are right.' },
     { to: 'connpool', ko: '큐와 풀에서 기다린 시간이 응답시간에서 사라지는 자리.', en: 'Where time spent waiting in the queue and the pool drops out of the latency number.' },
-    { to: 'backlog', ko: '측정이 시작되기 전의 시간 — 서버의 시계는 accept() 부터 돕니다.', en: 'The time before the measurement starts — the server’s clock begins at accept().' }
+    { to: 'backlog', ko: '측정이 시작되기 전의 시간 — 서버의 시계는 accept() 부터 돕니다.', en: 'The time before the measurement starts — the server’s clock begins at accept().' },
+    { to: 'usl', ko: '정점을 넘긴 상태를 폐루프로 재면 아예 안 보일 수 있습니다.', en: 'Measure a past-the-peak system with a closed loop and you may not see it at all.' }
   ],
   slowstart: [
     { to: 'throughput', ko: '정상 상태로 넘어가면 이번엔 손실률이 처리량을 정합니다 — 거기도 대역폭은 식에 없습니다.', en: 'Once the steady state arrives, loss rate sets the throughput — and bandwidth is not in that formula either.' },
@@ -189,6 +196,16 @@ export const RELATED = {
     { to: 'mvcc', ko: '삭제와 갱신이 섞이면 채움률이 더 낮아집니다 — VACUUM 이 왜 필요한가.', en: 'Mixed deletes and updates push occupancy lower still — which is what VACUUM is for.' },
     { to: 'stampede', ko: '인덱스가 버퍼 캐시를 넘는 순간이 실제로 아픈 지점입니다.', en: 'The moment the index outgrows the buffer cache is where it actually hurts.' },
     { to: 'genericplan', ko: '같은 인덱스를 옵티마이저 쪽에서 — 통계가 낡으면 계획이 갈립니다.', en: 'The same index from the optimiser side — stale statistics split the plan.' }
+  ],
+  usl: [
+    { to: 'connpool', ko: '같은 곡선을 커넥션 풀 크기로 — 리틀의 법칙이 세 번째로 나옵니다.', en: 'The same curve as pool size — Little’s law for the third time.' },
+    { to: 'omission', ko: '정점을 넘겼는지 재려면 측정이 먼저 정직해야 합니다.', en: 'To measure whether you are past the peak, the measurement has to be honest first.' },
+    { to: 'backpressure', ko: '정점 위에서 들어오는 요청을 어떻게 할 것인가.', en: 'What to do with the requests that arrive past the peak.' }
+  ],
+  quorum: [
+    { to: 'raft', ko: '같은 문제를 확률이 아니라 합의로 푸는 쪽.', en: 'The same problem solved by consensus instead of probability.' },
+    { to: 'writeskew', ko: '겹쳤는데도 틀리는 경우 — 어느 값이 최신인지 고르는 문제.', en: 'Overlapping and still wrong — the problem of picking which value is newest.' },
+    { to: 'backpressure', ko: '가용성을 위해 등급을 낮추는 그 판단이 거부와 같은 종류입니다.', en: 'Lowering the level for availability is the same kind of decision as rejecting.' }
   ],
   rebalance: [
     { to: 'connpool', ko: '바쁨과 진행을 구별하지 못해서 생기는 같은 사고 — CPU 사용률은 진행률이 아닙니다.', en: 'The same accident from confusing busy with progressing — CPU utilisation is not a progress bar.' },

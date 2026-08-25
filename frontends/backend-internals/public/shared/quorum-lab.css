@@ -1,0 +1,125 @@
+/* ============================================================
+   31. R + W > N 을 지켰는데 왜 위험한가 — 정족수의 산수
+   ============================================================ */
+
+.lab{margin:32px 0 8px;border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);overflow:hidden}
+.lab section{border-bottom:1px solid var(--rule);padding:16px 18px}
+.lab section:last-child{border-bottom:none}
+.cap{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;display:block}
+
+/* --- 손잡이 --- */
+.dials{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end}
+.dial label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
+.dial input[type=range]{width:124px;max-width:42vw;accent-color:var(--horizon);vertical-align:middle}
+.dial .v{font-family:var(--mono);font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums;min-width:64px;display:inline-block}
+.dial .v small{font-size:11px;color:var(--ink-3)}
+.seg{display:flex;gap:0;border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+.seg button{border:none;border-right:1px solid var(--rule);border-radius:0;padding:6px 12px;font-size:11px;white-space:nowrap}
+.seg button:last-child{border-right:none}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.seg.reuse button[aria-pressed="true"]{background:var(--horizon);color:var(--paper)}
+.hint{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:8px;min-height:14px}
+.hint.warn{color:var(--blocked)}
+
+.board{border:1px solid var(--rule);border-radius:3px;background:var(--paper);padding:13px 14px 10px}
+
+/* --- 복제본 격자 -------------------------------------------------------
+   칸 하나가 복제본 하나. 쓰기가 기다린 칸과 읽기가 모은 칸이 겹치는지를 본다. */
+.nodes{display:flex;flex-direction:column;gap:8px;margin-bottom:4px}
+.nodes .row{display:grid;grid-template-columns:104px 1fr;gap:10px;align-items:center}
+.nodes .rn{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);text-align:right;white-space:nowrap}
+.nodes .set{display:flex;gap:5px}
+.nodes .nd{flex:1;height:22px;border:1px solid var(--rule);border-radius:2px;background:var(--paper-2);
+  font-family:var(--mono);font-size:9px;color:var(--ink-3);display:flex;align-items:center;justify-content:center}
+.nodes .nd.w{background:color-mix(in srgb,var(--live) 30%,transparent);border-color:var(--live);color:var(--ink)}
+.nodes .nd.r{background:color-mix(in srgb,var(--horizon) 30%,transparent);border-color:var(--horizon);color:var(--ink)}
+.nodes .nd.both{background:color-mix(in srgb,var(--free) 42%,transparent);border-color:var(--free);color:var(--ink)}
+.nodes .nd.dead{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--blocked) 26%,transparent) 0 3px,transparent 3px 6px);
+  border-color:var(--blocked);color:var(--blocked)}
+.nodecap{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:8px;line-height:1.8}
+.nodecap b{color:var(--free);font-weight:500}
+.nodecap .no{color:var(--blocked)}
+
+/* --- 조합표 --- */
+.grid2{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:15px}
+.grid2 th,.grid2 td{text-align:center;padding:6px 4px;border:1px solid var(--rule)}
+.grid2 th{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--ink-3);font-weight:400;background:var(--paper-2)}
+.grid2 td{font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.grid2 td.safe{background:color-mix(in srgb,var(--live) 18%,transparent);color:var(--live)}
+.grid2 td.risk{color:var(--blocked)}
+.grid2 td.on{outline:2px solid var(--ink);outline-offset:-2px}
+.grid2 th:first-child{text-align:right}
+
+/* --- 조건별 표 --- */
+.four{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:15px}
+.four th,.four td{text-align:right;padding:5px 0 5px 10px;border-bottom:1px solid var(--rule);vertical-align:baseline}
+.four th{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--ink-3);font-weight:400}
+.four td{font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.four th:first-child,.four td:first-child{text-align:left;padding-left:0;color:var(--ink);white-space:nowrap}
+.four tr.on td{background:var(--paper-3)}
+.four td.bad{color:var(--blocked)}
+.four td.good{color:var(--live)}
+
+/* --- 미터 --- */
+.meters{display:flex;gap:24px;flex-wrap:wrap;margin-top:15px}
+.meters .m{min-width:84px}
+.meters .k{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.meters .n{font-family:var(--mono);font-size:19px;color:var(--ink);font-variant-numeric:tabular-nums}
+.meters .n small{font-size:11px;color:var(--ink-3);margin-left:2px}
+.meters .m.bad .n{color:var(--blocked)}
+.meters .m.good .n{color:var(--live)}
+
+/* --- 판정 --- */
+.verdict{border-left:2px solid var(--rule);background:var(--paper);padding:10px 0 10px 13px;margin-top:14px;
+  font-family:var(--mono);font-size:10.5px;line-height:1.8;color:var(--ink-2)}
+.verdict.stuck{border-left-color:var(--blocked)}
+.verdict.stuck b{color:var(--blocked)}
+.verdict.ok{border-left-color:var(--live)}
+.verdict.ok b{color:var(--live)}
+.verdict b{font-weight:500;color:var(--ink)}
+.verdict .at{color:var(--ink-3)}
+
+/* --- IW 비교 표 --- */
+.cmp-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.cmp-tbl th,.cmp-tbl td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.cmp-tbl th{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.cmp-tbl td:first-child{font-size:12.5px;width:1%;white-space:nowrap;padding-right:16px}
+.cmp-tbl td.num{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums}
+.cmp-tbl tr.on td{background:var(--paper-3)}
+.cmp-tbl td.bad{color:var(--blocked)}
+.cmp-tbl td.good{color:var(--live)}
+.cmp-tbl td.same{color:var(--ink-3)}
+
+/* --- 조작대 --- */
+.transport{background:var(--paper-3);display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.transport .keys{display:flex;gap:6px;flex-wrap:wrap}
+.narration{flex:1;min-width:240px;font-family:var(--serif);font-size:14.5px;line-height:1.65;color:var(--ink)}
+.narration .n{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-3);display:block;margin-bottom:3px}
+
+/* --- 안내 --- */
+.recipe{border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);padding:14px 16px;margin:14px 0;max-width:68ch}
+.recipe h4{font-family:var(--sans);font-size:14px;font-weight:700;margin:0 0 4px}
+.recipe .seq{font-family:var(--mono);font-size:11px;line-height:1.9;background:var(--paper);border:1px solid var(--rule);
+  border-radius:2px;padding:9px 11px;margin:9px 0;white-space:pre-wrap;color:var(--ink-2)}
+.recipe .seq em{font-style:normal;color:var(--horizon)}
+.recipe .why{font-size:13.5px;color:var(--ink-2);margin:0}
+.keytable{width:100%;border-collapse:collapse;margin:12px 0;max-width:68ch;font-size:13.5px}
+.keytable th,.keytable td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.keytable th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.keytable td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap;width:1%;padding-right:18px;color:var(--ink)}
+
+/* 범례 */
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:11px;font-family:var(--mono);font-size:9.5px;color:var(--ink-3)}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend i{width:16px;height:9px;border-radius:1px;display:block;flex:none}
+.legend i.wi{background:color-mix(in srgb,var(--live) 30%,transparent);border:1px solid var(--live)}
+.legend i.ri{background:color-mix(in srgb,var(--horizon) 30%,transparent);border:1px solid var(--horizon)}
+.legend i.bothi{background:color-mix(in srgb,var(--free) 42%,transparent);border:1px solid var(--free)}
+.legend i.deadi{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--blocked) 26%,transparent) 0 3px,transparent 3px 6px);border:1px solid var(--blocked)}
+
+@media (max-width:600px){
+  .nodes .row{grid-template-columns:72px 1fr;gap:6px}
+  .nodes .rn{font-size:8.5px}
+  .nodes .nd{height:18px;font-size:8px}
+  .grid2 td,.grid2 th{padding:5px 2px;font-size:10.5px}
+}
