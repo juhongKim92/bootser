@@ -261,6 +261,7 @@ Width 200 · 1 round                    tail <em>86.6%</em> · mean <em>867ms</e
       <li><a href="/en/timeout/"><span class="no">17</span><span><span class="t">Everyone got a second and nobody gets to use one</span><span class="why">If cancellation does not propagate, the copy costs more than the number says — work nobody waits for is left running.</span></span></a></li>
       <li><a href="/en/retrystorm/"><span class="no">14</span><span><span class="t">The load is gone and it still will not recover</span><span class="why">Where the overlapping copies become the load, once there is no spare capacity left.</span></span></a></li>
       <li><a href="/en/backpressure/"><span class="no">11</span><span><span class="t">Rejection is a signal, not a bug</span><span class="why">If the width cannot shrink, the remaining choice is deciding what to drop.</span></span></a></li>
+      <li><a href="/en/omission/"><span class="no">25</span><span><span class="t">The load test never counted the 30 seconds it was frozen</span><span class="why">Why that tail went unseen — when the measurement rests precisely while things are slow.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->

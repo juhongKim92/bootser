@@ -241,6 +241,7 @@
       <li><a href="/writeskew/"><span class="no">15</span><span><span class="t">둘 다 확인했고 둘 다 통과했다</span><span class="why">예외도 로그도 없이 숫자만 틀리는 같은 종류 — 저쪽은 동시성입니다.</span></span></a></li>
       <li><a href="/genericplan/"><span class="no">13</span><span><span class="t">여섯 번째 실행부터 느려진다</span><span class="why">평균으로 판단하는 자리 — 젠센 부등식이 옵티마이저 쪽에서 나옵니다.</span></span></a></li>
       <li><a href="/mvcc/"><span class="no">01</span><span><span class="t">DELETE 했는데 테이블이 줄지 않는 이유</span><span class="why">두 경로가 서로 다른 스냅숏을 읽고 있으면 차이가 하나 더 생깁니다.</span></span></a></li>
+      <li><a href="/omission/"><span class="no">25</span><span><span class="t">멈춰 있던 30초를 부하 테스트가 세지 않았다</span><span class="why">이쪽은 정의가 둘이라 둘 다 맞았습니다. 25번은 한쪽이 사건을 아예 안 봤습니다.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->
@@ -291,7 +292,7 @@ window.LAB_I18N = {
   "url": "https://lab.vermilion19.com/aggregate/",
   "inLanguage": "ko",
   "datePublished": "2026-08-13",
-  "dateModified": "2026-08-24",
+  "dateModified": "2026-08-25",
   "author": {
     "@type": "Organization",
     "name": "Backend Internals",

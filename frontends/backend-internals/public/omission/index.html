@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>멈춰 있던 30초를 부하 테스트가 세지 않았다 — coordinated omission</title>
+<meta name="description" content="5분 부하 시험 중 서버가 30초 멈췄습니다. 폐루프 부하 생성기가 보고한 p99 는 10ms 입니다. p99.99 도 10ms 예요. 같은 사건을 개루프로 재면 27.01초입니다 — 2,701배. 둘 다 정직하게 측정했습니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/omission/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/omission/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/omission/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/omission/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="멈춰 있던 30초를 부하 테스트가 세지 않았다">
+<meta property="og:description" content="보고된 p99 는 10ms, 실제는 27.01초. 표본이 틀린 게 아니라 애초에 안 잡혔습니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/omission/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="멈춰 있던 30초를 부하 테스트가 세지 않았다">
+<meta name="twitter:description" content="부하를 50배로 올려도 이 왜곡은 한 자리도 안 변합니다. 왜곡을 정하는 것은 부하가 아니라 시험 시간입니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/omission-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/omission/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>멈춰 있던 30초를 부하 테스트가 세지 않았다</h1>
+  <p class="lede">5분짜리 부하 시험 중에 서버가 <strong>30초 동안 완전히 멈췄습니다.</strong> 시험이 끝나고 나온 보고서의 p99 는 <strong>10ms</strong> 였어요. p99.99 도 10ms 입니다. 같은 사건을 다른 방식으로 재면 <strong>27.01초</strong>고요. 둘 다 정직하게 측정했습니다. 한쪽이 <em>그 30초를 세지 않았을</em> 뿐입니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>재는 방식</label>
+          <div class="seg mode" id="segMode" role="group" aria-label="부하 생성기 방식">
+            <button data-mode="closed" aria-pressed="true">폐루프</button>
+            <button data-mode="open">개루프</button>
+            <button data-mode="fixed">보정</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sD">서버가 멈춘 시간</label>
+          <span class="v" id="vD">0<small>초</small></span>
+          <input type="range" id="sD" min="0" max="60" step="1" value="0" aria-label="서버가 아무 응답도 못 하는 구간의 길이">
+        </div>
+        <div class="dial">
+          <label for="sT">시험 시간</label>
+          <span class="v" id="vT">300<small>초</small></span>
+          <input type="range" id="sT" min="30" max="600" step="10" value="300" aria-label="부하 시험 전체 길이">
+        </div>
+        <div class="dial">
+          <label for="sC">동시 워커</label>
+          <span class="v" id="vC">10<small>개</small></span>
+          <input type="range" id="sC" min="1" max="50" step="1" value="10" aria-label="부하 생성기의 동시 워커 수">
+        </div>
+        <div class="dial">
+          <label for="sS">평소 응답</label>
+          <span class="v" id="vS">10<small>ms</small></span>
+          <input type="range" id="sS" min="0" max="4" step="1" value="1" aria-label="정지가 없을 때 서버가 답하는 시간">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->목표 1,000 rps (워커 10 × 평소 10ms) · 시험 300초 중 0초 정지 — 이 방식이 보고하는 p99 는 10ms<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">시험 시간 위에 표본이 남은 자리</span>
+      <div class="board">
+        <div id="tape"><!--pr--><div class="tape head"><span class="tn"></span><div class="tl"><div class="stall" style="left:30%;width:0%"></div><div class="lbl" style="left:30%">서버 정지 0초</div></div></div><div class="tape on"><span class="tn">폐루프</span><div class="tl"><div class="stall" style="left:30%;width:0%"></div><div class="live " style="left:0;width:30%"></div><div class="live " style="left:30%;right:0;width:70%"></div></div></div><div class="tape"><span class="tn">개루프</span><div class="tl"><div class="stall" style="left:30%;width:0%"></div><div class="live " style="left:0;width:30%"></div><div class="live " style="left:30%;right:0;width:70%"></div></div></div><div class="tape"><span class="tn">보정</span><div class="tl"><div class="stall" style="left:30%;width:0%"></div><div class="live " style="left:0;width:30%"></div><div class="live " style="left:30%;right:0;width:70%"></div></div></div><!--/pr--></div>
+        <div class="tapex" id="tapeX"><!--pr--><span>0초</span><span>150초</span><span>300초</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="live"></i>정상 표본</span>
+          <span><i class="hot"></i>정지 구간에서 실제로 잰 표본</span>
+          <span><i class="synth"></i>보정이 채워 넣은 기록</span>
+          <span><i class="void"></i>표본이 아예 없는 구간</span>
+        </div>
+
+        <div class="spine" id="spine"><!--pr--><div class="row rep"><span class="rn">폐루프</span><span class="bar" style="width:100.00%"></span><span class="rv">10ms</span></div><div class="row truth"><span class="rn">개루프</span><span class="bar" style="width:100.00%"></span><span class="rv">10ms</span></div><div class="row "><span class="rn">보정</span><span class="bar" style="width:100.00%"></span><span class="rv">10ms</span></div><!--/pr--></div>
+        <table class="pct" id="pct"><!--pr--><tr><th>재는 방식</th><th>p50</th><th>p90</th><th>p99</th><th>p99.9</th><th>p99.99</th><th>최대</th><th>표본</th></tr><tr class="on"><td>폐루프</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td>300,000</td></tr><tr class=""><td>개루프</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td>300,000</td></tr><tr class=""><td>보정</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td>300,000</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m "><span class="k">보고된 p99</span><span class="n">10ms</span></div><div class="m good"><span class="k">실제 p99</span><span class="n">10ms</span></div><div class="m good"><span class="k">왜곡 배수</span><span class="n">×1.0</span></div><div class="m "><span class="k">드러나는 지점</span><span class="n">p100.000</span></div><div class="m "><span class="k">표본 수</span><span class="n">300,000</span></div><div class="m good"><span class="k">놓친 표본</span><span class="n">0</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>정지가 없으면 세 방식이 구별되지 않는다.</b> 셋 다 p99 <b>10ms</b><br><span class="at">평소에 이 문제를 발견할 기회가 없는 이유다</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>재는 방식</td><td><strong>폐루프</strong>는 응답을 받아야 다음 요청을 보냅니다(대부분의 부하 도구가 이렇습니다). <strong>개루프</strong>는 목표 속도대로 계속 보냅니다. <strong>보정</strong>은 폐루프로 재고 누락분을 되채웁니다.</td></tr>
+    <tr><td>서버가 멈춘 시간</td><td>이 구간에 도착한 요청은 전부 정지가 끝난 뒤에 답을 받습니다. <strong>0 으로 두면 세 방식의 모든 퍼센타일이 완전히 같아집니다</strong> — 차이는 이 구간에서만 생깁니다.</td></tr>
+    <tr><td>시험 시간</td><td>전체 길이. <strong>이 손잡이가 왜곡의 크기를 정합니다</strong> — 부하가 아니라요. 길게 잡을수록 폐루프는 더 낙관적이 됩니다.</td></tr>
+    <tr><td>동시 워커</td><td>부하 생성기의 워커 수. 목표 속도가 <code>워커 ÷ 평소 응답</code> 이라 이 값이 곧 부하입니다. <strong>돌려 보세요 — 왜곡이 한 자리도 안 움직입니다.</strong></td></tr>
+    <tr><td>평소 응답</td><td>정지가 없을 때 서버가 답하는 시간. 보정이 쓰는 <em>기대 간격</em>도 이 값입니다(워커 하나가 요청을 보내는 간격이니까요).</td></tr>
+  </table>
+
+  <p>퍼센타일은 <strong>최근접 순위</strong>로 계산합니다 — 표본 <code>n</code> 개를 정렬하고 <code>ceil(q × n / 100)</code> 번째 값을 씁니다. 보간하지 않아요. 방식을 하나로 고정하고 여기 적어두는 이유는, 경계에서 값이 갈리면 이 페이지의 논지가 측정 방식 논쟁으로 바뀌기 때문입니다.</p>
+
+  <p>난수가 없습니다. 요청 간격이 고정이고 서비스 시간이 상수라 모든 지연이 결정되고, 세 방식의 수치가 <strong>닫힌 식</strong>으로 나옵니다. 표본을 만들어 정렬하는 게 아니에요.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 정지를 0 으로 — 세 방식이 완전히 같다</h4>
+    <div class="seq">서버가 멈춘 시간 0초
+p50 · p99 · p99.9 · p99.99 · 최대 <em>전부 10ms</em> (세 방식 모두)</div>
+    <p class="why">여기서 출발하는 게 중요합니다. <strong>정상 구간에서는 세 방식이 구별되지 않아요.</strong> 폐루프가 늘 틀린 게 아니라, <em>서버가 멈추는 동안에만</em> 갈라집니다. 그래서 평소에 이 문제를 발견할 기회가 없습니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 30초 멈춘다 — 폐루프는 p99.99 로도 못 본다</h4>
+    <div class="seq">서버가 멈춘 시간 0 → 30초 (폐루프)
+p99 <em>10ms</em> · p99.9 <em>10ms</em> · p99.99 <em>10ms</em>
+최대 <em>30.01초</em> · 표본 <em>270,010</em></div>
+    <p class="why">시험 시간의 <strong>10% 동안 서버가 완전히 죽어 있었는데</strong> 퍼센타일이 하나도 안 움직입니다. 정지 중에 묶인 요청이 워커 수만큼, 즉 <strong>10건뿐</strong>이거든요. 27만 표본 중 10건은 p99.99 에도 못 낍니다. 미터의 "드러나는 지점" 이 <strong>p99.996</strong> 이라고 알려주고 있어요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 개루프로 바꾼다 — 같은 사건이 27.01초</h4>
+    <div class="seq">재는 방식 폐루프 → 개루프
+p99 10ms → <em>27.01초</em> (2,701배) · p99.9 <em>29.71초</em>
+표본 270,010 → <em>300,000</em> · 드러나는 지점 p99.996 → <em>p90.0</em></div>
+    <p class="why">개루프는 서버가 답을 주든 말든 <strong>1,000/초로 계속 보냅니다.</strong> 그래서 정지 구간에 3만 건이 쌓이고, 그 3만 건이 전부 표본이 됩니다. 시간축에서 폐루프 줄만 그 구간이 <em>비어 있는 것</em>을 보세요. <strong>폐루프는 값을 잘못 잰 게 아니라 그 구간에 잰 것이 없습니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. 보정을 켠다 — 폐루프로 재고 되돌린다</h4>
+    <div class="seq">재는 방식 개루프 → 보정 (측정은 폐루프 그대로)
+p99 <em>27.01초</em> — 개루프와 소수점까지 같다
+표본 270,010 → 300,010 (<em>기록 30,000개를 채워 넣었다</em>)</div>
+    <p class="why">묶인 표본 하나가 30.01초라면, 기대 간격 10ms 로 <strong>30.01초 · 30.00초 · 29.99초 …</strong> 를 만들어 넣습니다. 있었어야 할 요청들이 각각 얼마를 기다렸을지를 되살리는 거예요. <strong>근사가 아니라 되돌리기입니다</strong> — 개루프가 실제로 잰 것과 같은 값이 나오니까요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 부하를 5배로 — 왜곡이 한 자리도 안 변한다</h4>
+    <div class="seq">동시 워커 10 → 50 (1,000 → 5,000 rps · 폐루프)
+보고 p99 <em>10ms 그대로</em> · 드러나는 지점 <em>p99.996 그대로</em>
+표본만 270,010 → 1,350,050</div>
+    <p class="why">직관과 반대예요. 부하를 세게 주면 정지 구간에 더 많이 걸릴 것 같은데, <strong>묶이는 요청은 워커 수만큼 늘고 전체 표본도 같은 비율로 늘어서 상쇄됩니다.</strong> 나쁜 표본의 비율은 <code>평소응답 ÷ (시험시간 − 정지시간)</code> 이고, 이 식에 <strong>부하가 없습니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. 시험을 짧게 한다 — 그제서야 보인다</h4>
+    <div class="seq">시험 시간 300 → 60초 (폐루프 · 정지 30초 그대로)
+p99.99 10ms → <em>30.01초</em> · 드러나는 지점 p99.996 → <em>p99.967</em>
+600초로 늘리면 <em>p99.998</em> — 더 깊이 숨는다</div>
+    <p class="why"><strong>"오래 돌려야 정확하다" 와 정반대입니다.</strong> 정지는 한 번 있었고 묶인 표본은 워커 수만큼 고정인데, 시험을 길게 할수록 정상 표본만 계속 늘어나서 그 10건이 희석됩니다. 같은 장애가 시험을 길게 잡을수록 더 안 보여요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. 정지가 3초라면 — 개루프도 p99 에서는 못 본다</h4>
+    <div class="seq">서버가 멈춘 시간 30 → 3초 (개루프)
+p99 <em>10ms</em> — 안 보인다 · p99.9 <em>2.71초</em> · 최대 3.01초</div>
+    <p class="why">개루프가 만능은 아닙니다. 정지 구간이 시험 시간의 1% 보다 짧으면 <strong>개루프에서도 p99 에는 안 나옵니다.</strong> 다만 폐루프와 다른 점은, 개루프에서는 <em>어느 퍼센타일을 봐야 하는지</em>가 표본 수로 계산된다는 것이에요 — 이 경우 p99.0 부터입니다.</p>
+  </div>
+
+  <h2>폐루프는 왜 그 구간을 못 세는가</h2>
+
+  <p>대부분의 부하 도구는 <strong>워커 하나가 응답을 받은 뒤에 다음 요청을 보냅니다.</strong> 평소엔 문제가 없어요. 서버가 10ms 에 답하니 워커 하나가 초당 100건을 보내고, 워커 10개면 1,000/초가 나옵니다.</p>
+
+  <p>그런데 서버가 30초 멈추면 <strong>워커 10개가 전부 그 자리에서 같이 멈춥니다.</strong> 30초 동안 나간 요청은 10건이고, 그 뒤로는 아무것도 안 나갑니다. 있었어야 할 <strong>29,990건이 발생하지 않았고</strong>, 발생하지 않은 요청은 느리게 기록될 수도 없습니다.</p>
+
+  <div class="callout">이것을 <strong>coordinated omission</strong> 이라고 부릅니다 — 부하 생성기가 서버와 <em>보조를 맞춰서</em>, 하필 서버가 느린 구간에만 측정을 쉬는 겁니다. wrk2 문서의 표현으로는 <em>“응답을 받은 뒤에만 다음 요청을 보내므로, 높은 지연이 곧 그 구간에서 측정을 피하도록 부하 생성기가 서버와 협조하는 결과가 된다”</em> 입니다.</div>
+
+  <p>그래서 이 문제는 <strong>정확도의 문제가 아니라 표본의 문제</strong>입니다. 값을 잘못 잰 게 아니라 그 구간에 잰 것이 없어요. 표본을 아무리 많이 모아도, 시험을 아무리 오래 돌려도 없는 표본은 생기지 않습니다.</p>
+
+  <h2>최대값은 셋 다 같다</h2>
+
+  <p>이 페이지에서 가장 불편한 칸입니다. 표의 <strong>최대</strong> 열을 보세요.</p>
+
+  <table class="keytable">
+    <tr><th>방식</th><th>p99</th><th>최대</th></tr>
+    <tr><td>폐루프</td><td><strong>10ms</strong></td><td>30.01초</td></tr>
+    <tr><td>개루프</td><td><strong>27.01초</strong></td><td>30.01초</td></tr>
+    <tr><td>보정</td><td><strong>27.01초</strong></td><td>30.01초</td></tr>
+  </table>
+
+  <p><strong>세 방식의 최대값이 정확히 같습니다.</strong> 그러니 "최대값도 봤는데 30초짜리가 하나 있더라, 이상치겠지" 로 넘어갈 수 있어요. 실제로는 그게 이상치가 아니라 <strong>3만 명이 겪은 일</strong>인데, 폐루프는 그 3만 명 중 10명만 데려온 겁니다.</p>
+
+  <div class="callout">최대값은 <strong>사건이 있었다</strong>는 것만 알려주고, 퍼센타일은 <strong>몇 명이 겪었나</strong>를 알려줍니다. coordinated omission 은 앞의 것은 그대로 두고 뒤의 것만 지웁니다.</div>
+
+  <p>같은 이유로 <strong>폐루프의 꼬리에는 모양이 없습니다.</strong> 문턱 아래는 전부 10ms 이고, 문턱을 넘는 순간 곧바로 최대값이에요 — 그 사이 값이 아예 없습니다. 개루프에는 있어요(p99 27.01초 · p99.9 29.71초 · p99.99 29.98초). 표를 가로로 읽어 보면 폐루프 줄만 <em>10ms · 10ms · 10ms · 30.01초</em> 로 계단 하나입니다.</p>
+
+  <div class="callout">그래서 폐루프로는 <strong>“나빴다 / 아니다” 만 알 수 있고 “얼마나 나빴나” 는 알 수 없습니다.</strong> 꼬리의 모양은 정지 구간에 실제로 보낸 요청들이 만드는 것이고, 폐루프에는 그 요청이 워커 수만큼밖에 없습니다.</div>
+
+  <h2>보정이 하는 일 — 문서에 적힌 그대로</h2>
+
+  <p>HdrHistogram 에는 이 보정이 API 로 들어 있습니다. <code>recordValueWithExpectedInterval(값, 기대간격)</code> 이고, 하는 일은 소스에 이렇게 적혀 있어요.</p>
+
+  <pre><code>recordSingleValue(value);
+if (expectedIntervalBetweenValueSamples &lt;= 0) return;
+for (long missingValue = value - expectedIntervalBetweenValueSamples;
+     missingValue &gt;= expectedIntervalBetweenValueSamples;
+     missingValue -= expectedIntervalBetweenValueSamples) {
+    recordSingleValue(missingValue);
+}</code></pre>
+
+  <p>값 하나를 기록한 뒤, 기대 간격만큼씩 빼면서 <strong>있었어야 할 표본을 되채웁니다.</strong> 30.01초짜리 표본 하나가 기대 간격 10ms 로 <code>floor(30010 / 10) = 3,001</code> 개의 기록이 되는 거예요. 묶인 표본 10건이 30,010개가 되고, 그게 개루프가 실제로 잰 30,000건과 거의 정확히 같습니다.</p>
+
+  <div class="callout">보정은 <strong>추정이 아니라 재구성</strong>입니다. "요청이 고정 간격으로 나갔어야 한다" 는 것 하나만 가정하면, 나가지 못한 요청이 각각 얼마를 기다렸을지는 <strong>계산됩니다</strong> — 정지가 끝나는 시각에서 역산하면 되니까요.</div>
+
+  <p>다만 되채운 기록은 <em>측정값이 아닙니다.</em> 그래서 이 실험대는 보정 줄을 다른 색으로 그립니다. 실제로 잰 것과 되살린 것은 구별해두는 편이 낫습니다.</p>
+
+  <h2>실측이 이 식을 확인해준다</h2>
+
+  <p>wrk2 문서에 실제로 측정한 예시가 있습니다. 연결 100개로 30초 동안 2,000rps 를 주면서 Apache 를 <code>^Z</code> 로 <strong>1.4초</strong> 멈춘 결과입니다.</p>
+
+  <table class="keytable">
+    <tr><th>측정</th><th>p90</th><th>p99</th><th>p99.9</th><th>최대</th></tr>
+    <tr><td>보정</td><td>11.77ms</td><td><strong>1.27초</strong></td><td>1.42초</td><td>1.42초</td></tr>
+    <tr><td>미보정</td><td>4.87ms</td><td><strong>6.04ms</strong></td><td>1.41초</td><td>1.41초</td></tr>
+  </table>
+
+  <p>여기서 확인할 수 있는 게 셋입니다. <strong>최대값이 사실상 같고</strong>(1.42 vs 1.41초), <strong>p99 는 210배 다르고</strong>, 그리고 <strong>미보정도 p99.9 에서는 결국 보입니다.</strong></p>
+
+  <p>마지막 것이 중요해요. 이 실험대의 "드러나는 지점" 식 — <code>100 × 정상표본 ÷ 전체표본</code> — 에 저 설정을 넣으면 <strong>보정판은 p95.3, 미보정은 p99.83</strong> 이 나옵니다. 발표된 출력과 정확히 맞습니다. 보정판은 p90 에서 정상(11.77ms)이고 p99 에서 정지(1.27초), 미보정은 p99 에서 정상(6.04ms)이고 p99.9 에서 정지(1.41초)예요.</p>
+
+  <div class="callout"><strong>어느 칸에서 뒤집히는지를 발표된 숫자만으로 맞혔습니다.</strong> 그래서 이 페이지의 모델은 물려받은 서술이 아니라 확인된 메커니즘입니다. 위 표의 1.27초 · 6.04ms 는 <em>wrk2 의 실측치이지 이 실험대의 출력이 아닙니다.</em></div>
+
+  <h2>이 모델이 가정하는 것</h2>
+
+  <table class="keytable">
+    <tr><th>가정</th><th>깨지면 어떻게 되나</th></tr>
+    <tr><td>정지가 끝나면 한꺼번에</td><td>묶여 있던 요청이 정지가 끝나는 순간 <strong>동시에</strong> 답을 받는다고 봤습니다. 실제 서버는 밀린 큐를 유한한 속도로 빼므로 <strong>꼬리가 더 깁니다</strong> — 그쪽은 <a href="/backpressure/">11번</a>과 <a href="/retrystorm/">14번</a>의 자리입니다. 이 모델은 그만큼 <em>과소평가</em>입니다</td></tr>
+    <tr><td>두 개의 값</td><td>서버가 10ms 아니면 정지, 둘 중 하나로만 답합니다. 그래서 퍼센타일이 계단이에요. 실제 분포에는 그 사이가 넓게 퍼져 있습니다</td></tr>
+    <tr><td>워커가 동시에 보낸다</td><td>정지 중 워커들이 요청을 보낸 시각은 서로 <strong>평소 응답 시간보다 작게</strong> 다른데, 그 차이는 무시했습니다(30초짜리 정지에서 10ms 차이라서요)</td></tr>
+    <tr><td>정지가 한 번</td><td>짧은 정지가 여러 번이면 폐루프가 그때마다 워커 수만큼은 잡습니다. 그래도 비율은 여전히 <strong>정지 횟수 × 워커 ÷ 전체 표본</strong> 이라 작습니다</td></tr>
+  </table>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>쓰고 있는 도구</td><td><strong>고정 속도(open loop)를 지원하는가</strong>부터 봅니다. wrk2 는 <code>-R</code> 로 목표 속도를 받고 <em>의도한 발송 시각</em>부터 지연을 잽니다. 원래 wrk 나 대부분의 폐루프 도구는 실제 발송 시각부터 재요</td></tr>
+    <tr><td>보고서에서 볼 것</td><td>p99 만 보지 말고 <strong>표본 수와 목표 속도를 곱해서 대조</strong>하세요. <code>목표 rps × 시험 시간</code> 보다 표본이 적으면 그 차이가 곧 <strong>측정하지 못한 구간</strong>입니다</td></tr>
+    <tr><td>어느 퍼센타일을 볼까</td><td>표본 수로 계산됩니다. 놓친 표본이 <code>k</code> 건이면 <code>p(100 − 100k/n)</code> 아래는 볼 필요가 없어요. 이 실험대의 "드러나는 지점" 미터가 그 값입니다</td></tr>
+    <tr><td>운영 지표도 같다</td><td>이건 부하 시험만의 문제가 아닙니다. <strong>서버가 스스로 재는 응답시간</strong>도 요청을 받은 뒤부터 재니까, 커넥션 큐나 스레드 풀에서 기다린 시간이 안 들어갑니다 — <a href="/connpool/">8번</a>의 점유 시간이 여기서 사라집니다</td></tr>
+    <tr><td>큐 대기가 특히 그렇다</td><td>수락(accept)부터 재는지, 핸들러 진입부터 재는지 확인하세요. 둘의 차이가 <a href="/backpressure/">11번</a>에서 큐가 길어질 때 통째로 사라지는 값입니다</td></tr>
+    <tr><td>HdrHistogram</td><td>이미 쓰고 있다면 <code>recordValueWithExpectedInterval</code> 로 바꾸는 것만으로 됩니다. 기대 간격은 <strong>워커 하나가 요청을 보내야 하는 간격</strong>이에요 — 목표 속도를 워커 수로 나눈 값입니다</td></tr>
+    <tr><td>합의할 것</td><td>퍼센타일 계산 방식(최근접 순위 / 선형보간)을 팀에서 하나로 정하세요. 경계에서 값이 갈리면 <a href="/aggregate/">22번</a>처럼 <strong>같은 사건이 두 화면에서 다른 숫자</strong>가 됩니다</td></tr>
+  </table>
+
+  <p><a href="/aggregate/">22번</a>은 같은 사건을 두 경로가 다르게 <em>집계</em>해서 숫자가 갈리는 이야기였습니다. 둘 다 맞았어요. 이 페이지는 다릅니다 — <strong>한쪽은 사건을 아예 안 봤습니다.</strong> 집계를 아무리 맞춰도 없는 표본은 돌아오지 않습니다.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/fanout/"><span class="no">24</span><span><span class="t">서버는 안 느려졌는데 사용자는 느려졌다</span><span class="why">측정을 고치고 나면 볼 것 — 개별 서버의 꼬리가 사용자에게 몇 배로 도착하는가.</span></span></a></li>
+      <li><a href="/aggregate/"><span class="no">22</span><span><span class="t">같은 숫자가 두 화면에서 다르다</span><span class="why">같은 사건이 두 숫자가 되는 다른 이유 — 이쪽은 둘 다 맞습니다.</span></span></a></li>
+      <li><a href="/connpool/"><span class="no">08</span><span><span class="t">17밀리초 쿼리가 커넥션 풀을 말린다</span><span class="why">큐와 풀에서 기다린 시간이 응답시간에서 사라지는 자리.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/omission/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uMs:'ms', uSec:'초', uSecShort:'초', uWorkers:'개',
+  tClosed:'폐루프', tOpen:'개루프', tFixed:'보정',
+  tStall:'서버 정지 $1초',
+  hint:'목표 $1 rps (워커 $2 × 평소 $3ms) · 시험 $4초 중 $5초 정지 — 이 방식이 보고하는 p99 는 $6',
+  hMode:'재는 방식', hMax:'최대', hN:'표본',
+  hFlip:'p$1 부터 보인다',
+  mRep:'보고된 p99', mTruth:'실제 p99', mGap:'왜곡 배수',
+  mFlip:'드러나는 지점', mN:'표본 수', mMissed:'놓친 표본',
+  vNone:'<b>정지가 없으면 세 방식이 구별되지 않는다.</b> 셋 다 p99 <b>$1</b><br><span class="at">평소에 이 문제를 발견할 기회가 없는 이유다</span>',
+  vHidden:'<b>보고된 p99 는 $1 인데 실제로는 $2 다 — $3배.</b><br>이 방식은 p$4 부터 정지가 보인다 <span class="at">— 최대값 $5 만 그 사건을 알고 있다</span>',
+  vFixed:'<b>되채운 뒤 p99 가 $1 — 개루프가 실제로 잰 $2 와 같다.</b><br>기록 <b>$3</b>개를 채워 넣었다 <span class="at">— 추정이 아니라 재구성이다</span>',
+  vOpen:'<b>정지 구간에 $3건을 실제로 보내서 쟀다.</b> p99 <b>$1</b><br>p$2 부터 정지가 드러난다 <span class="at">— 표본이 있으니 퍼센타일이 움직인다</span>',
+  scene:[
+    '정지를 0 으로 두고 시작합니다. 표를 보세요 — 세 방식의 p50 부터 최대까지 전부 10ms 로 같습니다. 폐루프가 늘 틀린 게 아니에요. 정상 구간에서는 구별조차 안 됩니다. 그래서 평소에 이 문제를 발견할 기회가 없습니다.',
+    '서버를 30초 멈췄습니다. 5분 시험의 10% 동안 완전히 죽어 있었어요. 그런데 폐루프가 보고하는 p99 는 10ms 이고, p99.9 도 p99.99 도 10ms 입니다. 시간축의 폐루프 줄을 보세요 — 정지 구간이 빗금입니다. 표본이 아예 없어요. 정지 중에 묶인 요청은 워커 수만큼, 10건뿐입니다. 최대값만 30.01초라고 말하고 있습니다.',
+    '같은 사건을 개루프로 잽니다. 서버가 답을 주든 말든 초당 1,000건을 계속 보내니, 정지 구간에 3만 건이 쌓이고 그게 전부 표본이 됩니다. p99 가 10ms 에서 27.01초로 뜁니다 — 2,701배요. 시간축에서 이 줄만 정지 구간이 붉게 차 있습니다. 폐루프가 값을 잘못 잰 게 아니라, 그 구간에 잰 것이 없었던 겁니다.',
+    '측정은 폐루프 그대로 두고 보정만 켰습니다. 묶인 표본 하나가 30.01초니까, 기대 간격 10ms 로 30.01초 · 30.00초 · 29.99초 … 를 만들어 채웁니다. HdrHistogram 소스에 적힌 그대로예요. 기록 3만 개가 채워지고 p99 가 27.01초 — 개루프가 실제로 잰 값과 같습니다. 근사가 아니라 되돌리기입니다.',
+    '폐루프로 돌아가서 부하를 다섯 배로 올렸습니다. 워커 10개에서 50개, 초당 1,000건에서 5,000건이요. 표본은 27만에서 135만으로 늘었는데 보고 p99 는 10ms 그대로이고, 드러나는 지점도 p99.996 에서 한 자리도 안 움직입니다. 묶이는 요청이 워커 수만큼 늘지만 전체 표본도 같은 비율로 늘어서 상쇄되거든요. 나쁜 표본의 비율에는 부하가 아예 없습니다.',
+    '이번엔 시험 시간을 300초에서 60초로 줄였습니다. 정지는 30초 그대로예요. 그랬더니 p99.99 가 드디어 30.01초를 보여줍니다. 드러나는 지점이 p99.996 에서 p99.967 로 내려왔어요. 600초로 늘리면 반대로 p99.998 이 됩니다. 오래 돌릴수록 정확해진다는 통념과 정반대입니다 — 묶인 표본 수는 고정인데 정상 표본만 계속 늘어나니까요.',
+    '마지막으로 정직한 단서 하나. 정지를 3초로 줄이고 개루프로 봅니다. p99 가 10ms 예요 — 개루프에서도 안 보입니다. 정지가 시험 시간의 1% 보다 짧으면 p99 에는 안 나오거든요. 다만 개루프에서는 어느 퍼센타일을 봐야 하는지가 표본 수로 계산됩니다. 이 경우 p99.0 부터고, p99.9 에서 2.71초로 나타납니다.'
+  ],
+};
+</script>
+<script src="/shared/omission-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "멈춰 있던 30초를 부하 테스트가 세지 않았다",
+  "description": "5분 부하 시험 중 서버가 30초 멈췄습니다. 폐루프 부하 생성기가 보고한 p99 는 10ms 입니다. p99.99 도 10ms 예요. 같은 사건을 개루프로 재면 27.01초입니다 — 2,701배. 둘 다 정직하게 측정했습니다.",
+  "url": "https://lab.vermilion19.com/omission/",
+  "inLanguage": "ko",
+  "datePublished": "2026-08-25",
+  "dateModified": "2026-08-25",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "멈춰 있던 30초를 부하 테스트가 세지 않았다"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

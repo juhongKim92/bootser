@@ -26,6 +26,7 @@ node tools/verify-tcpclose.mjs     # 21편
 node tools/verify-aggregate.mjs    # 22편
 node tools/verify-alignment.mjs    # 23편
 node tools/verify-fanout.mjs       # 24편
+node tools/verify-omission.mjs     # 25편
 node tools/verify-favicon.mjs      # 파비콘 네 파일이 원화와 같은지
 
 node tools/gen-related.mjs         # "이어서 볼 것" 블록을 박는다
@@ -176,6 +177,12 @@ prose 규칙이 없는 페이지에만 `<main class="wrap prose">` 를 붙인다
 > 이미 밀렸으면 **날짜 줄만 다른 파일**을 골라 되돌린다 —
 > `git diff -U0 -- <파일> | grep -E '^[+-][^+-]' | grep -v '"dateModified"'` 가 비면
 > 그 파일은 `git checkout` 해도 되는 것이다.
+>
+> **더 나은 방법 — 아예 따로 커밋하지 않는다.** 이 생성기는 *내용을 고친 커밋에 같이 태우는*
+> 것을 전제로 만들어졌다(더러운 트리 → 오늘 → 오늘 커밋 → 일치). 날짜만 고치는 커밋을
+> 따로 만들면 **그 커밋 자체가 수정이라서** 다음 실행 때 그 파일들이 다시 오늘로 간다.
+> 2026-08-25 에 24편을 내면서 이 한 칸 밀림을 겪었다 — 날짜를 08-24 로 정정해 커밋했더니,
+> 25편 작업 때 돌린 실행이 그 36장을 08-25 로 옮겼다. 이번엔 거기서 수렴하니 받아들였다.
 
 > **되돌린 뒤에 줄바꿈을 확인할 것.** Windows 에서 `git checkout` 은 작업 트리에
 > CRLF 를 쓰는데(`core.autocrlf`) 이 디렉터리의 생성기들은 전부 LF 로 쓴다.

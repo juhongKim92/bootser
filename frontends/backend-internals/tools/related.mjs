@@ -17,7 +17,7 @@ export const NO = {
   keepalive: '07', connpool: '08', jobclaim: '09', retryloop: '10', backpressure: '11',
   correlation: '12', genericplan: '13', retrystorm: '14', writeskew: '15', stampede: '16',
   timeout: '17', lockttl: '18', throughput: '19', rebalance: '20', tcpclose: '21',
-  aggregate: '22', alignment: '23', fanout: '24'
+  aggregate: '22', alignment: '23', fanout: '24', omission: '25'
 };
 
 /* slug → [{ to, ko, en }] */
@@ -79,7 +79,8 @@ export const RELATED = {
   backpressure: [
     { to: 'retrystorm', ko: '무너지는 임계와 회복하는 임계가 다릅니다.', en: 'The threshold where it breaks and the threshold where it recovers are not the same.' },
     { to: 'connpool', ko: '자라는 큐가 어디서 오는가.', en: 'Where the growing queue comes from.' },
-    { to: 'timeout', ko: '거부가 신호라는 것과 남은 예산을 아래로 넘기는 것은 같은 이야기입니다.', en: 'Rejection as a signal and passing the remaining budget downward are the same idea.' }
+    { to: 'timeout', ko: '거부가 신호라는 것과 남은 예산을 아래로 넘기는 것은 같은 이야기입니다.', en: 'Rejection as a signal and passing the remaining budget downward are the same idea.' },
+    { to: 'omission', ko: '큐에서 기다린 시간은 서버가 재는 응답시간에 안 들어갑니다 — 통째로 사라집니다.', en: 'Time spent waiting in the queue never enters server-side latency — it vanishes whole.' }
   ],
   correlation: [
     { to: 'timeout', ko: '타임아웃으로 포기한 요청의 응답이 늦게 오면, 그게 다음 요청의 짝이 됩니다.', en: 'When the answer to a timed-out request arrives late, it becomes the next request’s pair.' },
@@ -131,7 +132,8 @@ export const RELATED = {
   aggregate: [
     { to: 'writeskew', ko: '예외도 로그도 없이 숫자만 틀리는 같은 종류 — 저쪽은 동시성입니다.', en: 'The same species of silent wrong number — that one comes from concurrency.' },
     { to: 'genericplan', ko: '평균으로 판단하는 자리 — 젠센 부등식이 옵티마이저 쪽에서 나옵니다.', en: 'Judging by the average — Jensen’s inequality showing up on the optimiser side.' },
-    { to: 'mvcc', ko: '두 경로가 서로 다른 스냅숏을 읽고 있으면 차이가 하나 더 생깁니다.', en: 'If the two paths read different snapshots you get one more source of difference.' }
+    { to: 'mvcc', ko: '두 경로가 서로 다른 스냅숏을 읽고 있으면 차이가 하나 더 생깁니다.', en: 'If the two paths read different snapshots you get one more source of difference.' },
+    { to: 'omission', ko: '이쪽은 정의가 둘이라 둘 다 맞았습니다. 25번은 한쪽이 사건을 아예 안 봤습니다.', en: 'Here two definitions were both right. In no. 25 one side never saw the event at all.' }
   ],
   alignment: [
     { to: 'tcpclose', ko: '21 이 선로에 무엇이 나갔나였다면, 이쪽은 도착한 바이트를 어떻게 읽나입니다.', en: 'If no. 21 was what went out on the wire, this is how to read the bytes that arrived.' },
@@ -147,7 +149,13 @@ export const RELATED = {
   fanout: [
     { to: 'timeout', ko: '취소가 전파되지 않으면 사본의 추가 부하가 계산보다 커집니다 — 아무도 안 기다리는 일이 남습니다.', en: 'If cancellation does not propagate, the copy costs more than the number says — work nobody waits for is left running.' },
     { to: 'retrystorm', ko: '여유 용량이 없을 때 겹쳐 보낸 사본이 부하 자체가 되는 자리.', en: 'Where the overlapping copies become the load, once there is no spare capacity left.' },
-    { to: 'backpressure', ko: '폭을 못 줄인다면 남는 선택은 무엇을 버릴지 정하는 것입니다.', en: 'If the width cannot shrink, the remaining choice is deciding what to drop.' }
+    { to: 'backpressure', ko: '폭을 못 줄인다면 남는 선택은 무엇을 버릴지 정하는 것입니다.', en: 'If the width cannot shrink, the remaining choice is deciding what to drop.' },
+    { to: 'omission', ko: '그 꼬리를 왜 못 봤는가 — 측정이 하필 느린 구간에만 쉬는 경우.', en: 'Why that tail went unseen — when the measurement rests precisely while things are slow.' }
+  ],
+  omission: [
+    { to: 'fanout', ko: '측정을 고치고 나면 볼 것 — 개별 서버의 꼬리가 사용자에게 몇 배로 도착하는가.', en: 'Once the measurement is fixed: how one server’s tail arrives magnified at the user.' },
+    { to: 'aggregate', ko: '같은 사건이 두 숫자가 되는 다른 이유 — 이쪽은 둘 다 맞습니다.', en: 'The other way one event becomes two numbers — there, both are right.' },
+    { to: 'connpool', ko: '큐와 풀에서 기다린 시간이 응답시간에서 사라지는 자리.', en: 'Where time spent waiting in the queue and the pool drops out of the latency number.' }
   ],
   rebalance: [
     { to: 'connpool', ko: '바쁨과 진행을 구별하지 못해서 생기는 같은 사고 — CPU 사용률은 진행률이 아닙니다.', en: 'The same accident from confusing busy with progressing — CPU utilisation is not a progress bar.' },

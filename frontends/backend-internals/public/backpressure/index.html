@@ -345,6 +345,7 @@ void submit(Task task) throws InterruptedException {
       <li><a href="/retrystorm/"><span class="no">14</span><span><span class="t">부하는 걷혔는데 돌아오지 않는다</span><span class="why">무너지는 임계와 회복하는 임계가 다릅니다.</span></span></a></li>
       <li><a href="/connpool/"><span class="no">08</span><span><span class="t">17밀리초 쿼리가 커넥션 풀을 말린다</span><span class="why">자라는 큐가 어디서 오는가.</span></span></a></li>
       <li><a href="/timeout/"><span class="no">17</span><span><span class="t">각자 1초씩 줬는데 왜 아무도 1초를 못 쓰나</span><span class="why">거부가 신호라는 것과 남은 예산을 아래로 넘기는 것은 같은 이야기입니다.</span></span></a></li>
+      <li><a href="/omission/"><span class="no">25</span><span><span class="t">멈춰 있던 30초를 부하 테스트가 세지 않았다</span><span class="why">큐에서 기다린 시간은 서버가 재는 응답시간에 안 들어갑니다 — 통째로 사라집니다.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->
@@ -403,7 +404,7 @@ window.LAB_I18N = {
   "url": "https://lab.vermilion19.com/backpressure/",
   "inLanguage": "ko",
   "datePublished": "2026-08-12",
-  "dateModified": "2026-08-24",
+  "dateModified": "2026-08-25",
   "author": {
     "@type": "Organization",
     "name": "Backend Internals",

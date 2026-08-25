@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>The load test never counted the 30 seconds it was frozen — coordinated omission</title>
+<meta name="description" content="The server froze for 30 seconds during a five-minute load test. The closed-loop generator reported a p99 of 10ms. Its p99.99 was also 10ms. Measured the other way the same event is 27.01 seconds — 2,701 times larger. Both measured honestly.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/omission/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/omission/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/omission/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/omission/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="The load test never counted the 30 seconds it was frozen">
+<meta property="og:description" content="Reported p99 10ms, actual 27.01s. The samples were not wrong — they were never taken.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/omission/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The load test never counted the 30 seconds it was frozen">
+<meta name="twitter:description" content="Raise the load fifty-fold and the distortion does not move one digit. What sets it is the test duration, not the load.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/omission-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/omission/" hreflang="ko" lang="ko">KO</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>The load test never counted the 30 seconds it was frozen</h1>
+  <p class="lede">During a five-minute load test the server <strong>stopped answering entirely for 30 seconds.</strong> The report that came out afterwards put p99 at <strong>10ms</strong>. Its p99.99 was also 10ms. Measure the same event another way and it is <strong>27.01 seconds</strong>. Both measured honestly. One of them simply <em>never counted those 30 seconds.</em></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>How it measures</label>
+          <div class="seg mode" id="segMode" role="group" aria-label="load generator model">
+            <button data-mode="closed" aria-pressed="true">closed</button>
+            <button data-mode="open">open</button>
+            <button data-mode="fixed">corrected</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sD">Server frozen for</label>
+          <span class="v" id="vD">0<small>s</small></span>
+          <input type="range" id="sD" min="0" max="60" step="1" value="0" aria-label="length of the window where the server answers nothing">
+        </div>
+        <div class="dial">
+          <label for="sT">Test duration</label>
+          <span class="v" id="vT">300<small>s</small></span>
+          <input type="range" id="sT" min="30" max="600" step="10" value="300" aria-label="total length of the load test">
+        </div>
+        <div class="dial">
+          <label for="sC">Workers</label>
+          <span class="v" id="vC">10<small> ea</small></span>
+          <input type="range" id="sC" min="1" max="50" step="1" value="10" aria-label="concurrent workers in the load generator">
+        </div>
+        <div class="dial">
+          <label for="sS">Normal response</label>
+          <span class="v" id="vS">10<small>ms</small></span>
+          <input type="range" id="sS" min="0" max="4" step="1" value="1" aria-label="response time when the server is healthy">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->target 1,000 rps (10 workers × 10ms normal) · 0s frozen out of 300s — this mode reports a p99 of 10ms<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">Where samples landed on the test timeline</span>
+      <div class="board">
+        <div id="tape"><!--pr--><div class="tape head"><span class="tn"></span><div class="tl"><div class="stall" style="left:30%;width:0%"></div><div class="lbl" style="left:30%">server frozen 0s</div></div></div><div class="tape on"><span class="tn">closed</span><div class="tl"><div class="stall" style="left:30%;width:0%"></div><div class="live " style="left:0;width:30%"></div><div class="live " style="left:30%;right:0;width:70%"></div></div></div><div class="tape"><span class="tn">open</span><div class="tl"><div class="stall" style="left:30%;width:0%"></div><div class="live " style="left:0;width:30%"></div><div class="live " style="left:30%;right:0;width:70%"></div></div></div><div class="tape"><span class="tn">corrected</span><div class="tl"><div class="stall" style="left:30%;width:0%"></div><div class="live " style="left:0;width:30%"></div><div class="live " style="left:30%;right:0;width:70%"></div></div></div><!--/pr--></div>
+        <div class="tapex" id="tapeX"><!--pr--><span>0s</span><span>150s</span><span>300s</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="live"></i>normal samples</span>
+          <span><i class="hot"></i>samples actually taken during the freeze</span>
+          <span><i class="synth"></i>records the correction filled in</span>
+          <span><i class="void"></i>no samples at all</span>
+        </div>
+
+        <div class="spine" id="spine"><!--pr--><div class="row rep"><span class="rn">closed</span><span class="bar" style="width:100.00%"></span><span class="rv">10ms</span></div><div class="row truth"><span class="rn">open</span><span class="bar" style="width:100.00%"></span><span class="rv">10ms</span></div><div class="row "><span class="rn">corrected</span><span class="bar" style="width:100.00%"></span><span class="rv">10ms</span></div><!--/pr--></div>
+        <table class="pct" id="pct"><!--pr--><tr><th>mode</th><th>p50</th><th>p90</th><th>p99</th><th>p99.9</th><th>p99.99</th><th>max</th><th>samples</th></tr><tr class="on"><td>closed</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td>300,000</td></tr><tr class=""><td>open</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td>300,000</td></tr><tr class=""><td>corrected</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td class="hid">10ms</td><td>300,000</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m "><span class="k">reported p99</span><span class="n">10ms</span></div><div class="m good"><span class="k">actual p99</span><span class="n">10ms</span></div><div class="m good"><span class="k">distortion</span><span class="n">×1.0</span></div><div class="m "><span class="k">first visible at</span><span class="n">p100.000</span></div><div class="m "><span class="k">samples</span><span class="n">300,000</span></div><div class="m good"><span class="k">samples missed</span><span class="n">0</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>With no freeze the three modes cannot be told apart.</b> All three report p99 <b>10ms</b><br><span class="at">which is why nobody finds this on an ordinary day</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">Previous</button>
+        <button id="btnStep">Next step</button>
+        <button id="btnReset">Reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>Work the dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What it changes</th></tr>
+    <tr><td>How it measures</td><td><strong>Closed</strong> waits for a response before sending the next request — that is what most load tools do. <strong>Open</strong> keeps sending at the target rate regardless. <strong>Corrected</strong> measures closed-loop and then fills the missing samples back in.</td></tr>
+    <tr><td>Server frozen for</td><td>Requests arriving in this window all get their answer after the freeze ends. <strong>Set it to 0 and every percentile in all three modes becomes identical</strong> — the difference exists only inside this window.</td></tr>
+    <tr><td>Test duration</td><td>Total length. <strong>This is the dial that sets the size of the distortion</strong> — not the load. The longer the run, the more optimistic the closed loop gets.</td></tr>
+    <tr><td>Workers</td><td>Concurrency in the generator. The target rate is <code>workers ÷ normal response</code>, so this dial is the load. <strong>Turn it — the distortion does not move one digit.</strong></td></tr>
+    <tr><td>Normal response</td><td>What the server answers in when healthy. It is also the <em>expected interval</em> the correction uses, since that is how often one worker should be issuing.</td></tr>
+  </table>
+
+  <p>Percentiles here use <strong>nearest rank</strong>: sort the <code>n</code> samples and take the <code>ceil(q × n / 100)</code>-th. No interpolation. Pinning one method and saying so matters because if values differ at the boundary, this page turns into an argument about percentile arithmetic instead of about sampling.</p>
+
+  <p>There is no randomness. Arrivals are evenly spaced and service time is constant, so every latency is determined and all three modes come out of <strong>closed-form expressions</strong> — no samples are generated and sorted.</p>
+
+  <h2>Things to try</h2>
+
+  <div class="recipe">
+    <h4>1. Set the freeze to 0 — all three are identical</h4>
+    <div class="seq">Server frozen for 0s
+p50 · p99 · p99.9 · p99.99 · max <em>all 10ms</em> (in all three modes)</div>
+    <p class="why">Start here, because it matters. <strong>In the healthy region the three modes cannot be told apart.</strong> The closed loop is not wrong in general — it diverges <em>only while the server is frozen</em>. Which is exactly why nobody discovers this on an ordinary day.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Freeze it for 30 seconds — even p99.99 misses it</h4>
+    <div class="seq">Server frozen for 0 → 30s (closed loop)
+p99 <em>10ms</em> · p99.9 <em>10ms</em> · p99.99 <em>10ms</em>
+max <em>30.01s</em> · samples <em>270,010</em></div>
+    <p class="why">The server was completely dead for <strong>10% of the test</strong> and not one percentile moved. Only as many requests were caught in the freeze as there are workers — <strong>10 of them</strong>. Ten samples out of 270,000 do not reach p99.99. The “first visible at” meter is telling you it takes <strong>p99.996</strong>.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Switch to the open loop — the same event is 27.01s</h4>
+    <div class="seq">How it measures: closed → open
+p99 10ms → <em>27.01s</em> (2,701×) · p99.9 <em>29.71s</em>
+samples 270,010 → <em>300,000</em> · first visible at p99.996 → <em>p90.0</em></div>
+    <p class="why">The open loop keeps sending <strong>1,000 per second whether or not the server answers.</strong> Thirty thousand requests pile into the freeze, and all thirty thousand become samples. Look at the closed-loop row on the timeline — that window is hatched. <strong>The closed loop did not mismeasure anything; it measured nothing there.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Turn on the correction — measure closed, then undo it</h4>
+    <div class="seq">How it measures: open → corrected (measurement is still closed-loop)
+p99 <em>27.01s</em> — identical to the open loop
+samples 270,010 → 300,010 (<em>30,000 records filled in</em>)</div>
+    <p class="why">If a stuck sample is 30.01s, then with an expected interval of 10ms it becomes <strong>30.01s, 30.00s, 29.99s …</strong> — reconstructing what each request that never went out would have waited. <strong>This is not an approximation, it is an inversion</strong>: it lands on the value the open loop actually measured.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Five times the load — the distortion does not move</h4>
+    <div class="seq">Workers 10 → 50 (1,000 → 5,000 rps · closed loop)
+Reported p99 <em>still 10ms</em> · first visible at <em>still p99.996</em>
+Only the sample count moves: 270,010 → 1,350,050</div>
+    <p class="why">This is backwards from intuition. Hit it harder and surely more requests land in the freeze — but <strong>the number caught grows with the workers and so does the total, and the two cancel.</strong> The bad-sample fraction is <code>normal response ÷ (test duration − freeze)</code>, and <strong>load does not appear in it.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Shorten the test — now it shows up</h4>
+    <div class="seq">Test duration 300 → 60s (closed loop · freeze still 30s)
+p99.99 10ms → <em>30.01s</em> · first visible at p99.996 → <em>p99.967</em>
+Stretch it to 600s and it becomes <em>p99.998</em> — buried deeper</div>
+    <p class="why"><strong>The exact opposite of “run it longer to be accurate”.</strong> The freeze happened once and the number of stuck samples is fixed at the worker count, so a longer run only piles up more healthy samples to dilute those ten. The same outage hides better the longer you test.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. A 3-second freeze — even the open loop misses it at p99</h4>
+    <div class="seq">Server frozen for 30 → 3s (open loop)
+p99 <em>10ms</em> — invisible · p99.9 <em>2.71s</em> · max 3.01s</div>
+    <p class="why">The open loop is not magic. If the freeze is shorter than 1% of the test, <strong>it will not show at p99 there either.</strong> The difference is that with the open loop <em>which percentile to look at</em> is computable from the sample counts — here, anything past p99.0.</p>
+  </div>
+
+  <h2>Why the closed loop cannot count that window</h2>
+
+  <p>Most load tools have <strong>each worker send its next request only after a response arrives.</strong> Normally that is fine: the server answers in 10ms, so one worker issues 100 per second and ten workers give 1,000 per second.</p>
+
+  <p>Then the server freezes for 30 seconds and <strong>all ten workers freeze with it, in place.</strong> Ten requests went out during those 30 seconds, and after that, nothing. The <strong>29,990 requests that should have existed never happened</strong> — and a request that never happened cannot be recorded as slow.</p>
+
+  <div class="callout">This is <strong>coordinated omission</strong>: the load generator keeps time <em>with</em> the server, taking its break precisely while the server is slow. In wrk2’s words — <em>“each connection will only begin to send a request after receiving a response, high latency responses result in the load generator coordinating with the server to avoid measurement during high latency periods.”</em></div>
+
+  <p>So this is <strong>a sampling problem, not an accuracy problem.</strong> Nothing was measured incorrectly; nothing was measured at all. No amount of extra samples, and no amount of extra runtime, brings back a sample that was never taken.</p>
+
+  <h2>The maximum is the same in all three</h2>
+
+  <p>This is the most uncomfortable column on the page. Look at <strong>max</strong>.</p>
+
+  <table class="keytable">
+    <tr><th>Mode</th><th>p99</th><th>max</th></tr>
+    <tr><td>closed</td><td><strong>10ms</strong></td><td>30.01s</td></tr>
+    <tr><td>open</td><td><strong>27.01s</strong></td><td>30.01s</td></tr>
+    <tr><td>corrected</td><td><strong>27.01s</strong></td><td>30.01s</td></tr>
+  </table>
+
+  <p><strong>All three maxima are exactly equal.</strong> So “we did look at the max — there was one 30-second outlier, probably noise” is available to you. It was not an outlier. It was <strong>30,000 people</strong>, and the closed loop brought back ten of them.</p>
+
+  <div class="callout">The maximum tells you <strong>an event happened</strong>. Percentiles tell you <strong>how many people it happened to</strong>. Coordinated omission leaves the first intact and erases the second.</div>
+
+  <p>For the same reason, <strong>the closed loop’s tail has no shape.</strong> Below its threshold everything is 10ms; the instant it crosses, the value is the maximum — there is nothing in between. The open loop does have that in between (p99 27.01s, p99.9 29.71s, p99.99 29.98s). Read the table across and the closed row is a single step: <em>10ms · 10ms · 10ms · 30.01s</em>.</p>
+
+  <div class="callout">So a closed loop can tell you <strong>“it was bad / it was not” and never “how bad”.</strong> The shape of a tail is made by the requests actually sent during the freeze, and the closed loop has only as many of those as it has workers.</div>
+
+  <h2>What the correction does — straight from the source</h2>
+
+  <p>HdrHistogram ships this correction as an API: <code>recordValueWithExpectedInterval(value, expectedInterval)</code>. What it does is right there in the source.</p>
+
+  <pre><code>recordSingleValue(value);
+if (expectedIntervalBetweenValueSamples &lt;= 0) return;
+for (long missingValue = value - expectedIntervalBetweenValueSamples;
+     missingValue &gt;= expectedIntervalBetweenValueSamples;
+     missingValue -= expectedIntervalBetweenValueSamples) {
+    recordSingleValue(missingValue);
+}</code></pre>
+
+  <p>Record the value, then keep subtracting the expected interval, <strong>filling back the samples that should have been there.</strong> One 30.01-second sample with a 10ms interval becomes <code>floor(30010 / 10) = 3,001</code> records. Ten stuck samples become 30,010 — near-exactly the 30,000 the open loop actually measured.</p>
+
+  <div class="callout">The correction is <strong>reconstruction, not estimation.</strong> Assume only that requests should have gone out at a fixed interval, and what each blocked request would have waited is <strong>computable</strong> — count backwards from the moment the freeze ends.</div>
+
+  <p>That said, a filled-in record is <em>not a measurement.</em> That is why this lab draws the corrected row in a different colour. Keeping “measured” and “reconstructed” visually apart is worth the ink.</p>
+
+  <h2>A real measurement confirms the formula</h2>
+
+  <p>wrk2’s documentation includes an actual measured run: 100 connections, 30 seconds, 2,000 rps, with Apache suspended by <code>^Z</code> for <strong>1.4 seconds</strong>.</p>
+
+  <table class="keytable">
+    <tr><th>Measurement</th><th>p90</th><th>p99</th><th>p99.9</th><th>max</th></tr>
+    <tr><td>corrected</td><td>11.77ms</td><td><strong>1.27s</strong></td><td>1.42s</td><td>1.42s</td></tr>
+    <tr><td>uncorrected</td><td>4.87ms</td><td><strong>6.04ms</strong></td><td>1.41s</td><td>1.41s</td></tr>
+  </table>
+
+  <p>Three things are visible. <strong>The maxima are effectively the same</strong> (1.42 vs 1.41s), <strong>the p99s differ by 210×</strong>, and <strong>the uncorrected run does eventually show it at p99.9.</strong></p>
+
+  <p>That last one is the interesting part. Feed those settings into this lab’s “first visible at” formula — <code>100 × healthy samples ÷ total samples</code> — and it returns <strong>p95.3 for the corrected run and p99.83 for the uncorrected one.</strong> That matches the published output exactly: corrected is healthy at p90 (11.77ms) and frozen at p99 (1.27s); uncorrected is healthy at p99 (6.04ms) and frozen at p99.9 (1.41s).</p>
+
+  <div class="callout"><strong>The formula predicts which column flips, from the published numbers alone.</strong> That is the evidence this model is a checked mechanism rather than an inherited story. The 1.27s and 6.04ms above are <em>wrk2’s measurements, not this lab’s output.</em></div>
+
+  <h2>What this model assumes</h2>
+
+  <table class="keytable">
+    <tr><th>Assumption</th><th>What breaks if it fails</th></tr>
+    <tr><td>Everything drains at once</td><td>Blocked requests are treated as all answered the instant the freeze ends. A real server drains its backlog at a finite rate, so <strong>the tail is longer</strong> — that is <a href="/en/backpressure/">no. 11</a> and <a href="/en/retrystorm/">no. 14</a> territory. This model <em>understates</em> by that much</td></tr>
+    <tr><td>Two values</td><td>The server answers in 10ms or it is frozen, nothing between, which makes percentiles a staircase. Real distributions fill in that gap</td></tr>
+    <tr><td>Workers issue together</td><td>The workers’ send times inside the freeze differ by <strong>less than one normal response</strong>, and that difference is ignored (10ms inside a 30-second freeze)</td></tr>
+    <tr><td>One freeze</td><td>With several short freezes the closed loop catches one worker-count each time. The fraction is still <strong>freezes × workers ÷ total samples</strong>, which stays small</td></tr>
+  </table>
+
+  <h2>In the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>Your tool</td><td>First: <strong>does it support a fixed rate (open loop)?</strong> wrk2 takes a target rate with <code>-R</code> and measures latency from the <em>intended</em> send time. The original wrk, and most closed-loop tools, measure from the actual send</td></tr>
+    <tr><td>Reading the report</td><td>Do not stop at p99 — <strong>multiply the target rate by the duration and compare it to the sample count.</strong> Fewer samples than <code>rps × seconds</code> means the shortfall is exactly <strong>the window you failed to measure</strong></td></tr>
+    <tr><td>Which percentile</td><td>It follows from the counts. If <code>k</code> samples were missed out of <code>n</code>, nothing below <code>p(100 − 100k/n)</code> is worth reading. That is what the “first visible at” meter is</td></tr>
+    <tr><td>Production metrics too</td><td>This is not only a load-testing problem. <strong>Server-side latency</strong> is measured from when the request is picked up, so time spent waiting in the accept queue or the thread pool never enters it — <a href="/en/connpool/">no. 8</a>’s hold time disappears right here</td></tr>
+    <tr><td>Queue wait especially</td><td>Check whether the timer starts at accept or at handler entry. The gap between them is the value that vanishes entirely when the queue grows in <a href="/en/backpressure/">no. 11</a></td></tr>
+    <tr><td>HdrHistogram</td><td>If you already use it, switching to <code>recordValueWithExpectedInterval</code> is the whole change. The expected interval is <strong>how often one worker should issue</strong> — the target rate divided by the worker count</td></tr>
+    <tr><td>Agree on one</td><td>Pin the percentile method (nearest rank vs interpolation) across the team. When values split at the boundary you get <a href="/en/aggregate/">no. 22</a>: <strong>one event, two different numbers on two screens</strong></td></tr>
+  </table>
+
+  <p><a href="/en/aggregate/">No. 22</a> was one event that two aggregation paths counted differently — and both were right. This page is not that. <strong>One side never saw the event at all.</strong> No amount of agreeing on the arithmetic brings back a sample that does not exist.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/fanout/"><span class="no">24</span><span><span class="t">The servers did not get slower. The users did</span><span class="why">Once the measurement is fixed: how one server’s tail arrives magnified at the user.</span></span></a></li>
+      <li><a href="/en/aggregate/"><span class="no">22</span><span><span class="t">The same number, different on two screens</span><span class="why">The other way one event becomes two numbers — there, both are right.</span></span></a></li>
+      <li><a href="/en/connpool/"><span class="no">08</span><span><span class="t">A 17-millisecond query drains the pool</span><span class="why">Where time spent waiting in the queue and the pool drops out of the latency number.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">Index</a> · <a href="/omission/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uMs:'ms', uSec:'s', uSecShort:'s', uWorkers:' ea',
+  tClosed:'closed', tOpen:'open', tFixed:'corrected',
+  tStall:'server frozen $1s',
+  hint:'target $1 rps ($2 workers × $3ms normal) · $5s frozen out of $4s — this mode reports a p99 of $6',
+  hMode:'mode', hMax:'max', hN:'samples',
+  hFlip:'first visible at p$1',
+  mRep:'reported p99', mTruth:'actual p99', mGap:'distortion',
+  mFlip:'first visible at', mN:'samples', mMissed:'samples missed',
+  vNone:'<b>With no freeze the three modes cannot be told apart.</b> All three report p99 <b>$1</b><br><span class="at">which is why nobody finds this on an ordinary day</span>',
+  vHidden:'<b>Reported p99 is $1 where the truth is $2 — $3×.</b><br>This mode only shows the freeze past p$4 <span class="at">— the max, $5, is the one number that knows</span>',
+  vFixed:'<b>Filled back in, p99 is $1 — the same $2 the open loop actually measured.</b><br><b>$3</b> records were reconstructed <span class="at">— an inversion, not an estimate</span>',
+  vOpen:'<b>$3 requests really were sent into the freeze and measured.</b> p99 <b>$1</b><br>The freeze shows from p$2 on <span class="at">— there are samples, so the percentiles move</span>',
+  scene:[
+    'Start with no freeze at all. Look at the table — from p50 to max, all three modes read 10ms. The closed loop is not wrong in general. In the healthy region it cannot even be distinguished. Which is exactly why nobody discovers this on an ordinary day.',
+    'Now freeze the server for 30 seconds: 10% of a five-minute test, completely dead. Yet the closed loop reports a p99 of 10ms, and so do p99.9 and p99.99. Look at the closed row on the timeline — the freeze window is hatched. There are no samples there. Only as many requests were caught as there are workers, ten of them. The maximum is the one number saying 30.01 seconds.',
+    'Measure the same event with an open loop. It keeps sending a thousand per second whether or not the server answers, so thirty thousand requests pile into the freeze and all of them become samples. p99 jumps from 10ms to 27.01 seconds — 2,701 times. On the timeline only this row is filled red across the freeze. The closed loop did not mismeasure; it had nothing there to measure.',
+    'Keep the closed-loop measurement and turn on the correction. A stuck sample of 30.01 seconds becomes 30.01s, 30.00s, 29.99s and so on at the 10ms expected interval — exactly the loop written in the HdrHistogram source. Thirty thousand records get filled in and p99 becomes 27.01 seconds, the same value the open loop actually measured. An inversion, not an approximation.',
+    'Back to the closed loop, and now five times the load: ten workers to fifty, a thousand per second to five thousand. Samples go from 270 thousand to 1.35 million, and yet the reported p99 is still 10ms and the first-visible point does not move off p99.996. The number caught in the freeze grows with the workers, but so does the total, and the two cancel. Load does not appear in the fraction at all.',
+    'This time shorten the test from 300 seconds to 60, with the same 30-second freeze. Now p99.99 finally reads 30.01 seconds — the first-visible point came down from p99.996 to p99.967. Stretch the run to 600 seconds instead and it goes to p99.998. This is the exact opposite of “run it longer to be accurate”: the stuck sample count is fixed while healthy samples keep piling up.',
+    'One honest caveat to finish. Cut the freeze to 3 seconds and watch the open loop. p99 is 10ms — invisible there too. A freeze shorter than 1% of the test will not show at p99 either way. The difference is that with an open loop, which percentile to read is computable from the counts: here, anything past p99.0, and p99.9 shows 2.71 seconds.'
+  ],
+};
+</script>
+<script src="/shared/omission-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "The load test never counted the 30 seconds it was frozen",
+  "description": "The server froze for 30 seconds during a five-minute load test. The closed-loop generator reported a p99 of 10ms. Its p99.99 was also 10ms. Measured the other way the same event is 27.01 seconds — 2,701 times larger. Both measured honestly.",
+  "url": "https://lab.vermilion19.com/en/omission/",
+  "inLanguage": "en",
+  "datePublished": "2026-08-25",
+  "dateModified": "2026-08-25",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "The load test never counted the 30 seconds it was frozen"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

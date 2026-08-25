@@ -298,7 +298,7 @@
       <summary>
         <span class="arw" aria-hidden="true"></span>
         <h2>Failing quietly <em>no exception, no log — just a wrong result</em></h2>
-        <span class="count">6</span>
+        <span class="count">7</span>
       </summary>
       <div class="glist">
 
@@ -352,6 +352,15 @@
         <span>
           <h2>The same number, different on two screens</h2>
           <p>When aggregation paths multiply. Both are right — one is the overall weighted mean, the other the mean of daily means.</p>
+        </span>
+        <span class="tag live">live</span>
+      </a>
+
+      <a class="card" href="/en/omission/">
+        <span class="no">25</span>
+        <span>
+          <h2>The load test never counted the 30 seconds it was frozen</h2>
+          <p>Coordinated omission. Reported p99 10ms, actual 27.01s — the samples were not wrong, they were never taken.</p>
         </span>
         <span class="tag live">live</span>
       </a>
