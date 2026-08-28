@@ -138,6 +138,10 @@ check('favicon.svg', (file) => {
         [/td\.date \.at\{/, '하늘 표의 시각 스타일이 없다'],
         [/td\.ev\{/, '하늘 표의 이름 칸 스타일이 없다'],
         [/\.cardinal\{/, '분점·지점 배지 스타일이 없다'],
+        /* .now .pair dd .dd 는 카드 안에만 걸린다. 첫 화면 목록에도 같은 모양이
+           필요한데 그걸 빠뜨려서 "D-10다음 절기" 처럼 붙어 나온 적이 있다. */
+        [/\.worldwide \.what \.dd\{/, '첫 화면 하늘 목록의 D-day 가 붙어 나온다'],
+        [/\.worldwide \.what em\{/, '첫 화면 하늘 목록의 날짜가 붙어 나온다'],
         [/prefers-color-scheme:\s*dark/, '어두운 테마 토큰이 없다'],
         [/@media \(max-width:\s*640px\)/, '좁은 화면 대응이 없다'],
     ];
@@ -159,6 +163,7 @@ const WORDS = {
           noBreak: '담긴 자료에 연휴가 없습니다',
           newMoon: '삭', fullMoon: '보름',
           skyNone: '오늘은 절기도 삭망도 아닙니다', skyOff: '오늘입니다',
+          dtTerm: '다음 절기', dtNew: '다음 삭', dtFull: '다음 보름', dtShower: '다음 유성우',
           asofYear: (y) => String(y) },
     en: { noHoliday: 'An ordinary day', off: ' — a day off today',
           partial: ' — observed only in some regions', outOfRange: 'Outside the range of the data',
@@ -166,6 +171,7 @@ const WORDS = {
           noBreak: 'No long weekend in the data',
           newMoon: 'New Moon', fullMoon: 'Full Moon',
           skyNone: 'No solar term or moon phase today', skyOff: 'today',
+          dtTerm: 'Next term', dtNew: 'Next new moon', dtFull: 'Next full moon', dtShower: 'Next shower',
           asofYear: (y) => String(y) },
 };
 
@@ -818,6 +824,13 @@ for (const [page, lang, langs, wantCc] of [
 
         const rows = (drawnSky.match(/<li>/g) || []).length;
         if (rows !== 4) bad(label, `하늘 칸이 ${rows}줄 — 절기·삭·보름·유성우 넷이어야 한다`);
+
+        /* 갈래 이름이 앞, D-day 가 뒤. 순서가 뒤집히면 "D-10다음 절기" 가 된다. */
+        for (const dt of [w.dtTerm, w.dtNew, w.dtFull, w.dtShower]) {
+            if (!drawnSky.includes(`<span class="who">${esc(dt)}</span>`)) {
+                bad(label, `하늘 칸에 "${dt}" 줄이 없다 — 갈래 이름이 앞에 와야 한다`);
+            }
+        }
 
         for (const [items, name] of [
             [SKY.terms, (e) => (lang === 'en' ? e.e : e.n)],

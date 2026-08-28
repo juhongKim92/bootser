@@ -473,9 +473,11 @@
                 var m = got.next;
                 if (!m) return '';
                 var it = m.item.e;
-                return '<li><span class="who"><span class="dd">' +
-                    'D-' + m.diff + '</span>' + esc(label) + '</span>' +
-                    '<span class="what">' + esc(name(it)) +
+                /* 갈래 이름이 앞, D-day 와 내용이 뒤 — /sky/ 카드의 dt·dd 와 같은 차례다.
+                   .dd 를 .what 안에 두는 것도 그래서다. 카드에서는 dd 안에 있다. */
+                return '<li><span class="who">' + esc(label) + '</span>' +
+                    '<span class="what"><span class="dd">D-' + m.diff + '</span>' +
+                    esc(name(it)) +
                     (sub(it) ? '<span class="en">' + esc(sub(it)) + '</span>' : '') +
                     '<em>' + shortHuman(it[zone]) + '</em></span></li>';
             };

@@ -205,6 +205,16 @@ details.year[open] > summary::before{content:'▾ '}
 .worldwide .who a:hover{color:var(--soon);text-decoration:underline}
 .worldwide .what{color:var(--ink-2)}
 .worldwide .what .en{color:var(--ink-3);font-size:12px;margin-left:6px}
+
+/* 첫 화면의 "다가오는 절기와 삭망". D-day 와 날짜는 오늘 카드와 같은 모양이어야
+   하는데, 그쪽 규칙은 `.now .pair dd` 안에 갇혀 있어서 여기까지 오지 않는다 —
+   그대로 두면 "D-10다음 절기" 처럼 붙어 나온다. */
+.worldwide .what .dd{
+  font-family:var(--mono);font-weight:500;color:var(--soon);
+  margin-right:8px;
+}
+.worldwide .what em{font-style:normal;color:var(--ink-3);font-size:12px;margin-left:8px}
+
 .pending{font-size:14px;color:var(--ink-3)}
 
 /* ------------------------------------------------ 국가 목록(첫 화면) */
