@@ -8,13 +8,14 @@
    한국어와 영어가 같은 파일을 쓴다. 갈림길은 <html lang> 하나이고, 말은 아래
    STR 표에 모아 두었다 — 페이지마다 사전을 인라인하면 한쪽만 고쳐지는 일이 생긴다.
 
-   국가 페이지는 공휴일 표를 다시 안 받는다 — 이미 HTML 안에
-   <tr data-d="2026-10-03"> 로 들어 있어서 DOM 만 읽으면 된다.
-   fetch 는 두 곳에만 쓴다.
-     · 국가 선택기 목록 (countries.json) — 204개 <li> 를 410개 페이지에 인라인하면
+   표는 다시 받지 않는다 — 공휴일도(<tr data-d>), 황금연휴도(<tr data-s>),
+   절기·삭망도(<tr data-sky>) 이미 HTML 안에 있어서 DOM 만 읽으면 된다.
+   fetch 는 네 곳에만 쓴다.
+     · 국가 선택기 목록 (countries.json) — 204개 <li> 를 412개 페이지에 인라인하면
        HTML 만 7MB 가 된다. 첫 화면의 국가 목록만 HTML 에 박고 선택기는 여기서 채운다.
      · 첫 화면의 "내 국가" 요약 카드
      · 첫 화면의 "오늘 공휴일인 나라" — 이번 달 색인 하나 (data/month/YYYY-MM.json)
+     · 첫 화면의 "다가오는 절기와 삭망" — sky.json 하나 (/sky/ 페이지는 안 받는다)
    ============================================================ */
 (function () {
     'use strict';
@@ -34,7 +35,9 @@
             short: function (p) { return p.m + '월 ' + p.d + '일'; },
             asof: function (d) { return '기준 ' + d + ' · 내 기기 시간'; },
             today: '오늘',
-            noHoliday: '오늘은 공휴일이 아닙니다',
+            /* 부정문을 쓰지 않는다. 이 사이트는 이제 공휴일만 다루지 않아서,
+               "공휴일이 아니다" 는 카드의 머리글이 되기에 좁고 막다르다. */
+            noHoliday: '오늘은 여느 날입니다',
             off: ' — 오늘 쉽니다',
             partial: ' — 일부 지역만 쉽니다',
             outOfRange: '담긴 자료 범위 밖입니다',
@@ -78,7 +81,7 @@
             short: function (p) { return STR.en.mon[p.m - 1] + ' ' + p.d; },
             asof: function (d) { return 'As of ' + d + ' · this device'; },
             today: 'today',
-            noHoliday: 'Today is not a public holiday',
+            noHoliday: 'An ordinary day',
             off: ' — a day off today',
             partial: ' — observed only in some regions',
             outOfRange: 'Outside the range of the data',

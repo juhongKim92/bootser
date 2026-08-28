@@ -153,14 +153,14 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
 /* 카드에 나와야 하는 말. dday.js 의 STR 을 가져다 쓰지 않고 여기 따로 적는다 —
    같은 표를 보고 견주면 번역이 통째로 틀려도 통과한다. */
 const WORDS = {
-    ko: { noHoliday: '오늘은 공휴일이 아닙니다', off: ' — 오늘 쉽니다',
+    ko: { noHoliday: '오늘은 여느 날입니다', off: ' — 오늘 쉽니다',
           partial: ' — 일부 지역만 쉽니다', outOfRange: '담긴 자료 범위 밖입니다',
           breakLen: (n) => `${n}일 연휴`, breakNow: '연휴 중', dtBreak: '다음 연휴',
           noBreak: '담긴 자료에 연휴가 없습니다',
           newMoon: '삭', fullMoon: '보름',
           skyNone: '오늘은 절기도 삭망도 아닙니다', skyOff: '오늘입니다',
           asofYear: (y) => String(y) },
-    en: { noHoliday: 'Today is not a public holiday', off: ' — a day off today',
+    en: { noHoliday: 'An ordinary day', off: ' — a day off today',
           partial: ' — observed only in some regions', outOfRange: 'Outside the range of the data',
           breakLen: (n) => `${n}-day break`, breakNow: 'on now', dtBreak: 'Next break',
           noBreak: 'No long weekend in the data',
