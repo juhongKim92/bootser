@@ -9,7 +9,11 @@
    전부 한 파일에 담으면 대한민국 공휴일을 보려고 204개국을 내려받게 된다.
 
    필드 이름이 한 글자인 것도 같은 이유다. 204개 × 3년치라 키 이름이 곧 용량이다.
-     d 날짜 · n 현지어 이름 · e 영어 이름(현지어와 같으면 생략) · r 지역 한정 코드
+     days  d 날짜 · n 현지어 이름 · e 영어 이름(현지어와 같으면 생략) · r 지역 한정 코드
+     long  s 시작 · e 끝 · b 징검다리 날짜(없으면 생략)
+
+   long 에 일수를 담지 않는 이유 — s 와 e 에서 나온다. 담아 두면 자료 안에서
+   두 값이 갈라질 수 있고, 그러면 그것까지 검사해야 한다.
    ============================================================ */
 import { writeFileSync, readFileSync, mkdirSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -26,7 +30,12 @@ async function getJson(url, tries = 3) {
             if (res.status === 404) return null;           /* 그 해 데이터가 아직 없는 국가 */
             if (res.status === 429) { await sleep(1500 * i); continue; }
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return await res.json();
+            /* 200 인데 본문이 비어 오는 엔드포인트가 있다 (LongWeekend 가 그렇다).
+               res.json() 은 거기서 SyntaxError 를 내는데, 그건 재시도해도 똑같다 —
+               자료가 없는 것이므로 404 와 같이 다룬다. */
+            const text = await res.text();
+            if (!text.trim()) return null;
+            return JSON.parse(text);
         } catch (e) {
             if (i === tries) throw new Error(`${url} — ${e.message}`);
             await sleep(700 * i);
@@ -52,6 +61,64 @@ async function pool(items, worker) {
 
 /* counties 는 'US-CA' 처럼 ISO 3166-2 로 온다. 앞의 국가 코드는 파일마다 똑같으니 뗀다. */
 const trimCounty = (code, cc) => (code.startsWith(cc + '-') ? code.slice(cc.length + 1) : code);
+
+/* ------------------------------------------------------------- 날짜 셈
+   'YYYY-MM-DD' 를 Date 로 바로 넘기면 시간대에 따라 하루가 밀린다.
+   전부 "에폭 일수" 정수로만 다룬다. */
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
+const epochDay = (iso) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return Math.round(Date.UTC(y, m - 1, d) / 86400000);
+};
+const isoOf = (n) => new Date(n * 86400000).toISOString().slice(0, 10);
+const spanOf = (s, e) => {
+    const out = [];
+    for (let n = epochDay(s); n <= epochDay(e); n++) out.push(isoOf(n));
+    return out;
+};
+
+/* 버린 연휴를 세어 둔다. pool 이 동시에 돌지만 자바스크립트는 한 줄기라 안전하다. */
+let dropped = 0, mismatched = 0;
+
+/* ------------------------------------------------------------- 황금연휴
+   같은 Nager 에 엔드포인트만 하나 더다. /LongWeekend/{year}/{cc} 가 공휴일과
+   주말을, 필요하면 징검다리 하루를 끼워 3일 이상 이어지는 구간을 준다.
+   주말이 어느 요일인지는 나라마다 다른데(이집트는 금·토) 그건 Nager 가 안다.
+
+   우리가 담지 않은 공휴일에 걸린 연휴는 버린다. Nager 의 LongWeekend 는 types 를
+   가리지 않는데 우리 표에는 Public 만 있어서, 그대로 실으면 표에 없는 날을 근거로
+   "5일 연휴" 라고 적는 페이지가 나온다 — 페이지 안에서 앞뒤가 안 맞는다. */
+async function buildBreaks(cc, gotYears, holidays) {
+    const found = new Map();                           /* 'start|end' → 항목 */
+
+    for (const year of gotYears) {
+        const raw = await getJson(`${NAGER}/LongWeekend/${year}/${cc}`);
+        if (!Array.isArray(raw) || !raw.length) continue;
+
+        for (const w of raw) {
+            if (!ISO.test(w.startDate || '') || !ISO.test(w.endDate || '')) continue;
+            if (epochDay(w.endDate) < epochDay(w.startDate)) continue;
+
+            const span = spanOf(w.startDate, w.endDate);
+            if (span.length < 3) continue;             /* 3일 미만은 연휴라 부르지 않는다 */
+            if (w.dayCount && w.dayCount !== span.length) mismatched++;
+            if (!span.some((d) => holidays.has(d))) { dropped++; continue; }
+
+            const item = { s: w.startDate, e: w.endDate };
+            /* 징검다리는 "쉬는 날이 아닌데 하루 쓰면 이어지는 날" 이다.
+               공휴일이 징검다리로 들어오면 그건 징검다리가 아니다. */
+            const bridge = (w.bridgeDays || [])
+                .filter((d) => ISO.test(d) && span.includes(d) && !holidays.has(d))
+                .sort();
+            if (bridge.length) item.b = bridge;
+
+            /* 연말에 걸친 연휴는 두 해의 응답에 다 들어온다 */
+            found.set(`${item.s}|${item.e}`, item);
+        }
+    }
+
+    return [...found.values()].sort((a, b) => a.s.localeCompare(b.s));
+}
 
 async function buildCountry({ countryCode: cc, name }) {
     const days = [];
@@ -85,6 +152,9 @@ async function buildCountry({ countryCode: cc, name }) {
     const list = [...merged.values()].sort((a, b) => a.d.localeCompare(b.d));
     for (const day of list) if (day.r) day.r.sort();
 
+    /* 공휴일이 하나도 없으면 연휴도 없다 — 요청을 아낀다 */
+    const breaks = list.length ? await buildBreaks(cc, gotYears, new Set(list.map((d) => d.d))) : [];
+
     return {
         code: cc,
         name,
@@ -92,6 +162,7 @@ async function buildCountry({ countryCode: cc, name }) {
         years: gotYears,
         generated: generatedOn,
         days: list,
+        long: breaks,
     };
 }
 
@@ -100,7 +171,7 @@ async function buildCountry({ countryCode: cc, name }) {
 console.log(`Nager.Date → ${years.join(' · ')}`);
 const countries = await getJson(`${NAGER}/AvailableCountries`);
 if (!countries?.length) { console.error('AvailableCountries 를 못 받았다'); process.exit(1); }
-console.log(`대상 국가 ${countries.length}개, 요청 ${countries.length * years.length}건`);
+console.log(`대상 국가 ${countries.length}개, 요청 ${countries.length * years.length * 2}건 (공휴일 · 황금연휴)`);
 
 const built = await pool(countries, async (c, i) => {
     const out = await buildCountry(c);
@@ -181,6 +252,12 @@ for (const [m, byDay] of months) {
 }
 
 const total = usable.reduce((n, c) => n + c.days.length, 0);
-console.log(`\n국가 ${usable.length}개 · 공휴일 ${total}건`);
+const breaks = usable.reduce((n, c) => n + c.long.length, 0);
+console.log(`\n국가 ${usable.length}개 · 공휴일 ${total}건 · 황금연휴 ${breaks}건`);
 console.log(`data/ 파일 ${readdirSync(DATA).length}개 · data/month/ ${readdirSync(MONTHS).length}개`);
 if (empty.length) console.log(`Public 공휴일 0건이라 제외: ${empty.join(', ')}`);
+/* 조용히 버리면 다음 달에 왜 연휴가 줄었는지 알 수 없다 */
+if (dropped) console.log(`우리가 담지 않은 공휴일에만 걸려 제외한 연휴 ${dropped}건`);
+if (mismatched) console.log(`주의: Nager 의 dayCount 가 기간과 다른 연휴 ${mismatched}건 — 기간으로 셌다`);
+const noBreak = usable.filter((c) => !c.long.length).map((c) => c.code);
+if (noBreak.length) console.log(`3년간 황금연휴 0건: ${noBreak.join(', ')}`);

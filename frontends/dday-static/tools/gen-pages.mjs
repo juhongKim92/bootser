@@ -38,6 +38,13 @@ const dow = (iso) => {
     return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 };
 
+/* 연휴 일수를 세는 데만 쓴다. 자료에는 일수를 담지 않는다 — 시작·끝에서 나오므로
+   담아 두면 두 값이 갈라질 수 있다. */
+const epochDay = (iso) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return Math.round(Date.UTC(y, m - 1, d) / 86400000);
+};
+
 /* 한글 · 영어 · 코드 아무거나로 찾히게 한다. 영어 페이지에서도 "대한" 으로 찾힌다 —
    목록에 걸어 두는 열쇠는 언어와 무관하게 같은 것이 편하다. */
 const searchKey = (c) => [c.ko, c.name, c.code].filter(Boolean).join(' ').toLowerCase();
@@ -104,9 +111,15 @@ const L = {
         yearCap: (y, n) => `${y}년 · ${n}일`,
         yearH2: (c, y) => `${y}년 ${c.ko} 공휴일`,
         thDate: '날짜', thName: '공휴일',
+        breakCap: (y, n) => `${y}년 · 연휴 ${n}회`,
+        breakH2: (c, y) => `${y}년 ${c.ko} 황금연휴`,
+        breakNote: '주말과 공휴일이 이어져 사흘 이상 쉬는 구간입니다. 하루만 더 쓰면 이어지는 날은 징검다리로 적었습니다.',
+        thSpan: '기간', thBreak: '연휴',
+        breakLen: (n) => `${n}일 연휴`,
+        bridgeBadge: (n) => `징검다리 ${n}일`,
         placeholderVerdict: (c, n) => `${c.ko} 공휴일 ${n}일`,
         checking: '날짜를 확인하는 중…', computing: '계산하는 중…',
-        dtNext: '다음', dtPrev: '지난',
+        dtNext: '다음', dtPrev: '지난', dtBreak: '다음 연휴',
         otherCountries: '다른 국가 공휴일 보기 →',
         localBadge: (n) => `일부 지역 ${n}곳`,
         foot: (g) => `공휴일 자료 <a href="https://date.nager.at/" rel="noopener">Nager.Date</a> · <code>types</code> 가 <code>Public</code> 인 항목만 담았습니다. 갱신 ${g}.`,
@@ -146,9 +159,15 @@ const L = {
         yearCap: (y, n) => `${y} · ${n} days`,
         yearH2: (c, y) => `${c.name} public holidays in ${y}`,
         thDate: 'Date', thName: 'Holiday',
+        breakCap: (y, n) => `${y} · ${n} long weekends`,
+        breakH2: (c, y) => `${c.name} Long Weekends ${y}`,
+        breakNote: 'Stretches of three days or more where weekends and public holidays run together. Days you would have to take off to join them up are marked as bridge days.',
+        thSpan: 'Dates', thBreak: 'Break',
+        breakLen: (n) => `${n}-day break`,
+        bridgeBadge: (n) => (n === 1 ? '1 bridge day' : `${n} bridge days`),
         placeholderVerdict: (c, n) => `${n} public holidays in ${c.name}`,
         checking: 'Checking the date…', computing: 'Computing…',
-        dtNext: 'Next', dtPrev: 'Last',
+        dtNext: 'Next', dtPrev: 'Last', dtBreak: 'Next break',
         otherCountries: 'Holidays in other countries →',
         localBadge: (n) => `${n} regions`,
         foot: (g) => `Holiday data from <a href="https://date.nager.at/" rel="noopener">Nager.Date</a> · only entries whose <code>types</code> includes <code>Public</code>. Updated ${g}.`,
@@ -267,7 +286,57 @@ ${rows}
       </table>`;
 }
 
+/* ------------------------------------------------------------ 황금연휴 표
+
+   공휴일 표와 나란한 모양이지만 행이 날짜 하나가 아니라 구간이라 열이 다르다.
+   D-day 는 여기서도 비워 두고 dday.js 가 붙인다 — 시작 전이면 D-, 끝난 뒤면 D+,
+   그 사이면 "연휴 중" 이다.
+
+   이름 칸을 class="name" 이 아니라 class="len" 으로 두는 이유가 있다.
+   check-pages 의 한국어 누출 검사는 <td class="name"> 을 들어내고 본다 —
+   거기 들어가는 공휴일 이름은 자료(현지어)라서 영어 페이지에도 한글이 올 수 있기
+   때문이다. 연휴 칸은 우리가 쓰는 말이므로 그 면제를 받으면 안 된다. */
+const NUM = (iso) => { const [y, m, d] = iso.split('-'); return { y, m, d }; };
+
+function breakSpan(t, s, e) {
+    const a = NUM(s), b = NUM(e);
+    const cell = (p, iso, withYear) => {
+        const w = dow(iso);
+        const wcls = w === 0 ? ' sun' : w === 6 ? ' sat' : '';
+        return `${withYear ? p.y + '.' : ''}${p.m}.${p.d}<span class="dow${wcls}">${t.dow[w]}</span>`;
+    };
+    /* 연말에 걸친 연휴만 끝쪽에도 연도를 적는다 — 늘 적으면 좁은 화면에서 넘친다 */
+    return `${cell(a, s, true)} ~ ${cell(b, e, a.y !== b.y)}`;
+}
+
+function breakTable(t, items) {
+    const rows = items.map((w) => {
+        const n = (epochDay(w.e) - epochDay(w.s)) + 1;
+        const bridge = w.b?.length
+            ? `<span class="bridge" title="${esc(w.b.join(', '))}">${esc(t.bridgeBadge(w.b.length))}</span>`
+            : '';
+        return `        <tr data-s="${w.s}" data-e="${w.e}">
+          <td class="range">${breakSpan(t, w.s, w.e)}</td>
+          <td class="len">${esc(t.breakLen(n))}${bridge}</td>
+          <td class="mark"></td>
+        </tr>`;
+    }).join('\n');
+
+    return `      <table class="breaks">
+        <thead><tr><th>${esc(t.thSpan)}</th><th>${esc(t.thBreak)}</th><th></th></tr></thead>
+        <tbody>
+${rows}
+        </tbody>
+      </table>`;
+}
+
 function countryPage(t, data) {
+    /* 자료가 낡으면 연휴 섹션만 조용히 빠진다. 그게 가장 알아채기 어려우니 멈춘다. */
+    if (!Array.isArray(data.long)) {
+        console.error(`data/${data.code}.json 에 long 이 없다 — node tools/gen-holidays.mjs 를 먼저 돌릴 것.`);
+        process.exit(1);
+    }
+
     const byYear = new Map();
     for (const day of data.days) {
         const y = +day.d.slice(0, 4);
@@ -292,6 +361,33 @@ ${body}
         }
         return `  <details class="year">
     <summary>${esc(t.yearCap(y, byYear.get(y).length))}</summary>
+${body}
+  </details>`;
+    }).join('\n\n');
+
+    /* 황금연휴. 공휴일과 같은 해 나눔을 쓴다 — 표지 연도는 펼쳐 두고 나머지는 접는다.
+       연휴가 한 건도 없는 국가가 있어서(공휴일이 늘 주중 한복판인 곳) 통째로 뺀다. */
+    const breaksByYear = new Map();
+    for (const w of data.long) {
+        const y = +w.s.slice(0, 4);
+        if (!breaksByYear.has(y)) breaksByYear.set(y, []);
+        breaksByYear.get(y).push(w);
+    }
+    const breakYears = [...breaksByYear.keys()].sort((a, b) => a - b);
+    const breakMain = breaksByYear.has(main) ? main : breakYears[0];
+
+    const breaks = !data.long.length ? '' : '\n\n' + breakYears.map((y) => {
+        const body = breakTable(t, breaksByYear.get(y));
+        if (y === breakMain) {
+            return `  <section>
+    <span class="cap">${esc(t.breakCap(y, breaksByYear.get(y).length))}</span>
+    <h2>${esc(t.breakH2(data, y))}</h2>
+    <p class="note">${esc(t.breakNote)}</p>
+${body}
+  </section>`;
+        }
+        return `  <details class="year">
+    <summary>${esc(t.breakCap(y, breaksByYear.get(y).length))}</summary>
 ${body}
   </details>`;
     }).join('\n\n');
@@ -324,11 +420,12 @@ ${top(t, { slug, label: `<span class="flag">${flag(data.code)}</span>${esc(t.nam
     <div class="verdict">${esc(t.placeholderVerdict(data, data.days.length))}</div>
     <dl class="pair">
       <dt>${esc(t.dtNext)}</dt><dd id="next"><em>${esc(t.computing)}</em></dd>
-      <dt>${esc(t.dtPrev)}</dt><dd id="prev"><em>${esc(t.computing)}</em></dd>
+      <dt>${esc(t.dtPrev)}</dt><dd id="prev"><em>${esc(t.computing)}</em></dd>${data.long.length ? `
+      <dt>${esc(t.dtBreak)}</dt><dd id="break"><em>${esc(t.computing)}</em></dd>` : ''}
     </dl>
   </div>
 
-${sections}
+${sections}${breaks}
 
   <section>
     <p><a href="${t.dir}/#countries">${esc(t.otherCountries)}</a></p>

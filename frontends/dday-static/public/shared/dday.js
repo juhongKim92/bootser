@@ -42,6 +42,10 @@
             dtAll: '전체',
             dtNext: '다음',
             dtPrev: '지난',
+            dtBreak: '다음 연휴',
+            breakLen: function (n) { return n + '일 연휴'; },
+            breakNow: '연휴 중',
+            noBreak: '담긴 자료에 연휴가 없습니다',
             loadFail: '국가 목록을 불러오지 못했습니다.',
             todayCapN: function (n) { return '전 세계 · ' + n + '곳'; },
             todayNone: '오늘은 어느 나라도 공휴일이 아닙니다.',
@@ -69,6 +73,10 @@
             dtAll: 'All',
             dtNext: 'Next',
             dtPrev: 'Last',
+            dtBreak: 'Next break',
+            breakLen: function (n) { return n + '-day break'; },
+            breakNow: 'on now',
+            noBreak: 'No long weekend in the data',
             loadFail: 'Could not load the country list.',
             todayCapN: function (n) { return 'Around the world · ' + n; },
             todayNone: 'No country has a public holiday today.',
@@ -170,6 +178,33 @@
         return { marked: marked, todays: todays, next: next, prev: prev };
     }
 
+    /* ---------------------------------------------------------- 연휴 분류
+       연휴는 하루가 아니라 구간이라 classify() 를 쓸 수 없다. 갈림길이 셋이다.
+         시작 전 → D-(시작까지)   ·   끝난 뒤 → D+(끝난 뒤)   ·   그 사이 → 연휴 중
+       "다음" 은 지금 붙어 있는 연휴가 있으면 그것이다. 남은 이틀을 두고
+       두 달 뒤 연휴를 가리키면 카드가 거짓말을 한다.
+
+       items: [{ s: 'YYYY-MM-DD', e: 'YYYY-MM-DD', ... }] */
+    function breakState(it, t) {
+        var s = epochDay(it.s), e = epochDay(it.e);
+        var days = e - s + 1;
+        if (t < s) return { item: it, phase: 'next', diff: s - t, days: days };
+        if (t > e) return { item: it, phase: 'past', diff: e - t, days: days };
+        return { item: it, phase: 'now', diff: 0, nth: t - s + 1, days: days };
+    }
+    function classifyBreaks(items, today) {
+        var t = epochDay(today);
+        var marked = items.map(function (it) { return breakState(it, t); });
+
+        var now = null, next = null;
+        marked.forEach(function (m) {
+            if (m.phase === 'now') { if (!now) now = m; }
+            else if (m.phase === 'next' && (!next || m.diff < next.diff)) next = m;
+        });
+
+        return { marked: marked, now: now, next: next, upcoming: now || next };
+    }
+
     /* ------------------------------------------------------------ 표 채우기 */
     function paintTables(today) {
         var rows = $$('tr[data-d]');
@@ -196,6 +231,47 @@
         });
 
         return got;
+    }
+
+    /* ---------------------------------------------------------- 연휴 표 채우기
+       공휴일 표와 같은 자리(.mark)에 같은 모양으로 붙인다 — 다른 표라고 다른
+       규칙을 쓰면 같은 페이지 안에서 D-day 가 두 가지 뜻을 갖는다. */
+    function paintBreaks(today) {
+        var rows = $$('tr[data-s]');
+        var got = classifyBreaks(rows.map(function (tr) {
+            return {
+                s: tr.getAttribute('data-s'),
+                e: tr.getAttribute('data-e'),
+                tr: tr
+            };
+        }), today);
+
+        got.marked.forEach(function (m) {
+            var tr = m.item.tr;
+            var mark = $('.mark', tr);
+
+            if (m.phase === 'now') {
+                tr.classList.add('is-today');
+                if (mark) mark.innerHTML = '<span class="now">' + T.breakNow + '</span>';
+            } else if (m.phase === 'past') {
+                tr.classList.add('is-past');
+                if (mark) mark.textContent = 'D+' + (-m.diff);
+            } else if (mark) {
+                mark.innerHTML = '<span class="soon">D-' + m.diff + '</span>';
+            }
+        });
+
+        return got;
+    }
+
+    /* 카드의 연휴 한 줄. 국가 페이지와 첫 화면이 같은 문장을 쓴다. */
+    function breakHtml(m) {
+        if (!m) return '<em>' + T.noBreak + '</em>';
+        return (m.phase === 'now'
+                ? '<span class="dd on">' + T.breakNow + '</span>'
+                : '<span class="dd">D-' + m.diff + '</span>') +
+            esc(T.breakLen(m.days)) +
+            '<em>' + shortHuman(m.item.s) + ' ~ ' + shortHuman(m.item.e) + '</em>';
     }
 
     /* 이름 칸에는 영어 이름과 지역 배지가 같이 들어 있다. 카드에는 이름만 옮긴다. */
@@ -235,7 +311,7 @@
         };
     }
 
-    function paintNow(today, found) {
+    function paintNow(today, found, breaks) {
         var card = $('#now');
         if (!card) return;
 
@@ -251,6 +327,10 @@
 
         fill($('#next'), found.next, '-');
         fill($('#prev'), found.prev, '+');
+
+        /* 연휴가 한 건도 없는 국가에는 이 줄 자체가 없다 */
+        var brk = $('#break');
+        if (brk) brk.innerHTML = breakHtml(breaks && breaks.upcoming);
     }
     function fill(dd, entry, sign) {
         if (!dd) return;
@@ -385,6 +465,14 @@
                 : '<em>' + T.outOfRange + '</em>') + '</dd>';
         };
 
+        /* 국가 페이지 카드와 같은 줄을 같은 순서로 그린다. 예전에 첫 화면만
+           조용히 한 줄 빠뜨린 적이 있어서, 자료가 없을 때만 빠지게 해 둔다. */
+        var longs = data.long || [];
+        var breakLine = longs.length
+            ? '<dt>' + T.dtBreak + '</dt><dd>' +
+                breakHtml(classifyBreaks(longs, today).upcoming) + '</dd>'
+            : '';
+
         var label = T.name(data);
         home.innerHTML =
             '<div class="asof">' + T.asof(human(today)) + '</div>' +
@@ -393,6 +481,7 @@
             '<dl class="pair">' +
                 line(T.dtNext, got.next, '-') +
                 line(T.dtPrev, got.prev, '+') +
+                breakLine +
                 '<dt>' + T.dtAll + '</dt><dd><a href="' + T.dir + '/' +
                     data.code.toLowerCase() + '/">' + esc(T.allOf(label)) + '</a></dd>' +
             '</dl>';
@@ -504,7 +593,7 @@
         var page = document.body.getAttribute('data-cc');
         if (page) {
             var today = todayIso();
-            paintNow(today, paintTables(today));
+            paintNow(today, paintTables(today), paintBreaks(today));
         }
         initHome();
     }
@@ -514,8 +603,8 @@
     window.DDAY = {
         lang: LANG, t: T,
         epochDay: epochDay, todayIso: todayIso, human: human, shortHuman: shortHuman,
-        flag: flag, classify: classify, verdictOf: verdictOf, detect: detect,
-        searchKey: searchKey
+        flag: flag, classify: classify, classifyBreaks: classifyBreaks,
+        verdictOf: verdictOf, detect: detect, searchKey: searchKey
     };
 
     if (document.readyState === 'loading') {

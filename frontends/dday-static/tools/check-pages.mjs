@@ -11,8 +11,11 @@
         (파비콘은 파일까지 열어 정사각 + 48 의 배수인지 본다 — 구글 검색결과 아이콘 조건)
      5. HTML 표의 날짜 집합이 data/<CC>.json 과 정확히 같나
         (생성기가 자료를 흘리거나 겹쳐 쓰지 않았나)
+     5.5. 황금연휴가 스스로 앞뒤가 맞나 — 3일 이상인가, 우리가 담은 공휴일에
+        걸려 있나, 징검다리가 구간 안의 평일인가 — 그리고 표가 그 자료와 같나
      6. 고정 날짜를 넣고 DDAY.classify 가 낸 다음/지난/오늘이
-        여기서 따로 계산한 값과 같나
+        여기서 따로 계산한 값과 같나. 연휴는 갈림길이 셋이라(전·중·후)
+        DDAY.classifyBreaks 도 같은 방식으로 견준다
      7. 첫 화면 국가 링크 · countries.json · 실제 페이지 디렉터리가 1:1 인가
      8. sitemap.xml 의 URL 집합이 페이지 집합과 같나
      9. 브라우저 지역 감지(DDAY.detect)가 기대대로 갈리나, 그리고 저장된 값이
@@ -123,6 +126,9 @@ check('favicon.svg', (file) => {
         [/tr\.is-today\{/, '오늘 행 강조가 없다'],
         [/tr\.is-past td\{/, '지난 행 흐림 처리가 없다'],
         [/\.local\{/, '지역 한정 배지 스타일이 없다'],
+        [/\.bridge\{/, '징검다리 배지 스타일이 없다'],
+        [/td\.range\{/, '연휴 기간 칸 스타일이 없다 — 줄바꿈이 나 버린다'],
+        [/\.now \.pair dd \.dd\.on\{/, '연휴 중 표시 색이 없다 — 다가오는 연휴와 같아 보인다'],
         [/prefers-color-scheme:\s*dark/, '어두운 테마 토큰이 없다'],
         [/@media \(max-width:\s*640px\)/, '좁은 화면 대응이 없다'],
     ];
@@ -140,9 +146,13 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
 const WORDS = {
     ko: { noHoliday: '오늘은 공휴일이 아닙니다', off: ' — 오늘 쉽니다',
           partial: ' — 일부 지역만 쉽니다', outOfRange: '담긴 자료 범위 밖입니다',
+          breakLen: (n) => `${n}일 연휴`, breakNow: '연휴 중', dtBreak: '다음 연휴',
+          noBreak: '담긴 자료에 연휴가 없습니다',
           asofYear: (y) => String(y) },
     en: { noHoliday: 'Today is not a public holiday', off: ' — a day off today',
           partial: ' — observed only in some regions', outOfRange: 'Outside the range of the data',
+          breakLen: (n) => `${n}-day break`, breakNow: 'on now', dtBreak: 'Next break',
+          noBreak: 'No long weekend in the data',
           asofYear: (y) => String(y) },
 };
 
@@ -165,6 +175,31 @@ function expectRef(dates, today) {
         else if (diff < 0 && (prev === null || diff > prev.diff)) prev = { d, diff };
     }
     return { todays, next, prev };
+}
+
+/* 연휴 쪽 기대값. dday.js 의 classifyBreaks 를 가져다 쓰지 않고 여기 다시 적는다 —
+   같은 함수로 만들고 같은 함수로 검사하면 아무것도 검사하지 않는 것과 같다.
+   "다음" 은 지금 붙어 있는 연휴가 있으면 그것이다. */
+function expectBreak(longs, today) {
+    const t = epochDayRef(today);
+    let now = null, next = null;
+    for (const w of longs) {
+        const s = epochDayRef(w.s), e = epochDayRef(w.e);
+        const days = e - s + 1;
+        if (t >= s && t <= e) { if (!now) now = { w, days, phase: 'now' }; }
+        else if (s > t && (next === null || s - t < next.diff)) {
+            next = { w, days, diff: s - t, phase: 'next' };
+        }
+    }
+    return now || next;
+}
+/* 연휴 구간의 모든 날짜 */
+function spanRef(s, e) {
+    const out = [];
+    for (let n = epochDayRef(s); n <= epochDayRef(e); n++) {
+        out.push(new Date(n * 86400000).toISOString().slice(0, 10));
+    }
+    return out;
 }
 
 /* ------------------------------------------------------------ 페이지 순회 */
@@ -325,6 +360,56 @@ for (const { page, lang, slug, label } of ALL) {
         bad(label, `지역 한정 배지 ${localInHtml}개 / 자료 ${localInJson}건`);
     }
 
+    /* 5.5. 황금연휴 — 자료가 스스로 앞뒤가 맞나, 그리고 HTML 이 그 자료와 같나.
+       자료 검사를 여기(페이지 순회) 안에서 하는 이유는 두 언어가 같은 파일을
+       보므로 두 번 도는데, 그게 오히려 "두 페이지가 같은 자료를 봤다" 를 뜻하기
+       때문이다. 국가 하나가 두 번 걸리는 값싼 검사다. */
+    if (!Array.isArray(data.long)) {
+        bad(label, `data/${cc}.json 에 long 이 없다 — 자료가 낡았다 (gen-holidays.mjs)`);
+    } else {
+        const holidays = new Set(data.days.map((d) => d.d));
+        let prevStart = '';
+        for (const w of data.long) {
+            const where = `${cc} ${w.s}~${w.e}`;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(w.s) || !/^\d{4}-\d{2}-\d{2}$/.test(w.e)) {
+                bad(label, `연휴 날짜 모양이 아니다: ${where}`); continue;
+            }
+            const span = spanRef(w.s, w.e);
+            if (span.length < 3) bad(label, `연휴가 ${span.length}일이다 — 3일 미만: ${where}`);
+            /* 표에 없는 공휴일에 걸린 연휴는 페이지 안에서 앞뒤가 안 맞는다 */
+            if (!span.some((d) => holidays.has(d))) {
+                bad(label, `공휴일에 걸리지 않은 연휴: ${where}`);
+            }
+            for (const b of w.b || []) {
+                if (!span.includes(b)) bad(label, `징검다리 ${b} 가 연휴 밖이다: ${where}`);
+                if (holidays.has(b)) bad(label, `징검다리 ${b} 가 공휴일이다: ${where}`);
+            }
+            if (w.s < prevStart) bad(label, `연휴가 시작일순이 아니다: ${where}`);
+            prevStart = w.s;
+        }
+        const keys = data.long.map((w) => `${w.s}|${w.e}`);
+        if (new Set(keys).size !== keys.length) bad(label, '같은 연휴가 두 번 들어 있다');
+
+        /* HTML ↔ 자료 */
+        const htmlBreaks = [...html.matchAll(/<tr data-s="([\d-]+)" data-e="([\d-]+)">/g)]
+            .map((m) => `${m[1]}|${m[2]}`);
+        if (htmlBreaks.join(',') !== keys.join(',')) {
+            bad(label, `연휴 표 ${htmlBreaks.length}행 / 자료 ${keys.length}건 — 집합이나 순서가 다르다`);
+        }
+        const bridgeInHtml = (html.match(/class="bridge"/g) || []).length;
+        const bridgeInJson = data.long.filter((w) => w.b?.length).length;
+        if (bridgeInHtml !== bridgeInJson) {
+            bad(label, `징검다리 배지 ${bridgeInHtml}개 / 자료 ${bridgeInJson}건`);
+        }
+        /* 연휴가 없으면 카드 줄도 섹션도 없어야 한다 — 빈 표만 남으면 그게 더 나쁘다 */
+        const hasLine = html.includes('id="break"');
+        if (hasLine !== data.long.length > 0) {
+            bad(label, data.long.length
+                ? '연휴 자료가 있는데 카드에 #break 줄이 없다'
+                : '연휴가 0건인데 카드에 #break 줄이 있다');
+        }
+    }
+
     /* 6. 고정 날짜로 분류 대조 */
     const got = r.dday.classify(jsonDates.map((d) => ({ d })), PROBE);
     const want = expectRef(jsonDates, PROBE);
@@ -401,6 +486,59 @@ for (const { page, lang, slug, label } of ALL) {
         for (const [k, v] of Object.entries(drawn)) {
             if (v.includes(smell)) bad(label, `오늘 카드 ${k} 에 "${smell}" 가 있다`);
         }
+    }
+
+    /* 6.6. 연휴 줄과 연휴 표가 실제로 그려진 결과.
+       공휴일 쪽 D-day 는 하루 기준이지만 연휴는 구간이라 갈림길이 셋이다 —
+       셋 다 지나가는지 보려면 오늘 하나로는 모자라서, 고정 날짜로 한 번 더 본다. */
+    if (Array.isArray(data.long) && data.long.length) {
+        const e = expectBreak(data.long, TODAY);
+        const line = r.doc.querySelector('#break');
+        const drawnBreak = line ? (line.innerHTML || '') : '';
+        if (!drawnBreak) {
+            bad(label, '연휴 줄이 비어 있다 — paintNow 가 #break 를 안 채웠다');
+        } else if (!e) {
+            /* 자료가 3년치라 "앞으로도 연휴가 없다" 는 연말에만 나온다 */
+            if (!drawnBreak.includes(w.noBreak)) bad(label, `연휴 줄: "${drawnBreak}"`);
+        } else {
+            const head = e.phase === 'now' ? w.breakNow : `D-${e.diff}<`;
+            if (!drawnBreak.includes(head)) {
+                bad(label, `연휴 줄에 ${head} 가 없다 — "${drawnBreak}"`);
+            }
+            if (!drawnBreak.includes(esc(w.breakLen(e.days)))) {
+                bad(label, `연휴 줄에 "${w.breakLen(e.days)}" 가 없다 — "${drawnBreak}"`);
+            }
+        }
+        for (const smell of ['undefined', 'NaN', '[object Object]']) {
+            if (drawnBreak.includes(smell)) bad(label, `연휴 줄에 "${smell}" 가 있다`);
+        }
+
+        /* 표의 D-day. 고정 날짜(PROBE)로 다시 돌려 세 갈림길을 모두 지나가게 한다.
+           하니스의 행 객체를 직접 먹이므로 배포되는 코드 그대로가 돈다. */
+        const t = epochDayRef(PROBE);
+        const marks = r.dday.classifyBreaks(
+            r.doc.breaks.map((tr) => ({
+                s: tr.getAttribute('data-s'), e: tr.getAttribute('data-e'),
+            })), PROBE);
+        if (marks.marked.length !== data.long.length) {
+            bad(label, `연휴 행 ${marks.marked.length}개 / 자료 ${data.long.length}건 (하니스)`);
+        }
+        for (const m of marks.marked) {
+            const s = epochDayRef(m.item.s), en = epochDayRef(m.item.e);
+            const want = t < s ? 'next' : t > en ? 'past' : 'now';
+            if (m.phase !== want) {
+                bad(label, `${PROBE} 에 ${m.item.s}~${m.item.e} 가 ${m.phase} (기대 ${want})`);
+            }
+            if (m.days !== en - s + 1) bad(label, `${m.item.s}~${m.item.e} 일수가 ${m.days} 다`);
+        }
+        const ongoing = marks.marked.filter((m) => m.phase === 'now');
+        if (marks.now && marks.now !== ongoing[0]) bad(label, '연휴 중 판정이 첫 구간이 아니다');
+        if (!marks.now && marks.next) {
+            const nearest = Math.min(...marks.marked
+                .filter((m) => m.phase === 'next').map((m) => m.diff));
+            if (marks.next.diff !== nearest) bad(label, `다음 연휴가 가장 가깝지 않다 (D-${marks.next.diff} / 가장 가까운 D-${nearest})`);
+        }
+        if (marks.upcoming !== (marks.now || marks.next)) bad(label, 'upcoming 이 now/next 와 다르다');
     }
 }
 
@@ -589,6 +727,26 @@ for (const [page, lang, langs, wantCc] of [
             }
             if (sub && !drawn.includes(`<span class="sub">${esc(sub)}</span>`)) {
                 bad(label, `요약 카드에 다른 언어 이름 "${sub}" 이 없다`);
+            }
+        }
+
+        /* 연휴 줄. 국가 페이지 카드에는 있는데 첫 화면만 조용히 빠진 적이 있어
+           같은 자료로 같은 답이 나오는지 본다. */
+        const w = WORDS[lang];
+        const e = expectBreak(src.long || [], TODAY);
+        if (!src.long?.length) {
+            if (drawn.includes(`<dt>${w.dtBreak}</dt>`)) {
+                bad(label, '연휴 자료가 없는데 요약 카드가 연휴 줄을 그렸다');
+            }
+        } else if (!drawn.includes(`<dt>${w.dtBreak}</dt>`)) {
+            bad(label, `요약 카드에 "${w.dtBreak}" 줄이 없다`);
+        } else if (!e) {
+            if (!drawn.includes(w.noBreak)) bad(label, '연휴 줄이 없다');
+        } else {
+            const head = e.phase === 'now' ? w.breakNow : `D-${e.diff}<`;
+            if (!drawn.includes(head)) bad(label, `요약 카드 연휴 줄에 ${head} 가 없다`);
+            if (!drawn.includes(esc(w.breakLen(e.days)))) {
+                bad(label, `요약 카드에 "${w.breakLen(e.days)}" 가 없다`);
             }
         }
     }

@@ -81,7 +81,7 @@ export function makeEl(tag = 'div', { attrs: init = {}, kids = {} } = {}) {
 /* 같은 셀렉터는 같은 객체를 돌려준다 — 그래야 렌더 결과를 다시 읽을 수 있다.
    #picker 만은 안쪽 구조까지 미리 엮어 둔다. 선택기는 input · ul · .none 을 찾아
    서로 다른 갈림길로 가는데, 아무거나 돌려주면 그 갈림길이 사라진다. */
-function makeDoc(bodyAttrs, { rows, ids, lang, contacts }) {
+function makeDoc(bodyAttrs, { rows, breaks, ids, lang, contacts }) {
     const cache = new Map();
     const body = makeEl('body', { attrs: bodyAttrs });
     /* <html lang> 은 dday.js 가 말을 고르는 유일한 근거다. 안 옮기면 영어 페이지가
@@ -118,6 +118,7 @@ function makeDoc(bodyAttrs, { rows, ids, lang, contacts }) {
         },
         querySelectorAll(sel) {
             if (sel === 'tr[data-d]') return rows;
+            if (sel === 'tr[data-s]') return breaks;
             if (sel === '[data-contact]') return contacts;
             /* 선택기 항목은 dday.js 가 innerHTML 로 넣는다. 스텁은 트리를 만들지
                않으니 여기서 되읽을 수 없고, 채워진 결과는 check-pages.mjs 가
@@ -128,7 +129,7 @@ function makeDoc(bodyAttrs, { rows, ids, lang, contacts }) {
         createElement: (t) => makeEl(t),
         createTextNode(t) { const e = makeEl('#text'); e.textContent = String(t); return e; },
         addEventListener() { }, removeEventListener() { },
-        cache, pickerList, rows, contacts,
+        cache, pickerList, rows, breaks, contacts,
     };
     return doc;
 }
@@ -166,6 +167,21 @@ function parseRows(html) {
                 '.en': sub,
                 '.local': /class="local"/.test(m[2]) ? makeEl('span') : null,
             },
+        }));
+    }
+    return rows;
+}
+
+/* 황금연휴 표의 행. 공휴일 행과 달리 날짜가 둘이라(시작·끝) 따로 뽑는다.
+   내용 칸은 dday.js 가 읽지 않으므로 .mark 만 있으면 된다 — 거기에 붙는
+   D-day 를 check-pages 가 되읽는다. */
+function parseBreaks(html) {
+    const rows = [];
+    const re = /<tr data-s="(\d{4}-\d{2}-\d{2})" data-e="(\d{4}-\d{2}-\d{2})">/g;
+    for (const m of html.matchAll(re)) {
+        rows.push(makeEl('tr', {
+            attrs: { 'data-s': m[1], 'data-e': m[2] },
+            kids: { '.mark': makeEl('td') },
         }));
     }
     return rows;
@@ -221,6 +237,7 @@ export function boot(page, { languages = ['ko-KR'], storage = {} } = {}) {
 
     const doc = makeDoc(bodyAttrs, {
         rows: parseRows(html),
+        breaks: parseBreaks(html),
         ids: new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1])),
         lang: (html.match(/<html lang="([a-z]{2})">/) || [])[1] || 'ko',
         contacts: parseContacts(html),
