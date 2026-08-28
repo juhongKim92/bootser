@@ -1,6 +1,6 @@
 # dday-static — this is the day
 
-204개국 공휴일과 황금연휴를 한국어·영어로 보여주는 정적 사이트.
+204개국 공휴일과 황금연휴, 그리고 절기·삭망·유성우를 한국어·영어로 보여주는 정적 사이트.
 **백엔드도 빌드 도구도 의존성도 없다.** `public/` 을 Cloudflare 에 그대로 얹는다.
 
 `apps/d-day/d-day-service` 와는 별개다. 저쪽은 회원·영화·스포츠까지 다루는 Spring 서비스로
@@ -16,6 +16,7 @@ JSON 으로 굳히고, 날짜에 따라 달라지는 것(D-day · 오늘 여부)
 | --- | --- |
 | Nager 호출 → DB 저장 | `tools/gen-holidays.mjs` (빌드 타임) |
 | 연휴 구간 계산 | Nager `LongWeekend` — 같은 빌드 단계 |
+| 천문 계산 | `tools/astro.mjs` — 네트워크조차 안 탄다 |
 | `LocalDate.now(timezone)` | 브라우저 — 기기 날짜 |
 | 다음/지난 공휴일 탐색 | 브라우저 — `dday.js` 의 `classify()` · `classifyBreaks()` |
 | Redis 캐시 | Cloudflare CDN |
@@ -24,25 +25,32 @@ JSON 으로 굳히고, 날짜에 따라 달라지는 것(D-day · 오늘 여부)
 
 ```
 tools/                     전부 node 내장 모듈만 쓴다 (npm install 없음)
-├── config.mjs             도메인·연도 범위 — 바꿀 게 있으면 여기
+├── config.mjs             도메인·연도 범위·국가 아닌 슬러그 — 바꿀 게 있으면 여기
 ├── gen-holidays.mjs       Nager.Date  → public/data/*.json
-├── gen-pages.mjs          data        → 한국어·영어 두 벌의 HTML (410개)
+├── astro.mjs              절기·삭망·유성우 계산 (순수 함수, 네트워크 없음)
+├── vsop87.mjs             VSOP87D 절단본 172항 — 생성물, 손대지 말 것
+├── gen-vsop87.mjs         CDS VI/81   → vsop87.mjs (한 번 돌리고 마는 도구)
+├── sky-fixture.mjs        분점·지점 공표 시각 12건 — 검사 전용
+├── gen-sky.mjs            astro.mjs   → public/data/sky.json
+├── gen-pages.mjs          data        → 한국어·영어 두 벌의 HTML (412개)
 ├── gen-sitemap.mjs        git 커밋 날짜 → public/sitemap.xml
 ├── gen-favicon.mjs        favicon-art.mjs → ico · svg · png 넷
 ├── favicon-art.mjs        16×16 픽셀맵 (모든 크기의 원화)
 ├── harness.mjs            node:vm DOM·fetch 스텁 — 브라우저 없이 페이지를 돌린다
 ├── inject-beacon.mjs      Cloudflare 웹 분석 비콘 주입 (빌드 단계)
-└── check-pages.mjs        배포 전 검사 410개 페이지
+└── check-pages.mjs        배포 전 검사 412개 페이지
 
 public/
 ├── index.html             생성물 — 국가 목록 + 감지된 국가 요약 카드 (한국어)
 ├── {cc}/index.html        생성물 — 국가별 공휴일·황금연휴 (3년치, HTML 에 박혀 있다)
 ├── en/index.html          생성물 — 영어 첫 화면
+├── {sky,en/sky}/index.html 생성물 — 절기·삭망·유성우 (국가 축이 아니다)
 ├── en/{cc}/index.html     생성물 — 영어 국가 페이지
 ├── 404.html · en/404.html 생성물 — 언어 칸마다 하나씩
 ├── data/{CC}.json         생성물 — 국가별 자료 (공휴일 + 황금연휴, 언어 무관 한 벌)
 ├── data/month/YYYY-MM.json 생성물 — 같은 자료의 날짜 색인 36개
 ├── data/countries.json    생성물 — 선택기용 목록
+├── data/sky.json          생성물 — 절기·삭망·유성우 (한 벌, 21KB)
 ├── shared/base.css        손으로 쓴 것
 ├── shared/dday.css        손으로 쓴 것
 ├── shared/dday.js         손으로 쓴 것 — 두 언어가 같은 파일을 쓴다
@@ -69,15 +77,16 @@ Nager.Date 를 호출하는 유일한 자동 경로다. Cloudflare 빌드에서�
 cd frontends/dday-static
 
 node tools/gen-holidays.mjs    # 1. Nager 에서 자료를 새로 받는다 (유일한 네트워크 단계)
-node tools/gen-pages.mjs       # 2. 자료로 HTML 을 다시 만든다
-git add -A && git commit       # 3. lastmod 가 여기서 정해진다
-node tools/gen-sitemap.mjs     # 4. sitemap.xml
-node tools/check-pages.mjs     # 5. 실패하면 밀지 않는다 (종료 코드 1)
-git push                       # 6. 나머지는 Cloudflare 가 한다
+node tools/gen-sky.mjs         # 2. 절기·삭망을 다시 계산한다 (네트워크 없음)
+node tools/gen-pages.mjs       # 3. 자료로 HTML 을 다시 만든다
+git add -A && git commit       # 4. lastmod 가 여기서 정해진다
+node tools/gen-sitemap.mjs     # 5. sitemap.xml
+node tools/check-pages.mjs     # 6. 실패하면 밀지 않는다 (종료 코드 1)
+git push                       # 7. 나머지는 Cloudflare 가 한다
 ```
 
-3번을 건너뛰면 모든 HTML 이 "커밋 안 된 수정본" 으로 판정돼 `lastmod` 가 죄다 오늘이
-된다. 구글은 `lastmod` 가 부정확하면 아예 무시하므로 그게 최악이다. 4번이 3번 뒤에
+4번을 건너뛰면 모든 HTML 이 "커밋 안 된 수정본" 으로 판정돼 `lastmod` 가 죄다 오늘이
+된다. 구글은 `lastmod` 가 부정확하면 아예 무시하므로 그게 최악이다. 5번이 4번 뒤에
 오므로 `sitemap.xml` 이 커밋 밖에 남는데, 워크플로는 `--amend` 로 같은 커밋에 합친다.
 
 워크플로에서 특히 조심한 것 둘.
@@ -110,9 +119,9 @@ Workers Builds 가 push 를 받아 배포한다. 설정 네 칸이 전부인데,
 
 빌드 명령에 검사를 물려 두었으므로 **깨진 페이지는 배포되지 않는다.**
 `inject-beacon.mjs` 는 검사 뒤에 와야 한다 — 커밋된 HTML 을 제자리에서 고치기 때문에
-먼저 돌리면 410개가 전부 수정본이 된다.
+먼저 돌리면 412개가 전부 수정본이 된다.
 
-빌드 단계에서는 `gen-holidays` · `gen-pages` 를 돌리지 않는다. 생성물이 이미 커밋돼
+빌드 단계에서는 `gen-holidays` · `gen-sky` · `gen-pages` 를 돌리지 않는다. 생성물이 이미 커밋돼
 있고, 빌드 때마다 Nager 를 1224번 치면 자료가 조용히 바뀌어 배포될 수 있다.
 자료 갱신은 위 절차대로 손으로 하고 diff 를 보고 넘긴다.
 
@@ -147,6 +156,44 @@ Workers Builds 가 push 를 받아 배포한다. 설정 네 칸이 전부인데,
 뒤 연휴를 가리키면 카드가 거짓말을 한다. `dday.js` 의 `classifyBreaks()` 가 그 규칙을
 한 군데에 담고, 국가 페이지 카드와 첫 화면 카드가 같은 함수를 쓴다.
 
+## 절기와 삭망 (`/sky/`)
+
+국가 축이 아닌 첫 페이지다. 절기도 삭망도 유성우도 **온 세계가 같은 순간을 공유**하므로
+204개국으로 쪼갤 것이 없다 — `data/sky.json` 한 벌(21KB)이 전부다.
+그래서 `config.mjs` 에 `EXTRA` 가 생겼다. 그전까지는 "첫 화면 아니면 전부 국가 페이지"
+였고, `check-pages` 가 그 가정 위에 서 있었다.
+
+### 밖에서 받아오지 않는다
+
+`tools/astro.mjs` 가 직접 계산한다. Nager 도, 다른 API 도 안 탄다.
+
+- **절기** — 태양의 겉보기 황경이 15°의 배수가 되는 순간. 24개가 한 식에서 나오고
+  분점·지점은 그중 넷이다(0° · 90° · 180° · 270°).
+- **삭망** — Meeus 제49장.
+- **유성우** — **날짜를 손으로 적지 않는다.** 국제유성기구가 극대기를 태양 황경으로
+  정의하므로, 위의 태양 계산에 그 황경을 넣으면 해마다 맞는 날짜가 나온다.
+  해가 바뀌어도 표를 고칠 일이 없다.
+
+### 태양은 왜 VSOP87 인가
+
+처음에는 Meeus 저정밀식(0.01°)으로 짰다. **2025년 동지가 KST 자정 정각에 떨어졌다.**
+오차 한계가 ±15분이니 12월 21일인지 22일인지 정할 수 없었다 — 동지 날짜가 틀린 절기
+페이지는 안 내는 게 낫다.
+
+그래서 VSOP87D 정본(CDS 카탈로그 VI/81)을 받아 `|A|·0.03^p ≥ 1e-7` 로 절단했다.
+2425항 중 172항이 남고 오차는 **11분 → 1분**이 되었다. 지금 동지의 여유는 2분이다.
+
+계수를 기억으로 적지 않고 `tools/gen-vsop87.mjs` 로 받아 만든다. 172줄짜리 숫자
+뭉치는 손으로 검산할 수 없으니, 어디서 왔고 무엇을 버렸는지 코드로 남겨 둔다.
+
+### 날짜는 시간대마다 갈린다
+
+순간은 하나인데 날짜는 아니다. 2025년 동지는 UTC 12월 21일 15:02, 한국은 12월 22일
+00:02 다. **ko 페이지는 KST, en 페이지는 UTC** 로 굳혀 박고 각주로 밝힌다.
+
+굳히는 일은 `gen-sky.mjs` 한 군데에서만 한다. 브라우저가 다시 계산하면 HTML 에 박힌
+날짜와 갈라질 수 있어서, `sky.json` 이 두 기준 시간대의 날짜·시각을 함께 담는다.
+
 ## 오늘 공휴일인 나라
 
 첫 화면에 "오늘 어느 나라가 쉬는가" 를 띄운다. 국가별 파일로는 답할 수 없는 물음이라
@@ -179,7 +226,7 @@ hreflang 세 줄(ko · en · x-default→en)이 **양쪽에 똑같이** 들어�
 
 ## 검사
 
-`tools/check-pages.mjs` 가 410개 페이지를 브라우저 없이 돌려 본다.
+`tools/check-pages.mjs` 가 412개 페이지를 브라우저 없이 돌려 본다.
 jsdom 을 쓰지 않는다 — `node:vm` + 최소 DOM·fetch 스텁이면 충분하고, 의존성이 늘지 않는다.
 
 보는 것:
@@ -194,6 +241,13 @@ jsdom 을 쓰지 않는다 — `node:vm` + 최소 DOM·fetch 스텁이면 충분
 6. 황금연휴가 스스로 앞뒤가 맞나 — 사흘 이상인가, 우리가 담은 공휴일에 걸려 있나,
    징검다리가 구간 안의 공휴일 아닌 날인가, 시작일순이고 겹치지 않나. 그리고 연휴 표가
    그 자료와 같나, 연휴가 0건인 국가에는 카드 줄도 섹션도 없나
+6.5. **천문 검산점** — 절기·삭망은 우리가 직접 계산한 것이라 "받은 대로 찍혔나" 로는
+   아무것도 검사되지 않는다. 두 번째 점을 저장소 안에서 찾는다. 일본은 `春分の日`·
+   `秋分の日` 를 실제 천문 분점(일본 표준시)으로 정하고, 음력 1월 1일은 삭이 있는 날,
+   음력 8월 15일은 그 14일 뒤다. Nager 에서 온 공휴일 자료와 **21개 지점**을 견준다.
+   이름이 바뀌어 검산점이 통째로 사라지는 것이 가장 나쁘므로 최소 개수를 박아 두었다.
+   그것과 별개로 `sky-fixture.mjs` 의 분점·지점 공표 시각 12건과 **분 단위로** 견준다 —
+   공휴일 쪽 검산점은 날짜만 주므로 1분 오차와 70분 오차를 가르지 못한다
 7. 고정 날짜(`2026-06-15`)를 넣고 `classify()` 가 낸 다음/지난/오늘이
    검사기가 따로 계산한 값과 같나. 이어서 실제로 그려진 오늘 카드 문안,
    "오늘 공휴일인 나라" 목록(나라 수·이름·공휴일 이름·정렬), 그리고 dday.js 가

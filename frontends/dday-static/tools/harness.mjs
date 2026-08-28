@@ -13,10 +13,10 @@
    검사할 수 있어야 하기 때문이다 — boot(page, { storage }) 로 값을 심어 두고
    그것이 화면을 바꾸지 못하는지 본다.
 
-   DOM 스텁은 요소를 만들어 주기만 하고 HTML 을 파싱하지는 않는다 —
-   그래서 querySelectorAll('tr[data-d]') 은 빈 배열이다. 표의 내용은
-   check-pages.mjs 가 HTML 에서 직접 뽑아 DDAY.classify 에 먹여 검사한다.
-   구동 검사와 계산 검사를 갈라 둔 것이지, 빠뜨린 게 아니다.
+   DOM 스텁은 일반적인 HTML 파서가 아니다. 표의 행만 좁은 정규식으로 뽑아 준다 —
+   공휴일 tr[data-d] · 황금연휴 tr[data-s] · 하늘 tr[data-sky] 셋이고, 그래야
+   dday.js 가 붙인 D-day 를 check-pages.mjs 가 되읽을 수 있다.
+   나머지 셀렉터는 빈 배열이다. 구동 검사와 계산 검사를 갈라 둔 것이지, 빠뜨린 게 아니다.
    ============================================================ */
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -81,7 +81,7 @@ export function makeEl(tag = 'div', { attrs: init = {}, kids = {} } = {}) {
 /* 같은 셀렉터는 같은 객체를 돌려준다 — 그래야 렌더 결과를 다시 읽을 수 있다.
    #picker 만은 안쪽 구조까지 미리 엮어 둔다. 선택기는 input · ul · .none 을 찾아
    서로 다른 갈림길로 가는데, 아무거나 돌려주면 그 갈림길이 사라진다. */
-function makeDoc(bodyAttrs, { rows, breaks, ids, lang, contacts }) {
+function makeDoc(bodyAttrs, { rows, breaks, sky, ids, lang, contacts }) {
     const cache = new Map();
     const body = makeEl('body', { attrs: bodyAttrs });
     /* <html lang> 은 dday.js 가 말을 고르는 유일한 근거다. 안 옮기면 영어 페이지가
@@ -119,6 +119,7 @@ function makeDoc(bodyAttrs, { rows, breaks, ids, lang, contacts }) {
         querySelectorAll(sel) {
             if (sel === 'tr[data-d]') return rows;
             if (sel === 'tr[data-s]') return breaks;
+            if (sel === 'tr[data-sky]') return sky;
             if (sel === '[data-contact]') return contacts;
             /* 선택기 항목은 dday.js 가 innerHTML 로 넣는다. 스텁은 트리를 만들지
                않으니 여기서 되읽을 수 없고, 채워진 결과는 check-pages.mjs 가
@@ -129,7 +130,7 @@ function makeDoc(bodyAttrs, { rows, breaks, ids, lang, contacts }) {
         createElement: (t) => makeEl(t),
         createTextNode(t) { const e = makeEl('#text'); e.textContent = String(t); return e; },
         addEventListener() { }, removeEventListener() { },
-        cache, pickerList, rows, breaks, contacts,
+        cache, pickerList, rows, breaks, sky, contacts,
     };
     return doc;
 }
@@ -187,6 +188,38 @@ function parseBreaks(html) {
     return rows;
 }
 
+/* 하늘 표의 행. 공휴일 행과 셀렉터를 갈라 둔 이유가 있다 — 한 페이지에 둘이
+   같이 있을 일은 없지만, 같은 이름을 쓰면 어느 쪽이 도는지 하니스에서 알 수 없다.
+   이름 칸은 dday.js 가 카드로 옮겨 적으므로 한자·배지를 떼기 전 상태로 둔다. */
+function parseSky(html) {
+    const rows = [];
+    const re = /<tr data-d="(\d{4}-\d{2}-\d{2})" data-sky="([a-z]+)">([\s\S]*?)<\/tr>/g;
+    for (const m of html.matchAll(re)) {
+        const cell = (m[3].match(/<td class="ev">([\s\S]*?)<\/td>/) || [])[1] || '';
+        const clean = unesc(cell
+            .replace(/<span class="(alt|cardinal)"[^>]*>[\s\S]*?<\/span>/g, '')
+            .replace(/<[^>]+>/g, '')).trim();
+
+        const ev = makeEl('td');
+        ev.textContent = clean;
+
+        const altText = (cell.match(/<span class="alt">([\s\S]*?)<\/span>/) || [])[1];
+        let alt = null;
+        if (altText !== undefined) { alt = makeEl('span'); alt.textContent = unesc(altText).trim(); }
+
+        rows.push(makeEl('tr', {
+            attrs: { 'data-d': m[1], 'data-sky': m[2] },
+            kids: {
+                '.mark': makeEl('td'),
+                '.ev': ev,
+                '.alt': alt,
+                '.cardinal': /class="cardinal"/.test(cell) ? makeEl('span') : null,
+            },
+        }));
+    }
+    return rows;
+}
+
 /* 연락처 조각. HTML 에는 뒤집힌 두 토막만 있고 완성된 주소가 없다 —
    contact.js 가 합치는 결과가 맞는지 보려면 스텁에도 그 두 토막이 있어야 한다. */
 function parseContacts(html) {
@@ -238,6 +271,7 @@ export function boot(page, { languages = ['ko-KR'], storage = {} } = {}) {
     const doc = makeDoc(bodyAttrs, {
         rows: parseRows(html),
         breaks: parseBreaks(html),
+        sky: parseSky(html),
         ids: new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1])),
         lang: (html.match(/<html lang="([a-z]{2})">/) || [])[1] || 'ko',
         contacts: parseContacts(html),

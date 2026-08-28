@@ -119,6 +119,25 @@ td.len{font-weight:500}
 /* 섹션 머리말 아래 한 줄짜리 설명. .lede 는 첫 화면용이라 여백이 크다 */
 .note{font-size:13px;color:var(--ink-3);margin-bottom:14px;max-width:62ch}
 
+/* ------------------------------------------------ 하늘 표
+   절기·삭망·유성우. 공휴일 표와 골격은 같고 첫 칸에 시각이 하나 더 붙는다 —
+   절기는 "며칠" 만큼이나 "몇 시" 가 중요하고, 자정 근처면 왜 그 날짜인지가
+   시각을 봐야 설명된다. */
+td.date .at{
+  margin-left:8px;color:var(--ink-3);
+  font-variant-numeric:tabular-nums;
+}
+td.ev{font-weight:500}
+td.ev .alt{display:block;font-size:12px;color:var(--ink-3);font-weight:400}
+
+/* 분점 둘과 지점 둘. 24절기 가운데 이 넷만 천문학이 따로 이름을 붙인 자리다. */
+.cardinal{
+  display:inline-block;margin-left:8px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  color:var(--today);border:1px solid var(--today);
+  padding:0 5px;border-radius:2px;vertical-align:1px;font-weight:400;
+}
+
 details.year{margin-top:10px}
 details.year > summary{
   cursor:pointer;list-style:none;
@@ -216,6 +235,8 @@ details.year[open] > summary::before{content:'▾ '}
   .countries{columns:2}
   .now .verdict{font-size:19px}
   td.name .en{display:none}
+  /* 하늘 표의 한자·ZHR 은 남긴다 — 저건 이름의 일부지 부연이 아니다 */
+  td.date .at{display:block;margin-left:0}
 }
 @media (max-width:400px){
   .countries{columns:1}

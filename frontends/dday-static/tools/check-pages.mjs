@@ -31,7 +31,9 @@
 import { boot, pages, PUB, DATA } from './harness.mjs';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { BASE, today } from './config.mjs';
+import { BASE, EXTRA, today } from './config.mjs';
+import { SHOWERS } from './astro.mjs';
+import { EQUINOXES, TOLERANCE_MINUTES } from './sky-fixture.mjs';
 
 const fail = [], warn = [];
 const bad = (p, m) => fail.push(`${p}: ${m}`);
@@ -52,16 +54,20 @@ const ICON_LINKS = [
    그게 가장 알아채기 어려운 고장이라 여기서 본다. */
 const NEED_IDS = {
     country: ['picker', 'now', 'next', 'prev'],
-    home: ['picker', 'home', 'tcap', 'tnote', 'tlist', 'csearch', 'clist', 'cnone'],
+    home: ['picker', 'home', 'tcap', 'tnote', 'tlist', 'csearch', 'clist', 'cnone', 'sky', 'skylist'],
+    sky: ['picker', 'now', 'next-term', 'next-new', 'next-full', 'next-shower'],
 };
 
-/* 슬러그를 언어와 국가로 가른다.  '' | 'en' | 'kr' | 'en/kr' */
+/* 슬러그를 언어와 갈래로 가른다.  '' | 'en' | 'kr' | 'en/kr' | 'sky' | 'en/sky'
+   갈래가 셋이다 — 첫 화면 · 국가 페이지 · 국가가 아닌 페이지(EXTRA).
+   예전에는 "첫 화면 아니면 전부 국가 페이지" 였는데 하늘 페이지가 그 가정을 깬다. */
 const ALL = pages().map((p) => {
     const en = p === 'en' || p.startsWith('en/');
-    const slug = en ? p.slice(3) : p;                    /* '' | 'kr' */
-    return { page: p, lang: en ? 'en' : 'ko', slug, label: '/' + (p ? p + '/' : '') };
+    const slug = en ? p.slice(3) : p;                    /* '' | 'kr' | 'sky' */
+    const kind = slug === '' ? 'home' : EXTRA.includes(slug) ? slug : 'country';
+    return { page: p, lang: en ? 'en' : 'ko', slug, kind, label: '/' + (p ? p + '/' : '') };
 });
-const COUNTRY = ALL.filter((p) => p.slug !== '');
+const COUNTRY = ALL.filter((p) => p.kind === 'country');
 console.log(`페이지 ${ALL.length}개 (한국어 ${ALL.filter((p) => p.lang === 'ko').length}` +
     ` · 영어 ${ALL.filter((p) => p.lang === 'en').length})\n`);
 
@@ -129,6 +135,9 @@ check('favicon.svg', (file) => {
         [/\.bridge\{/, '징검다리 배지 스타일이 없다'],
         [/td\.range\{/, '연휴 기간 칸 스타일이 없다 — 줄바꿈이 나 버린다'],
         [/\.now \.pair dd \.dd\.on\{/, '연휴 중 표시 색이 없다 — 다가오는 연휴와 같아 보인다'],
+        [/td\.date \.at\{/, '하늘 표의 시각 스타일이 없다'],
+        [/td\.ev\{/, '하늘 표의 이름 칸 스타일이 없다'],
+        [/\.cardinal\{/, '분점·지점 배지 스타일이 없다'],
         [/prefers-color-scheme:\s*dark/, '어두운 테마 토큰이 없다'],
         [/@media \(max-width:\s*640px\)/, '좁은 화면 대응이 없다'],
     ];
@@ -148,16 +157,33 @@ const WORDS = {
           partial: ' — 일부 지역만 쉽니다', outOfRange: '담긴 자료 범위 밖입니다',
           breakLen: (n) => `${n}일 연휴`, breakNow: '연휴 중', dtBreak: '다음 연휴',
           noBreak: '담긴 자료에 연휴가 없습니다',
+          newMoon: '삭', fullMoon: '보름',
+          skyNone: '오늘은 절기도 삭망도 아닙니다', skyOff: '오늘입니다',
           asofYear: (y) => String(y) },
     en: { noHoliday: 'Today is not a public holiday', off: ' — a day off today',
           partial: ' — observed only in some regions', outOfRange: 'Outside the range of the data',
           breakLen: (n) => `${n}-day break`, breakNow: 'on now', dtBreak: 'Next break',
           noBreak: 'No long weekend in the data',
+          newMoon: 'New Moon', fullMoon: 'Full Moon',
+          skyNone: 'No solar term or moon phase today', skyOff: 'today',
           asofYear: (y) => String(y) },
 };
 
 /* 푸터에 조립돼 나와야 하는 주소. 소스의 조각을 뒤집어 만들지 않고 여기 적는다. */
 const CONTACT_ADDR = 'contact' + String.fromCharCode(64) + 'vermilion19.com';
+
+/* 하늘 자료. 페이지 순회와 아래 검산점 칸이 같은 것을 본다. */
+const SKY_FILE = join(DATA, 'sky.json');
+if (!existsSync(SKY_FILE)) {
+    console.error('data/sky.json 이 없다 — node tools/gen-sky.mjs 를 먼저 돌릴 것.');
+    process.exit(1);
+}
+const SKY = JSON.parse(readFileSync(SKY_FILE, 'utf8'));
+
+/* data/ 안의 국가 파일만 고른다. countries.json 은 목록이고 sky.json 은 국가 축이
+   아니다 — 그냥 훑으면 days 가 없다며 터진다. */
+const NOT_COUNTRY = new Set(['countries.json', 'sky.json']);
+const countryFiles = () => readdirSync(DATA).filter((f) => f.endsWith('.json') && !NOT_COUNTRY.has(f));
 
 const PROBE = '2026-06-15';                     /* 아무 날이나 — 재현 가능하기만 하면 된다 */
 function epochDayRef(iso) {
@@ -205,7 +231,7 @@ function spanRef(s, e) {
 /* ------------------------------------------------------------ 페이지 순회 */
 const linkedFromHome = { ko: new Set(), en: new Set() };
 
-for (const { page, lang, slug, label } of ALL) {
+for (const { page, lang, slug, kind, label } of ALL) {
     let r;
     try { r = boot(page); }
     catch (e) { bad(label, `구동 실패 — ${e.message}`); continue; }
@@ -214,7 +240,7 @@ for (const { page, lang, slug, label } of ALL) {
     if (!r.dday) { bad(label, 'window.DDAY 손잡이가 없다 — dday.js 가 안 실렸다'); continue; }
 
     const html = r.html;
-    const isHome = slug === '';
+    const isHome = kind === 'home';
     const dir = lang === 'en' ? '/en' : '';
 
     /* <html lang> 이 곧 dday.js 의 갈림길이다. 경로와 어긋나면 영어 페이지가
@@ -273,7 +299,7 @@ for (const { page, lang, slug, label } of ALL) {
     }
 
     /* 2. 필요한 id */
-    for (const id of (isHome ? NEED_IDS.home : NEED_IDS.country)) {
+    for (const id of (NEED_IDS[kind] || NEED_IDS.country)) {
         if (!html.includes(`id="${id}"`)) bad(label, `dday.js 가 찾는 #${id} 가 HTML 에 없다`);
     }
 
@@ -332,6 +358,84 @@ for (const { page, lang, slug, label } of ALL) {
         /* 검색칸이 있어야 204줄을 눈으로 훑지 않는다 */
         for (const id of ['csearch', 'clist', 'cnone']) {
             if (!html.includes(`id="${id}"`)) bad(label, `국가 검색에 필요한 #${id} 가 없다`);
+        }
+        continue;
+    }
+
+    /* ------------------------------------------------------------ 하늘 페이지
+       국가 축이 아니라 전 세계 공통 축이라 자료가 한 벌이고, 갈리는 것은 날짜뿐이다
+       (ko=KST · en=UTC). 여기서는 "표가 자료와 같은가" 와 "카드가 표와 같은 답을
+       내는가" 를 본다. 자료 자체의 검산은 아래 천문 검산점 칸에서 따로 한다. */
+    if (kind === 'sky') {
+        if (!r.dday.isSky) bad(label, 'dday.js 가 하늘 페이지로 알아보지 못했다');
+        const zone = lang === 'en' ? 'utc' : 'kst';
+
+        const want = [
+            ...SKY.terms.map((e) => `${e[zone]}|term`),
+            ...SKY.moons.map((e) => `${e[zone]}|moon`),
+            ...SKY.showers.map((e) => `${e[zone]}|shower`),
+        ];
+        const got = [...html.matchAll(/<tr data-d="([\d-]+)" data-sky="([a-z]+)">/g)]
+            .map((m) => `${m[1]}|${m[2]}`);
+        const sortKey = (a) => [...a].sort().join(',');
+        if (sortKey(got) !== sortKey(want)) {
+            bad(label, `하늘 표 ${got.length}행 / 자료 ${want.length}건 — 집합이 다르다 (${zone} 기준)`);
+        }
+        /* 갈래마다 날짜순이어야 한다. 연도 구획이 셋이라 눈으로는 안 보인다. */
+        for (const g of ['term', 'moon', 'shower']) {
+            const seq = got.filter((x) => x.endsWith('|' + g)).map((x) => x.split('|')[0]);
+            const asc = [...seq].sort();
+            if (seq.join(',') !== asc.join(',')) bad(label, `하늘 표(${g})가 날짜순이 아니다`);
+        }
+        /* 분점 둘 · 지점 둘, 해마다 넷 */
+        const cardinals = (html.match(/class="cardinal"/g) || []).length;
+        if (cardinals !== SKY.years.length * 4) {
+            bad(label, `분점·지점 배지 ${cardinals}개 / 기대 ${SKY.years.length * 4}개`);
+        }
+
+        /* 카드. 기대값은 sky.json 에서 여기가 따로 뽑는다 —
+           "다음" 은 앞으로 올 것이고 오늘 것은 오늘 칸이 맡는다. */
+        const nextOf = (items) => {
+            const t = epochDayRef(TODAY);
+            let best = null;
+            for (const e of items) {
+                const d = epochDayRef(e[zone]) - t;
+                if (d > 0 && (best === null || d < best.d)) best = { e, d };
+            }
+            return best;
+        };
+        const w = WORDS[lang];
+        const lines = [
+            ['#next-term', nextOf(SKY.terms), (e) => (lang === 'en' ? e.e : e.n)],
+            ['#next-new', nextOf(SKY.moons.filter((m) => !m.f)), () => w.newMoon],
+            ['#next-full', nextOf(SKY.moons.filter((m) => m.f)), () => w.fullMoon],
+            ['#next-shower', nextOf(SKY.showers), (e) => (lang === 'en' ? e.e : e.n)],
+        ];
+        for (const [sel, e, name] of lines) {
+            const el = r.doc.querySelector(sel);
+            const drawn = el ? (el.innerHTML || '') : '';
+            if (!drawn) { bad(label, `${sel} 이 비어 있다`); continue; }
+            if (!e) {
+                if (!drawn.includes(w.outOfRange)) bad(label, `${sel}: 자료가 없는데 무언가를 그렸다`);
+                continue;
+            }
+            if (!drawn.includes(`D-${e.d}<`)) bad(label, `${sel}: D-${e.d} 이 없다 — "${drawn}"`);
+            const wantName = esc(name(e.e));
+            if (!drawn.includes(wantName)) bad(label, `${sel}: "${wantName}" 이 없다 — "${drawn}"`);
+            for (const smell of ['undefined', 'NaN', '[object Object]']) {
+                if (drawn.includes(smell)) bad(label, `${sel} 에 "${smell}" 가 있다`);
+            }
+        }
+
+        /* 오늘 칸 */
+        const now = r.doc.cache.get('#now');
+        const verdict = now.querySelector('.verdict').textContent;
+        const todays = [...SKY.terms, ...SKY.moons, ...SKY.showers].filter((e) => e[zone] === TODAY);
+        if (!todays.length && verdict !== w.skyNone) {
+            bad(label, `오늘 아무것도 없는데 오늘 칸이 "${verdict}" 다`);
+        }
+        if (todays.length && !verdict.includes(w.skyOff.trim().replace(/^—\s*/, ''))) {
+            bad(label, `오늘 ${todays.length}건인데 오늘 칸이 "${verdict}" 다`);
         }
         continue;
     }
@@ -545,10 +649,8 @@ for (const { page, lang, slug, label } of ALL) {
 /* -------------------------------------------------- 7. 목록 ↔ 페이지 1:1 */
 const indexCodes = new Set(JSON.parse(readFileSync(join(DATA, 'countries.json'), 'utf8'))
     .map((c) => c.code));
-const dirCodes = new Set(COUNTRY.map((p) => p.slug.toUpperCase()));
-const dataCodes = new Set(readdirSync(DATA)
-    .filter((f) => f.endsWith('.json') && f !== 'countries.json')
-    .map((f) => f.replace('.json', '')));
+const dirCodes = new Set(COUNTRY.map((p) => p.slug.toUpperCase()));   /* EXTRA 는 COUNTRY 에 없다 */
+const dataCodes = new Set(countryFiles().map((f) => f.replace('.json', '')));
 
 const diff = (a, b) => [...a].filter((x) => !b.has(x));
 for (const [what, missing] of [
@@ -695,6 +797,46 @@ for (const [page, lang, langs, wantCc] of [
         }
     }
 
+    /* 첫 화면의 하늘 칸. /sky/ 로 가는 유일한 입구라 여기가 비면 하늘 페이지는
+       sitemap 에만 있고 아무도 못 찾는 쪽이 된다.
+       기대값은 sky.json 에서 여기가 따로 뽑고, 하늘 페이지 카드와 **같은 규칙**을
+       쓴다 — 두 화면이 같은 날 다른 답을 내면 안 된다. */
+    {
+        const zone = lang === 'en' ? 'utc' : 'kst';
+        const w = WORDS[lang];
+        const t = epochDayRef(TODAY);
+        const nextOf = (items) => {
+            let best = null;
+            for (const e of items) {
+                const d = epochDayRef(e[zone]) - t;
+                if (d > 0 && (best === null || d < best.d)) best = { e, d };
+            }
+            return best;
+        };
+        const drawnSky = r.doc.querySelector('#skylist').innerHTML || '';
+        if (!drawnSky) bad(label, '하늘 칸이 비어 있다 — /sky/ 로 가는 입구가 없다');
+
+        const rows = (drawnSky.match(/<li>/g) || []).length;
+        if (rows !== 4) bad(label, `하늘 칸이 ${rows}줄 — 절기·삭·보름·유성우 넷이어야 한다`);
+
+        for (const [items, name] of [
+            [SKY.terms, (e) => (lang === 'en' ? e.e : e.n)],
+            [SKY.moons.filter((m) => !m.f), () => w.newMoon],
+            [SKY.moons.filter((m) => m.f), () => w.fullMoon],
+            [SKY.showers, (e) => (lang === 'en' ? e.e : e.n)],
+        ]) {
+            const e = nextOf(items);
+            if (!e) continue;
+            if (!drawnSky.includes(`D-${e.d}<`)) bad(label, `하늘 칸에 D-${e.d} 이 없다`);
+            if (!drawnSky.includes(esc(name(e.e)))) bad(label, `하늘 칸에 "${name(e.e)}" 이 없다`);
+        }
+        for (const smell of ['undefined', 'NaN', '[object Object]']) {
+            if (drawnSky.includes(smell)) bad(label, `하늘 칸에 "${smell}" 가 있다`);
+        }
+        const homeHtml = readFileSync(join(PUB, page, "index.html"), "utf8");
+        if (!homeHtml.includes(`href="${dir}/sky/"`)) bad(label, `첫 화면에 ${dir}/sky/ 링크가 없다`);
+    }
+
     /* 카드가 실제로 어떤 문자열을 그리는지 본다. 스텁은 셀렉터마다 같은 객체를
        돌려주므로 #home 의 innerHTML 을 그대로 읽을 수 있다. */
     const card = r.doc.querySelector('#home');
@@ -761,7 +903,7 @@ for (const [page, lang, langs, wantCc] of [
     if (!existsSync(MONTHS)) bad('/data/month/', '없다 — node tools/gen-holidays.mjs 를 돌릴 것');
     else {
         const fromCountry = new Set();
-        for (const f of readdirSync(DATA).filter((x) => x.endsWith('.json') && x !== 'countries.json')) {
+        for (const f of countryFiles()) {
             const d = JSON.parse(readFileSync(join(DATA, f), 'utf8'));
             for (const day of d.days) fromCountry.add(`${day.d}|${d.code}|${day.n}`);
         }
@@ -785,6 +927,182 @@ for (const [page, lang, langs, wantCc] of [
         /* 오늘 달이 있어야 첫 화면이 답을 낸다 */
         if (!existsSync(join(MONTHS, `${TODAY.slice(0, 7)}.json`))) {
             bad('/data/month/', `이번 달(${TODAY.slice(0, 7)}) 파일이 없다 — 자료가 낡았다`);
+        }
+    }
+}
+
+/* ------------------------------------------------- 천문 자료의 검산점
+   여기가 하늘 페이지의 게이트다. 절기·삭망은 **우리가 직접 계산한 것**이라
+   "받은 대로 찍혔나" 로는 아무것도 검사되지 않는다. 두 번째 점이 필요하다.
+
+   그 점이 이미 저장소 안에 있다 — Nager 에서 온 공휴일 자료다. 완전히 다른
+   경로로 들어온 값이고 우리 계산을 전혀 모른다.
+
+     · 일본은 春分の日 · 秋分の日 를 **실제 천문 분점**(일본 표준시)으로 정한다
+     · 음력 1월 1일은 **삭이 있는 날**이다 (그 나라 달력 표준시 기준)
+     · 음력 8월 15일은 삭이 있는 날 + 14일이다
+
+   대체공휴일이 있는 명절은 뺐다 — 계산일이 일요일이면 월요일로 밀려서
+   검산점이 아니라 요일 검사가 된다. (부처님오신날 2026 이 그렇다.) */
+{
+    const anchors = [
+        { cc: 'JP', re: /春分/, tz: 'Asia/Tokyo', kind: 'term', k: 0, what: '춘분' },
+        { cc: 'JP', re: /秋分/, tz: 'Asia/Tokyo', kind: 'term', k: 12, what: '추분' },
+        { cc: 'CN', re: /Spring Festival|春节/i, tz: 'Asia/Shanghai', kind: 'new', off: 0, what: '음력 1월 1일' },
+        { cc: 'HK', re: /農曆年初一/, tz: 'Asia/Hong_Kong', kind: 'new', off: 0, what: '음력 1월 1일' },
+        { cc: 'HK', re: /中秋節翌日/, tz: 'Asia/Hong_Kong', kind: 'new', off: 15, what: '음력 8월 16일' },
+        { cc: 'KR', re: /^추석$/, tz: 'Asia/Seoul', kind: 'new', off: 14, what: '음력 8월 15일' },
+        { cc: 'SG', re: /Chinese New Year/i, tz: 'Asia/Singapore', kind: 'new', off: 0, what: '음력 1월 1일' },
+    ];
+
+    /* 순간을 그 나라 시간대의 날짜로. sky.json 이 굳혀 둔 kst/utc 를 쓰지 않고
+       t(UTC 순간)에서 여기가 따로 뽑는다 — 굳히는 쪽이 틀렸다면 그것도 잡힌다. */
+    const inZone = (iso, tz) => new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date(iso));
+    const shift = (iso, n) =>
+        new Date(Date.parse(iso + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
+
+    let points = 0;
+    for (const a of anchors) {
+        const file = join(DATA, `${a.cc}.json`);
+        if (!existsSync(file)) { soft('/data/sky.json', `검산점 ${a.cc} 자료가 없다`); continue; }
+        const days = JSON.parse(readFileSync(file, 'utf8')).days
+            .filter((h) => a.re.test(h.n) || a.re.test(h.e || ''));
+        if (!days.length) {
+            soft('/data/sky.json', `검산점을 못 찾았다 — ${a.cc} ${a.what} (Nager 가 이름을 바꿨나)`);
+            continue;
+        }
+
+        for (const year of SKY.years) {
+            const holiday = days.map((h) => h.d).filter((d) => d.startsWith(String(year)));
+            if (!holiday.length) continue;
+
+            const mine = a.kind === 'term'
+                ? SKY.terms.filter((e) => e.k === a.k)
+                    .map((e) => inZone(e.t, a.tz))
+                    .filter((d) => d.startsWith(String(year)))
+                : SKY.moons.filter((e) => !e.f)
+                    .map((e) => shift(inZone(e.t, a.tz), a.off));
+
+            const hit = holiday.filter((d) => mine.includes(d));
+            points++;
+            if (hit.length !== 1) {
+                bad('/data/sky.json',
+                    `검산점 어긋남 — ${a.cc} ${year} ${a.what}: 공휴일 ${holiday.join(',')} / 계산 ${
+                        hit.length ? '중복 ' + hit.join(',') : '해당 없음'}`);
+            }
+        }
+    }
+
+    /* 검산점이 통째로 사라지는 것이 가장 나쁘다 — 이름이 바뀌면 위에서 조용히
+       건너뛰고 검사는 통과한다. 최소 개수를 박아 둔다. */
+    const FLOOR = 15;
+    if (points < FLOOR) {
+        bad('/data/sky.json', `검산점이 ${points}개뿐이다 — ${FLOOR}개 이상이어야 한다. 앵커 공휴일 이름을 확인할 것.`);
+    } else {
+        console.log(`천문 검산점 ${points}개 (일본 분점 · 음력 명절) 대조\n`);
+    }
+}
+
+/* ------------------------------------------------- 천문 자료 자체의 앞뒤 */
+{
+    const P = '/data/sky.json';
+    const byYear = (list) => {
+        const m = {};
+        for (const e of list) (m[e.t.slice(0, 4)] ??= []).push(e);
+        return m;
+    };
+
+    /* 굳혀 둔 날짜가 순간과 맞나. 여기가 틀리면 표 전체가 하루씩 밀린다. */
+    const zoneOf = { kst: 'Asia/Seoul', utc: 'UTC' };
+    for (const [key, tz] of Object.entries(zoneOf)) {
+        for (const e of [...SKY.terms, ...SKY.moons, ...SKY.showers]) {
+            const want = new Intl.DateTimeFormat('en-CA', {
+                timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+            }).format(new Date(e.t));
+            if (e[key] !== want) { bad(P, `${e.t} 의 ${key} 가 ${e[key]} 다 (기대 ${want})`); break; }
+        }
+    }
+
+    /* 절기 — 해마다 24개, k 는 0..23 이 한 번씩, 간격은 14~16.5일 */
+    for (const [y, list] of Object.entries(byYear(SKY.terms))) {
+        if (list.length !== 24) bad(P, `${y}년 절기가 ${list.length}개다`);
+        const ks = list.map((e) => e.k).sort((a, b) => a - b);
+        if (ks.join(',') !== [...Array(24).keys()].join(',')) bad(P, `${y}년 절기 k 가 0..23 이 아니다`);
+    }
+    for (let i = 1; i < SKY.terms.length; i++) {
+        const gap = (Date.parse(SKY.terms[i].t) - Date.parse(SKY.terms[i - 1].t)) / 86400000;
+        if (gap < 14 || gap > 16.5) bad(P, `절기 간격 ${gap.toFixed(1)}일 — ${SKY.terms[i - 1].n}→${SKY.terms[i].n}`);
+    }
+    /* 이름이 자리와 맞나. astro.mjs 의 TERM_NAMES 를 가져다 쓰지 않는다 —
+       만드는 표로 검사하면 두 이름을 맞바꿔도 통과한다(실제로 그랬다).
+       여기 따로 적고, 게다가 **드는 달**까지 본다. 이름만 견주면 같은 오타를
+       두 번 내는 것으로 뚫리지만, 동지가 6월에 뜨는 것은 못 숨긴다. */
+    const TERM_CHECK = [
+        ['춘분', 3], ['청명', 4], ['곡우', 4], ['입하', 5], ['소만', 5], ['망종', 6],
+        ['하지', 6], ['소서', 7], ['대서', 7], ['입추', 8], ['처서', 8], ['백로', 9],
+        ['추분', 9], ['한로', 10], ['상강', 10], ['입동', 11], ['소설', 11], ['대설', 12],
+        ['동지', 12], ['소한', 1], ['대한', 1], ['입춘', 2], ['우수', 2], ['경칩', 3],
+    ];
+    for (const e of SKY.terms) {
+        const want = TERM_CHECK[e.k];
+        if (!want) { bad(P, `모르는 절기 자리 k=${e.k}`); continue; }
+        if (want[0] !== e.n) bad(P, `k=${e.k} 의 이름이 "${e.n}" 이다 (기대 "${want[0]}")`);
+        const month = +e.t.slice(5, 7);
+        if (month !== want[1]) bad(P, `${e.n} 이 ${month}월에 든다 (기대 ${want[1]}월) — ${e.t}`);
+    }
+
+    /* 분 단위 검산. 공휴일 쪽 검산점은 날짜만 주므로 1분 오차와 70분 오차를
+       가르지 못한다. 공표값과 직접 견준다. */
+    {
+        let n = 0;
+        for (const [y, byK] of Object.entries(EQUINOXES)) {
+            for (const [k, iso] of Object.entries(byK)) {
+                const mine = SKY.terms.find((e) => e.k === +k && e.t.startsWith(y));
+                if (!mine) continue;
+                n++;
+                const off = Math.round((Date.parse(mine.t) - Date.parse(iso)) / 60000);
+                if (Math.abs(off) > TOLERANCE_MINUTES) {
+                    bad(P, `${y} k=${k}: 계산 ${mine.t} / 공표 ${iso} — ${off}분 차이 (허용 ${TOLERANCE_MINUTES}분)`);
+                }
+            }
+        }
+        if (n < 8) {
+            soft(P, `분점·지점 공표값과 겹치는 항목이 ${n}개뿐이다 — tools/sky-fixture.mjs 에 올해 값을 채울 것`);
+        }
+    }
+
+    /* 삭망 — 번갈아 나오고 간격은 반 삭망월(약 14.77일) 언저리 */
+    for (let i = 1; i < SKY.moons.length; i++) {
+        if (SKY.moons[i].f === SKY.moons[i - 1].f) bad(P, `삭망이 연달아 같다 — ${SKY.moons[i].t}`);
+        const gap = (Date.parse(SKY.moons[i].t) - Date.parse(SKY.moons[i - 1].t)) / 86400000;
+        if (gap < 13.5 || gap > 16) bad(P, `삭망 간격 ${gap.toFixed(1)}일 — ${SKY.moons[i].t}`);
+    }
+
+    /* 유성우 — 해마다 같은 목록, 널리 알려진 날짜에서 사흘 안.
+       λ☉ 를 잘못 적으면 조용히 며칠 어긋나는데 그것만 잡는다. 정밀 검산이 아니다. */
+    const win = Object.fromEntries(SHOWERS.map((s) => [s.id, s.win]));
+    for (const [y, list] of Object.entries(byYear(SKY.showers))) {
+        if (list.length !== SHOWERS.length) bad(P, `${y}년 유성우가 ${list.length}개다`);
+        for (const e of list) {
+            const [mo, day] = win[e.id] || [];
+            if (!mo) { bad(P, `모르는 유성우 ${e.id}`); continue; }
+            const at = new Date(e.t);
+            const off = Math.abs((at - Date.UTC(+y, mo - 1, day)) / 86400000);
+            if (off > 3) bad(P, `${e.n} 극대기가 ${e.utc} — 알려진 ${y}-${mo}-${day} 에서 ${off.toFixed(1)}일 벗어났다`);
+        }
+    }
+
+    /* 자정에서 1분도 안 남은 사건은 날짜를 못 믿는다. 태양 쪽 오차가 1분 안이라
+       그보다 얇으면 계산이 맞아도 어느 날인지 단정할 수 없다. */
+    for (const [key, zone] of [['kh', 'KST'], ['uh', 'UTC']]) {
+        for (const e of [...SKY.terms, ...SKY.moons, ...SKY.showers]) {
+            const [hh, mm] = e[key].split(':').map(Number);
+            const t = hh * 60 + mm;
+            const margin = Math.min(t, 1440 - t);
+            if (margin < 1) bad(P, `${e.t} 이 ${zone} 자정에서 ${margin}분 — 날짜를 단정할 수 없다`);
+            else if (margin <= 5) soft(P, `${e.t} 이 ${zone} 자정에서 ${margin}분 — 여유가 얇다`);
         }
     }
 }

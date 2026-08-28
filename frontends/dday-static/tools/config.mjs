@@ -23,6 +23,14 @@ export const YEARS = (now = new Date()) => {
     return [y - 1, y, y + 1];
 };
 
+/* 국가가 아닌 페이지의 슬러그.
+   여기까지는 "첫 화면 아니면 전부 국가 페이지" 라는 가정으로 굴러왔는데, 하늘 페이지가
+   그 가정을 깬다. 한 군데 적어 두고 gen-pages · gen-sitemap · check-pages 가 같이 본다.
+
+   두 글자가 아니어야 한다 — 국가 코드(ISO 3166-1 alpha-2)와 부딪히면 국가 페이지를
+   조용히 덮어쓴다. gen-pages 가 그것도 확인한다. */
+export const EXTRA = ['sky'];
+
 /* 'Public' 만 남긴다. Nager 의 types 에는 Bank · Observance · Optional · School ·
    Authorities 가 섞여 있는데, 그건 공휴일이 아니라 관습일이거나 일부 직군만 쉬는 날이다.
    (미국 Lincoln's Birthday 가 Observance 로 들어온다) */

@@ -19,9 +19,10 @@
    써도 국가 경로와 부딪히지 않는데, Nager 목록이 바뀌어 부딪히면 조용히
    덮어써 버리므로 아래에서 확인하고 멈춘다.
    ============================================================ */
-import { readFileSync, readdirSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { BASE, PUB, DATA, YEARS, today } from './config.mjs';
+import { BASE, PUB, DATA, YEARS, EXTRA, today } from './config.mjs';
+import { CARDINAL } from './astro.mjs';
 
 const SITE = 'this is the day';
 const MID = YEARS()[1];                                   /* 표지로 삼을 해 = 올해 */
@@ -87,6 +88,9 @@ const L = {
         lang: 'ko', dir: '', other: 'en', locale: 'ko_KR',
         otherLabel: 'EN',            /* 버튼에 적히는 글자 = 눌렀을 때 가는 언어 */
         dow: KO_DOW,
+        /* 하늘 페이지의 기준 시간대. sky.json 의 zones 와 같은 것을 가리켜야 한다 —
+           절기는 온 세계가 같은 순간을 공유하지만 날짜는 시간대마다 갈린다. */
+        zone: 'kst', zoneLabel: '한국 표준시(KST)',
         name: (c) => c.ko,
         homeTitle: (n) => `${SITE} — ${n}개국 공휴일과 다음 공휴일까지 D-day`,
         homeDesc: (n) => `오늘이 공휴일인지, 다음 공휴일까지 며칠 남았는지. 대한민국을 비롯한 ${n}개국의 법정 공휴일을 날짜순으로 봅니다.`,
@@ -125,6 +129,31 @@ const L = {
         foot: (g) => `공휴일 자료 <a href="https://date.nager.at/" rel="noopener">Nager.Date</a> · <code>types</code> 가 <code>Public</code> 인 항목만 담았습니다. 갱신 ${g}.`,
         footTz: 'D-day 는 이 기기의 날짜로 계산합니다 — 다른 시간대의 국가를 볼 때는 하루 어긋날 수 있습니다.',
         crumbCountry: (c) => `${c.ko} 공휴일`,
+
+        /* --- 하늘 --- */
+        skyTitle: (y) => `${y}년 절기와 삭망 — 24절기 날짜와 D-day`,
+        skyDesc: (y) => `${y}년 24절기와 삭·보름, 유성우 극대기를 날짜순으로. 다음 절기까지 남은 날을 함께 보여줍니다. 한국 표준시 기준.`,
+        skyH1: '절기와 삭망',
+        skyLede: '24절기와 삭·보름, 유성우 극대기입니다. 다음 절기까지 며칠 남았는지 바로 보여줍니다.',
+        skyCrumb: '절기와 삭망',
+        skyLink: '절기와 삭망 전체 보기 →',
+        skyHomeCap: '하늘',
+        skyHomeH2: '다가오는 절기와 삭망',
+        termsCap: (y, n) => `${y}년 · 절기 ${n}개`,
+        termsH2: (y) => `${y}년 24절기`,
+        moonsCap: (y, n) => `${y}년 · 삭망 ${n}회`,
+        moonsH2: (y) => `${y}년 삭과 보름`,
+        showersCap: (y, n) => `${y}년 · 유성우 ${n}개`,
+        showersH2: (y) => `${y}년 유성우 극대기`,
+        thTime: '날짜와 시각', thEvent: '천문 현상',
+        newMoon: '삭', fullMoon: '보름', han: { new: '朔', full: '望' },
+        showerName: (n) => `${n} 유성우`,
+        zhr: (n) => `조건이 좋으면 시간당 ${n}개`,
+        cardinal: { equinox: '분점', solstice: '지점' },
+        dtTerm: '다음 절기', dtNew: '다음 삭', dtFull: '다음 보름', dtShower: '다음 유성우',
+        skyVerdict: '오늘 하늘',
+        skyNote: '절기와 삭망은 온 세계가 같은 순간을 공유하지만, 날짜는 시간대마다 갈립니다. 이 페이지의 날짜와 시각은 모두 한국 표준시(KST) 기준입니다.',
+        skyFoot: '절기·삭망은 VSOP87D(태양)와 Meeus 제49장(달)으로 직접 계산합니다. 유성우 극대기는 국제유성기구가 쓰는 태양 황경으로 구합니다.',
         contact: '문의',
         nfTitle: `없는 쪽입니다 — ${SITE}`,
         nfH1: '없는 쪽입니다',
@@ -135,6 +164,7 @@ const L = {
         lang: 'en', dir: '/en', other: 'ko', locale: 'en_US',
         otherLabel: 'KO',            /* 버튼에 적히는 글자 = 눌렀을 때 가는 언어 */
         dow: EN_DOW,
+        zone: 'utc', zoneLabel: 'UTC',
         name: (c) => c.name,
         homeTitle: (n) => `${SITE} — public holidays in ${n} countries, counted down`,
         homeDesc: (n) => `Is today a holiday, and how many days until the next one? Public holidays for ${n} countries, in date order.`,
@@ -173,6 +203,31 @@ const L = {
         foot: (g) => `Holiday data from <a href="https://date.nager.at/" rel="noopener">Nager.Date</a> · only entries whose <code>types</code> includes <code>Public</code>. Updated ${g}.`,
         footTz: 'The countdown uses this device’s date — it can be a day out when you view a country in another time zone.',
         crumbCountry: (c) => `${c.name} public holidays`,
+
+        /* --- 하늘 --- */
+        skyTitle: (y) => `Solar Terms and Moon Phases ${y}`,
+        skyDesc: (y) => `All 24 solar terms for ${y} with new and full moons and meteor shower peaks, in date order, with the days until the next one. Times in UTC.`,
+        skyH1: 'Solar Terms and Moon Phases',
+        skyLede: 'The 24 solar terms, new and full moons, and meteor shower peaks. See at a glance how long until the next one.',
+        skyCrumb: 'solar terms and moon phases',
+        skyLink: 'All solar terms and moon phases →',
+        skyHomeCap: 'The sky',
+        skyHomeH2: 'Coming up in the sky',
+        termsCap: (y, n) => `${y} · ${n} solar terms`,
+        termsH2: (y) => `The 24 solar terms of ${y}`,
+        moonsCap: (y, n) => `${y} · ${n} phases`,
+        moonsH2: (y) => `New and full moons in ${y}`,
+        showersCap: (y, n) => `${y} · ${n} showers`,
+        showersH2: (y) => `Meteor shower peaks in ${y}`,
+        thTime: 'Date and time', thEvent: 'Event',
+        newMoon: 'New Moon', fullMoon: 'Full Moon', han: { new: '朔', full: '望' },
+        showerName: (n) => `${n}`,
+        zhr: (n) => `up to ${n} an hour in good conditions`,
+        cardinal: { equinox: 'equinox', solstice: 'solstice' },
+        dtTerm: 'Next term', dtNew: 'Next new moon', dtFull: 'Next full moon', dtShower: 'Next shower',
+        skyVerdict: 'Today',
+        skyNote: 'These moments are shared by the whole world, but the date they fall on depends on the time zone. Every date and time on this page is UTC.',
+        skyFoot: 'Solar terms and moon phases are computed here — VSOP87D for the Sun, Meeus chapter 49 for the Moon. Shower peaks use the solar longitude the International Meteor Organization defines them by.',
         contact: 'Contact',
         nfTitle: `Not here — ${SITE}`,
         nfH1: 'Not here',
@@ -442,6 +497,139 @@ ${foot(t, data.generated)}
 `;
 }
 
+/* ---------------------------------------------------------------- 하늘
+
+   국가 페이지와 달리 자료가 한 벌이다 — 절기도 삭망도 유성우도 온 세계가 같은
+   순간을 공유한다. 갈리는 것은 **날짜**뿐이고, 그건 sky.json 이 기준 시간대마다
+   미리 굳혀 두었다 (ko=KST · en=UTC). 여기서 다시 계산하지 않는다.
+
+   이름 칸을 class="ev" 로 두는 이유는 황금연휴의 class="len" 과 같다 —
+   한국어 누출 검사는 <td class="name"> 을 면제하는데, 이 칸의 말은 우리 것이라
+   그 면제를 받으면 안 된다. */
+const skyDate = (e, t) => (t.zone === 'kst' ? e.kst : e.utc);
+const skyTime = (e, t) => (t.zone === 'kst' ? e.kh : e.uh);
+
+function skyRow(t, e, kind, name, alt, badge) {
+    const iso = skyDate(e, t);
+    const [y, m, d] = iso.split('-');
+    const w = dow(iso);
+    const wcls = w === 0 ? ' sun' : w === 6 ? ' sat' : '';
+    return `        <tr data-d="${iso}" data-sky="${kind}">
+          <td class="date">${y}.${m}.${d}<span class="dow${wcls}">${t.dow[w]}</span><span class="at">${skyTime(e, t)}</span></td>
+          <td class="ev">${esc(name)}${badge || ''}${alt ? `<span class="alt">${esc(alt)}</span>` : ''}</td>
+          <td class="mark"></td>
+        </tr>`;
+}
+
+function skyTable(t, rows) {
+    return `      <table class="sky">
+        <thead><tr><th>${esc(t.thTime)}</th><th>${esc(t.thEvent)}</th><th></th></tr></thead>
+        <tbody>
+${rows.join('\n')}
+        </tbody>
+      </table>`;
+}
+
+/* 표지 연도는 펼치고 나머지 해는 접는다 — 공휴일·황금연휴와 같은 규칙이다. */
+function skyGroup(t, byYear, cap, h2, build) {
+    const years = [...byYear.keys()].sort((a, b) => a - b);
+    const head = byYear.has(MID) ? MID : years[0];
+    return years.map((y) => {
+        const body = skyTable(t, byYear.get(y).map(build));
+        if (y === head) {
+            return `  <section>
+    <span class="cap">${esc(cap(y, byYear.get(y).length))}</span>
+    <h2>${esc(h2(y))}</h2>
+${body}
+  </section>`;
+        }
+        return `  <details class="year">
+    <summary>${esc(cap(y, byYear.get(y).length))}</summary>
+${body}
+  </details>`;
+    }).join('\n\n');
+}
+
+const groupBy = (list, key) => {
+    const m = new Map();
+    for (const e of list) {
+        const y = +key(e).slice(0, 4);
+        if (!m.has(y)) m.set(y, []);
+        m.get(y).push(e);
+    }
+    return m;
+};
+
+function skyPage(t, sky) {
+    const slug = 'sky/';
+    const by = (list) => groupBy(list, (e) => skyDate(e, t));
+
+    const terms = skyGroup(t, by(sky.terms), t.termsCap, t.termsH2, (e) => {
+        const badge = CARDINAL[e.k]
+            ? `<span class="cardinal">${esc(t.cardinal[CARDINAL[e.k]])}</span>` : '';
+        return skyRow(t, e, 'term', t.lang === 'en' ? e.e : e.n, e.h, badge);
+    });
+    const moons = skyGroup(t, by(sky.moons), t.moonsCap, t.moonsH2, (e) =>
+        skyRow(t, e, 'moon', e.f ? t.fullMoon : t.newMoon, e.f ? t.han.full : t.han.new));
+    const showers = skyGroup(t, by(sky.showers), t.showersCap, t.showersH2, (e) =>
+        skyRow(t, e, 'shower', t.showerName(t.lang === 'en' ? e.e : e.n), t.zhr(e.z)));
+
+    const crumbs = {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+            { '@type': 'ListItem', position: 1, name: SITE, item: `${BASE}${t.dir}/` },
+            { '@type': 'ListItem', position: 2, name: t.skyCrumb, item: url(t.lang, slug) },
+        ],
+    };
+
+    return `${head(t, { title: t.skyTitle(MID), desc: t.skyDesc(MID), slug })}
+<body data-sky="1">
+
+${top(t, { slug, label: esc(t.pickerLabel) })}
+
+<main class="wrap">
+
+  <h1>${esc(t.skyH1)}</h1>
+  <p class="lede">${esc(t.skyLede)}</p>
+
+  <div class="now" id="now">
+    <div class="asof">${esc(t.checking)}</div>
+    <div class="verdict">${esc(t.skyVerdict)}</div>
+    <dl class="pair">
+      <dt>${esc(t.dtTerm)}</dt><dd id="next-term"><em>${esc(t.computing)}</em></dd>
+      <dt>${esc(t.dtNew)}</dt><dd id="next-new"><em>${esc(t.computing)}</em></dd>
+      <dt>${esc(t.dtFull)}</dt><dd id="next-full"><em>${esc(t.computing)}</em></dd>
+      <dt>${esc(t.dtShower)}</dt><dd id="next-shower"><em>${esc(t.computing)}</em></dd>
+    </dl>
+  </div>
+
+  <p class="note">${esc(t.skyNote)}</p>
+
+${terms}
+
+${moons}
+
+${showers}
+
+  <section>
+    <p><a href="${t.dir}/#countries">${esc(t.otherCountries)}</a></p>
+  </section>
+
+  <div class="foot">
+    <p>${esc(t.skyFoot)}</p>
+    <p>${t.contact} ${CONTACT}</p>
+  </div>
+</main>
+
+<script type="application/ld+json">${JSON.stringify(crumbs)}</script>
+<script src="/shared/dday.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>
+`;
+}
+
 /* -------------------------------------------------------------- 첫 화면 */
 
 function homePage(t, index, generated) {
@@ -467,6 +655,13 @@ ${top(t, { slug: '', home: true, label: esc(t.pickerLabel) })}
     <h2>${esc(t.todayH2)}</h2>
     <p class="pending" id="tnote">${esc(t.todayWait)}</p>
     <ul class="worldwide" id="tlist"></ul>
+  </section>
+
+  <section id="sky">
+    <span class="cap">${esc(t.skyHomeCap)}</span>
+    <h2>${esc(t.skyHomeH2)}</h2>
+    <ul class="worldwide" id="skylist"></ul>
+    <p><a href="${t.dir}/sky/">${esc(t.skyLink)}</a></p>
   </section>
 
   <section id="countries">
@@ -538,18 +733,36 @@ function notFoundPage(t) {
 /* ------------------------------------------------------------------ 실행 */
 
 const index = JSON.parse(readFileSync(join(DATA, 'countries.json'), 'utf8'));
-const files = readdirSync(DATA).filter((f) => f.endsWith('.json') && f !== 'countries.json');
+const SPECIAL = new Set(['countries.json', 'sky.json']);
+const files = readdirSync(DATA).filter((f) => f.endsWith('.json') && !SPECIAL.has(f));
 
 if (index.some((c) => c.code === 'EN')) {
     console.error('국가 코드 EN 이 생겼다 — /en/ 언어 칸과 부딪힌다. 언어 칸 주소를 바꿀 것.');
     process.exit(1);
 }
 
+/* 국가가 아닌 슬러그가 국가 코드와 부딪히면 국가 페이지를 조용히 덮어쓴다.
+   지금은 'sky' 가 세 글자라 안 부딪히지만, 늘어날 때를 위해 확인해 둔다. */
+for (const slug of EXTRA) {
+    if (index.some((c) => c.code.toLowerCase() === slug)) {
+        console.error(`슬러그 '${slug}' 가 국가 코드와 부딪힌다 — 다른 이름을 쓸 것.`);
+        process.exit(1);
+    }
+}
+
+const skyFile = join(DATA, 'sky.json');
+if (!existsSync(skyFile)) {
+    console.error('data/sky.json 이 없다 — node tools/gen-sky.mjs 를 먼저 돌릴 것.');
+    process.exit(1);
+}
+const sky = JSON.parse(readFileSync(skyFile, 'utf8'));
+
 /* 이전에 만든 국가·언어 디렉터리를 먼저 지운다. Nager 에서 빠진 국가의 페이지가
    남으면 sitemap 에는 없는데 링크만 살아 있는 유령이 된다. 'en' 도 두 글자라
-   이 규칙에 함께 걸려 통째로 다시 만들어진다. */
+   이 규칙에 함께 걸려 통째로 다시 만들어진다.
+   국가가 아닌 슬러그(EXTRA)는 두 글자가 아니라서 따로 지운다. */
 for (const name of readdirSync(PUB, { withFileTypes: true })) {
-    if (name.isDirectory() && /^[a-z]{2}$/.test(name.name)) {
+    if (name.isDirectory() && (/^[a-z]{2}$/.test(name.name) || EXTRA.includes(name.name))) {
         rmSync(join(PUB, name.name), { recursive: true });
     }
 }
@@ -576,6 +789,12 @@ for (const lang of ['ko', 'en']) {
         writeFileSync(join(dir, 'index.html'), countryPage(t, data));
         count++;
     }
+
+    /* 하늘 페이지. 국가 축이 아니라 전 세계 공통 축이라 자료가 한 벌이다. */
+    const skyDir = join(root, 'sky');
+    mkdirSync(skyDir, { recursive: true });
+    writeFileSync(join(skyDir, 'index.html'), skyPage(t, sky));
+    count++;
 
     mkdirSync(root, { recursive: true });
     writeFileSync(join(root, 'index.html'), homePage(t, sorted, generated));

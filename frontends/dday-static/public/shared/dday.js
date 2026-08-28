@@ -55,6 +55,19 @@
             name: function (c) { return c.ko || c.name; },
             holiday: function (h) { return h.n; },
             holidaySub: function (h) { return h.e || ''; },
+            /* 하늘. zone 은 sky.json 이 미리 굳혀 둔 날짜 중 어느 쪽을 쓸지다 —
+               ko 는 KST, en 은 UTC. 브라우저가 다시 계산하면 HTML 에 박힌 날짜와
+               갈라질 수 있으므로 여기서는 고르기만 한다. */
+            zone: 'kst',
+            skyNone: '오늘은 절기도 삭망도 아닙니다',
+            skyOff: ' — 오늘입니다',
+            newMoon: '삭', fullMoon: '보름',
+            showerName: function (n) { return n + ' 유성우'; },
+            skyName: function (e) { return e.n; },
+            skySub: function (e) { return e.h || ''; },
+            dtTerm: '다음 절기', dtNew: '다음 삭',
+            dtFull: '다음 보름', dtShower: '다음 유성우',
+            skyFail: '하늘 자료를 불러오지 못했습니다.',
             dir: ''
         },
         en: {
@@ -86,6 +99,16 @@
             name: function (c) { return c.name || c.ko; },
             holiday: function (h) { return h.e || h.n; },
             holidaySub: function (h) { return h.e ? h.n : ''; },
+            zone: 'utc',
+            skyNone: 'No solar term or moon phase today',
+            skyOff: ' — today',
+            newMoon: 'New Moon', fullMoon: 'Full Moon',
+            showerName: function (n) { return n; },
+            skyName: function (e) { return e.e || e.n; },
+            skySub: function (e) { return e.h || ''; },
+            dtTerm: 'Next term', dtNew: 'Next new moon',
+            dtFull: 'Next full moon', dtShower: 'Next shower',
+            skyFail: 'Could not load the sky data.',
             dir: '/en'
         }
     };
@@ -205,17 +228,11 @@
         return { marked: marked, now: now, next: next, upcoming: now || next };
     }
 
-    /* ------------------------------------------------------------ 표 채우기 */
-    function paintTables(today) {
-        var rows = $$('tr[data-d]');
-        var got = classify(rows.map(function (tr) {
-            return {
-                d: tr.getAttribute('data-d'), tr: tr, local: !!$('.local', tr),
-                n: nameOf(tr), sub: subOf(tr)
-            };
-        }), today);
-
-        got.marked.forEach(function (m) {
+    /* ------------------------------------------------------------ 표 채우기
+       공휴일 표든 하늘 표든 D-day 를 붙이는 규칙은 하나여야 한다. 표마다 다른
+       규칙을 쓰면 같은 사이트 안에서 D-day 가 여러 뜻을 갖는다. */
+    function markRows(marked) {
+        marked.forEach(function (m) {
             var tr = m.item.tr;
             var mark = $('.mark', tr);
 
@@ -229,7 +246,17 @@
                 mark.innerHTML = '<span class="soon">D-' + m.diff + '</span>';
             }
         });
+    }
 
+    function paintTables(today) {
+        var rows = $$('tr[data-d]');
+        var got = classify(rows.map(function (tr) {
+            return {
+                d: tr.getAttribute('data-d'), tr: tr, local: !!$('.local', tr),
+                n: nameOf(tr), sub: subOf(tr)
+            };
+        }), today);
+        markRows(got.marked);
         return got;
     }
 
@@ -338,6 +365,130 @@
             ? '<span class="dd">D' + sign + Math.abs(entry.diff) + '</span>' +
               nameHtml(entry.item) + '<em>' + shortHuman(entry.item.d) + '</em>'
             : '<em>' + T.outOfRange + '</em>';
+    }
+
+    /* ------------------------------------------------------------- 하늘
+       /sky/ 는 국가 축이 아니다 — 절기도 삭망도 유성우도 온 세계가 같은 순간을
+       공유한다. 갈리는 것은 날짜뿐이고 그건 sky.json 이 기준 시간대마다 미리
+       굳혀 두었으므로, 여기서는 시간대를 다시 계산하지 않는다.
+
+       표가 갈래(절기·삭망·유성우)마다 따로라 카드도 갈래마다 한 줄씩이다.
+       공휴일 표와 같은 classify() 를 쓰되 갈래별로 나눠 먹인다. */
+    function paintSky(today) {
+        var rows = $$('tr[data-sky]');
+        var groups = {};
+        rows.forEach(function (tr) {
+            var kind = tr.getAttribute('data-sky') || 'other';
+            if (!groups[kind]) groups[kind] = [];
+            groups[kind].push({
+                d: tr.getAttribute('data-d'), tr: tr,
+                n: evOf(tr), sub: altOf(tr)
+            });
+        });
+
+        var out = {}, all = [];
+        Object.keys(groups).forEach(function (kind) {
+            out[kind] = classify(groups[kind], today);
+            markRows(out[kind].marked);
+            all = all.concat(out[kind].todays);
+        });
+        out.todays = all;
+        return out;
+    }
+
+    /* 이름 칸에는 한자와 배지가 같이 들어 있다. 카드에는 이름만 옮긴다. */
+    function evOf(tr) {
+        var el = $('.ev', tr);
+        if (!el) return '';
+        var clone = el.cloneNode(true);
+        $$('.alt, .cardinal', clone).forEach(function (x) { x.remove(); });
+        return clone.textContent.trim();
+    }
+    function altOf(tr) {
+        var el = $('.alt', tr);
+        return el ? el.textContent.trim() : '';
+    }
+
+    function initSky() {
+        if (!document.body.getAttribute('data-sky')) return;
+
+        var today = todayIso();
+        var got = paintSky(today);
+
+        var card = $('#now');
+        if (card) {
+            var asof = $('.asof', card);
+            if (asof) asof.textContent = T.asof(human(today));
+
+            var verdict = $('.verdict', card);
+            if (verdict) {
+                verdict.textContent = got.todays.length
+                    ? got.todays.map(function (m) { return nameText(m.item); }).join(' · ') + T.skyOff
+                    : T.skyNone;
+                verdict.className = 'verdict' + (got.todays.length ? ' rest' : '');
+            }
+        }
+
+        /* 삭과 보름은 한 표에 섞여 있다 — 카드에서는 갈라야 하므로 이름으로 고른다.
+           이름은 HTML 에서 왔고 HTML 은 sky.json 에서 왔으니 갈라질 자리가 없다. */
+        fill($('#next-term'), got.term && got.term.next, '-');
+        fill($('#next-shower'), got.shower && got.shower.next, '-');
+
+        var moons = (got.moon && got.moon.marked) || [];
+        fill($('#next-new'), nextNamed(moons, T.newMoon), '-');
+        fill($('#next-full'), nextNamed(moons, T.fullMoon), '-');
+    }
+
+    function nextNamed(marked, name) {
+        var best = null;
+        marked.forEach(function (m) {
+            if (m.diff <= 0 || m.item.n !== name) return;
+            if (!best || m.diff < best.diff) best = m;
+        });
+        return best;
+    }
+
+    /* 첫 화면의 하늘 칸. /sky/ 로 가는 입구이기도 하다 — 여기서 링크가 빠지면
+       하늘 페이지는 sitemap 에만 있고 아무도 못 찾는 쪽이 된다. */
+    function initSkyHome() {
+        var list = $('#skylist');
+        if (!list) return;
+
+        var today = todayIso();
+        fetch('/data/sky.json').then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        }).then(function (sky) {
+            var zone = T.zone;
+            /* 하늘 페이지 카드와 같은 규칙을 쓴다 — "다음" 은 앞으로 올 것이고,
+               오늘 것은 그 페이지의 오늘 칸이 맡는다. 두 화면이 다른 규칙을 쓰면
+               같은 날 첫 화면과 /sky/ 가 서로 다른 답을 낸다. */
+            var pick = function (items, label, name, sub) {
+                var got = classify(items.map(function (e) {
+                    return { d: e[zone], e: e };
+                }), today);
+                var m = got.next;
+                if (!m) return '';
+                var it = m.item.e;
+                return '<li><span class="who"><span class="dd">' +
+                    'D-' + m.diff + '</span>' + esc(label) + '</span>' +
+                    '<span class="what">' + esc(name(it)) +
+                    (sub(it) ? '<span class="en">' + esc(sub(it)) + '</span>' : '') +
+                    '<em>' + shortHuman(it[zone]) + '</em></span></li>';
+            };
+
+            list.innerHTML = [
+                pick(sky.terms, T.dtTerm, T.skyName, T.skySub),
+                pick(sky.moons.filter(function (m) { return !m.f; }), T.dtNew,
+                    function () { return T.newMoon; }, function () { return ''; }),
+                pick(sky.moons.filter(function (m) { return m.f; }), T.dtFull,
+                    function () { return T.fullMoon; }, function () { return ''; }),
+                pick(sky.showers, T.dtShower,
+                    function (e) { return T.showerName(T.skyName(e)); }, function () { return ''; }),
+            ].join('');
+        }).catch(function () {
+            list.innerHTML = '<li><span class="what">' + T.skyFail + '</span></li>';
+        });
     }
 
     /* ------------------------------------------------------------- 선택기 */
@@ -595,6 +746,8 @@
             var today = todayIso();
             paintNow(today, paintTables(today), paintBreaks(today));
         }
+        initSky();
+        initSkyHome();
         initHome();
     }
 
@@ -606,6 +759,9 @@
         flag: flag, classify: classify, classifyBreaks: classifyBreaks,
         verdictOf: verdictOf, detect: detect, searchKey: searchKey
     };
+
+    /* 하늘 페이지가 첫 화면·국가 페이지와 다른 갈래라는 사실을 검사기가 알아야 한다 */
+    window.DDAY.isSky = !!document.body.getAttribute('data-sky');
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', start);

@@ -2677,6 +2677,22 @@
   </url>
 
   <url>
+    <loc>https://this-is-the.day/sky/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/"/>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/sky/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/"/>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+
+  <url>
     <loc>https://this-is-the.day/sl/</loc>
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sl/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sl/"/>
