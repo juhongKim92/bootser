@@ -9,6 +9,8 @@
      4. canonical(자기 주소) · hreflang 3줄(ko/en/x-default, 양쪽에 똑같이) ·
         title · description · 파비콘 4줄 · 자산 링크가 있나
         (파비콘은 파일까지 열어 정사각 + 48 의 배수인지 본다 — 구글 검색결과 아이콘 조건)
+     4.5. og:image · twitter:card 가 있고, 가리키는 공유 카드가 실제로 있으며
+        HTML 이 적어 둔 크기와 PNG 머리의 크기가 같나
      5. HTML 표의 날짜 집합이 data/<CC>.json 과 정확히 같나
         (생성기가 자료를 흘리거나 겹쳐 쓰지 않았나)
      5.5. 황금연휴가 스스로 앞뒤가 맞나 — 3일 이상인가, 우리가 담은 공휴일에
@@ -32,6 +34,7 @@ import { boot, pages, PUB, DATA } from './harness.mjs';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { BASE, EXTRA, today } from './config.mjs';
+import { pngSize } from './png.mjs';
 import { SHOWERS } from './astro.mjs';
 import { EQUINOXES, TOLERANCE_MINUTES } from './sky-fixture.mjs';
 
@@ -236,6 +239,7 @@ function spanRef(s, e) {
 
 /* ------------------------------------------------------------ 페이지 순회 */
 const linkedFromHome = { ko: new Set(), en: new Set() };
+const cardsUsed = new Set();
 
 for (const { page, lang, slug, kind, label } of ALL) {
     let r;
@@ -337,6 +341,21 @@ for (const { page, lang, slug, kind, label } of ALL) {
     if (title.length > 65) soft(label, `title 이 ${title.length}자 — 검색결과에서 잘린다`);
     const desc = (html.match(/name="description" content="([^"]*)"/) || [])[1] || '';
     if (desc.length > 160) soft(label, `description 이 ${desc.length}자 — 잘린다`);
+
+    /* 4.5. 공유 카드. 기대하는 이름을 여기서 따로 짓는다 —
+       gen-pages 가 쓴 값을 가져다 쓰면 둘이 같이 틀려도 통과한다.
+       og:image 는 절대 주소여야 한다. 상대 주소면 카카오톡·페이스북이 못 읽는다. */
+    const wantCard = slug === '' ? 'home' : slug;
+    cardsUsed.add(wantCard);
+    for (const need of [`property="og:image" content="${BASE}/card/${wantCard}.png"`,
+                        'property="og:image:width" content="1200"',
+                        'property="og:image:height" content="630"',
+                        'name="twitter:card" content="summary_large_image"']) {
+        if (!html.includes(need)) bad(label, `빠짐: ${need}`);
+    }
+    if (!((html.match(/property="og:image:alt" content="([^"]*)"/) || [])[1] || '')) {
+        bad(label, 'og:image:alt 가 비었다');
+    }
 
     if (isHome) {
         /* 7. 첫 화면 국가 링크 — 같은 언어 칸 안으로만 걸려야 한다 */
@@ -667,6 +686,45 @@ for (const [what, missing] of [
     ['영어 첫 화면에서 링크되지 않는다', diff(dirCodes, linkedFromHome.en)],
 ]) {
     if (missing.length) bad('/', `${what}: ${missing.slice(0, 8).join(', ')}${missing.length > 8 ? ` 외 ${missing.length - 8}개` : ''}`);
+}
+
+/* ----------------------------------------------------- 7.5. 공유 카드 파일
+   카카오톡·슬랙·트위터가 읽는 그림이다. og:image 만 있고 파일이 없으면 빈 카드가
+   뜨는데, 그건 사이트를 열어 봐서는 안 보인다 — 검사 말고 잡을 데가 없다.
+
+   **1200×630 을 card-art.mjs 에서 들여오지 않고 여기 따로 적는다.** 생성기가 쓰는
+   값을 그대로 가져오면 둘이 같이 틀려도 통과한다. 이 숫자는 우리가 정한 것이 아니라
+   소셜 미리보기가 요구하는 바깥 사실이라 여기 박는 것이 맞다. 페이지 쪽은 HTML 에
+   적힌 수를, 여기서는 PNG 머리의 수를 본다 — 둘이 갈라지면 한쪽에서 걸린다. */
+{
+    const NAME = 'card';
+    const WANT_W = 1200, WANT_H = 630;
+    const dir = join(PUB, NAME);
+
+    /* gen-pages 의 청소가 두 글자 디렉터리를 통째로 지운다. 'og' 로 옮기면
+       빌드마다 조용히 사라지므로, 이름이 두 글자가 되는 순간 여기서 멈춘다. */
+    if (/^[a-z]{2}$/.test(NAME) || EXTRA.includes(NAME)) {
+        bad('/', `카드 디렉터리 이름 '${NAME}' 이 국가 코드나 EXTRA 와 부딪힌다`);
+    }
+
+    if (!existsSync(dir)) {
+        bad('/', `${NAME}/ 이 없다 — node tools/gen-card.mjs`);
+    } else {
+        for (const name of [...cardsUsed].sort()) {
+            const at = `/${NAME}/${name}.png`;
+            const file = join(dir, `${name}.png`);
+            if (!existsSync(file)) { bad(at, '페이지가 가리키는데 파일이 없다 — node tools/gen-card.mjs'); continue; }
+            const size = pngSize(readFileSync(file));
+            if (!size) { bad(at, 'PNG 가 아니다'); continue; }
+            if (size.width !== WANT_W || size.height !== WANT_H) {
+                bad(at, `${size.width}×${size.height} 다 — ${WANT_W}×${WANT_H} 이어야 한다`);
+            }
+        }
+        /* 어느 페이지도 안 가리키는 카드는 국가가 빠진 흔적이다 */
+        for (const f of readdirSync(dir).filter((f) => f.endsWith('.png'))) {
+            if (!cardsUsed.has(f.replace(/\.png$/, ''))) bad(`/${NAME}/${f}`, '어느 페이지도 가리키지 않는다');
+        }
+    }
 }
 
 /* ---------------------------------------------------------- 8. sitemap */

@@ -5,6 +5,7 @@
    배포 순서 — 반드시 이 순서로 돌린다.
      1. node tools/gen-holidays.mjs   (Nager 에서 자료를 새로 받는다)
      2. node tools/gen-pages.mjs      (자료로 HTML 을 다시 만든다)
+     2.5. node tools/gen-card.mjs     (국가 목록이 바뀌었으면 공유 카드도)
      3. git commit                    ← lastmod 는 여기서 정해진다
      4. node tools/gen-sitemap.mjs
      5. node tools/check-pages.mjs

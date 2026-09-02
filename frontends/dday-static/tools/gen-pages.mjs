@@ -23,6 +23,7 @@ import { readFileSync, readdirSync, writeFileSync, mkdirSync, rmSync, existsSync
 import { join } from 'node:path';
 import { BASE, PUB, DATA, YEARS, EXTRA, today } from './config.mjs';
 import { CARDINAL } from './astro.mjs';
+import { CARD_W, CARD_H, CARD_DIR } from './card-art.mjs';
 
 const SITE = 'this is the day';
 const MID = YEARS()[1];                                   /* 표지로 삼을 해 = 올해 */
@@ -241,7 +242,7 @@ const url = (lang, slug) => `${BASE}${L[lang].dir}/${slug}`;
 
 /* ------------------------------------------------------------------ 머리 */
 
-function head(t, { title, desc, slug }) {
+function head(t, { title, desc, slug, card, alt }) {
     return `<!DOCTYPE html>
 <html lang="${t.lang}">
 <head>
@@ -263,6 +264,11 @@ function head(t, { title, desc, slug }) {
   <meta property="og:title" content="${esc(title)}">
   <meta property="og:description" content="${esc(desc)}">
   <meta property="og:url" content="${url(t.lang, slug)}">
+  <meta property="og:image" content="${BASE}/${CARD_DIR}/${card}.png">
+  <meta property="og:image:width" content="${CARD_W}">
+  <meta property="og:image:height" content="${CARD_H}">
+  <meta property="og:image:alt" content="${esc(alt)}">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -460,6 +466,8 @@ ${body}
         title: t.title(data, main),
         desc: t.desc(data, main, byYear.get(main).length, localCount),
         slug,
+        card: data.code.toLowerCase(),
+        alt: `${t.crumbCountry(data)} — ${SITE}`,
     })}
 <body data-cc="${data.code}">
 
@@ -583,7 +591,7 @@ function skyPage(t, sky) {
         ],
     };
 
-    return `${head(t, { title: t.skyTitle(MID), desc: t.skyDesc(MID), slug })}
+    return `${head(t, { title: t.skyTitle(MID), desc: t.skyDesc(MID), slug, card: 'sky', alt: `${t.skyCrumb} — ${SITE}` })}
 <body data-sky="1">
 
 ${top(t, { slug, label: esc(t.pickerLabel) })}
@@ -638,7 +646,7 @@ function homePage(t, index, generated) {
         `      <li data-cc="${c.code}" data-key="${esc(searchKey(c))}"><a href="${t.dir}/${c.code.toLowerCase()}/">${flag(c.code)} ${esc(t.name(c))}<span class="cc">${c.code}</span></a></li>`
     ).join('\n');
 
-    return `${head(t, { title: t.homeTitle(n), desc: t.homeDesc(n), slug: '' })}
+    return `${head(t, { title: t.homeTitle(n), desc: t.homeDesc(n), slug: '', card: 'home', alt: SITE })}
 <body>
 
 ${top(t, { slug: '', home: true, label: esc(t.pickerLabel) })}

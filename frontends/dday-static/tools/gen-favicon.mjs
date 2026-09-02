@@ -8,11 +8,11 @@
  *   node tools/gen-favicon.mjs
  *   node tools/gen-favicon.mjs --check   # 고치지 않고 최신인지만 본다
  */
-import { deflateSync } from 'node:zlib';
 import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { MAP, GRID, COLOR, TILE, validate } from './favicon-art.mjs';
+import { encodePng, rgb } from './png.mjs';
 
 const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
 const CHECK = process.argv.includes('--check');
@@ -68,8 +68,6 @@ ${body}
 
 // ---------------------------------------------------------------- PNG
 
-const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-
 /** 픽셀맵을 size×size RGB 로 키운다. size 는 16의 배수여야 한다. */
 function pixels(size) {
   if (size % GRID !== 0) throw new Error(`size must be a multiple of ${GRID}: ${size}`);
@@ -85,51 +83,8 @@ function pixels(size) {
   return buf;
 }
 
-const CRC_TABLE = (() => {
-  const t = new Int32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c;
-  }
-  return t;
-})();
-
-function crc32(buf) {
-  let c = -1;
-  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
-  return (c ^ -1) >>> 0;
-}
-
-function chunk(type, data) {
-  const len = Buffer.alloc(4);
-  len.writeUInt32BE(data.length);
-  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(body));
-  return Buffer.concat([len, body, crc]);
-}
-
 function png(size) {
-  const src = pixels(size);
-  // 스캔라인마다 필터 바이트 0 (None). 단색 블록뿐이라 이게 가장 잘 압축된다.
-  const stride = size * 3 + 1;
-  const raw = Buffer.alloc(size * stride);
-  for (let y = 0; y < size; y++) {
-    raw[y * stride] = 0;
-    src.copy(raw, y * stride + 1, y * size * 3, (y + 1) * size * 3);
-  }
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(size, 0);
-  ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8;   // bit depth
-  ihdr[9] = 2;   // color type: truecolor RGB
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk('IHDR', ihdr),
-    chunk('IDAT', deflateSync(raw, { level: 9 })),
-    chunk('IEND', Buffer.alloc(0)),
-  ]);
+  return encodePng(size, size, pixels(size));
 }
 
 // ---------------------------------------------------------------- ICO

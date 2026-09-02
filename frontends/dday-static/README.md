@@ -36,6 +36,9 @@ tools/                     전부 node 내장 모듈만 쓴다 (npm install 없�
 ├── gen-sitemap.mjs        git 커밋 날짜 → public/sitemap.xml
 ├── gen-favicon.mjs        favicon-art.mjs → ico · svg · png 넷
 ├── favicon-art.mjs        16×16 픽셀맵 (모든 크기의 원화)
+├── gen-card.mjs           card-art.mjs → public/card/*.png (공유 카드 206개)
+├── card-art.mjs           5×7 픽셀 대문자 글꼴 · 카드 규격 (원화)
+├── png.mjs                손으로 쓴 PNG 인코더 — 파비콘과 카드가 함께 쓴다
 ├── harness.mjs            node:vm DOM·fetch 스텁 — 브라우저 없이 페이지를 돌린다
 ├── inject-beacon.mjs      Cloudflare 웹 분석 비콘 주입 (빌드 단계)
 └── check-pages.mjs        배포 전 검사 412개 페이지
@@ -47,6 +50,7 @@ public/
 ├── {sky,en/sky}/index.html 생성물 — 절기·삭망·유성우 (국가 축이 아니다)
 ├── en/{cc}/index.html     생성물 — 영어 국가 페이지
 ├── 404.html · en/404.html 생성물 — 언어 칸마다 하나씩
+├── card/*.png             생성물 — og:image 공유 카드 (1200×630, 언어 무관 한 벌)
 ├── data/{CC}.json         생성물 — 국가별 자료 (공휴일 + 황금연휴, 언어 무관 한 벌)
 ├── data/month/YYYY-MM.json 생성물 — 같은 자료의 날짜 색인 36개
 ├── data/countries.json    생성물 — 선택기용 목록
@@ -79,6 +83,7 @@ cd frontends/dday-static
 node tools/gen-holidays.mjs    # 1. Nager 에서 자료를 새로 받는다 (유일한 네트워크 단계)
 node tools/gen-sky.mjs         # 2. 절기·삭망을 다시 계산한다 (네트워크 없음)
 node tools/gen-pages.mjs       # 3. 자료로 HTML 을 다시 만든다
+node tools/gen-card.mjs        # 3.5. 국가 목록이 바뀌었으면 공유 카드도
 git add -A && git commit       # 4. lastmod 가 여기서 정해진다
 node tools/gen-sitemap.mjs     # 5. sitemap.xml
 node tools/check-pages.mjs     # 6. 실패하면 밀지 않는다 (종료 코드 1)
