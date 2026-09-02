@@ -59,7 +59,24 @@ export const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
    무거워진다 — 그래서 public/ 을 통째로 훑어 쓰는 글자를 모으고, 걸리는 조각만 남긴다.
 
    HTML 뿐 아니라 JSON 과 JS 도 본다. 표의 절반은 브라우저가 data/{CC}.json 으로
-   그리고, dday.js 안에도 한국어 문자열이 박혀 있다. HTML 만 보면 그만큼이 샌다. */
+   그리고, dday.js 안에도 한국어 문자열이 박혀 있다. HTML 만 보면 그만큼이 샌다.
+
+   ---------------------------------------------------------------------------
+   **여기서 하는 것은 "고르기" 지 "자르기" 가 아니다. 그 선을 넘지 말 것.**
+
+   483자밖에 안 쓰는데 84면 1 MB 를 이고 있으니, 직접 서브셋을 떠서 한두 면으로
+   줄이고 싶어진다. 값은 그쪽이 싸지만 라이선스가 달라진다.
+
+   셋 다 SIL OFL 1.1 이고(public/fonts/LICENSE.txt), OFL 은 조건 둘을 건다 —
+   복제본에 고지와 라이선스를 같이 실을 것, 그리고 **고친 것을 배포하려면 Reserved
+   Font Name 을 떼고 이름을 바꿀 것.** Pretendard 에는 RFN 이 걸려 있다("with
+   Reserved Font Name Pretendard"). 우리가 글리프를 직접 잘라 내면 그건 Modified
+   Version 이고, 그 순간 `font-family:'Pretendard'` 라고 쓸 수 없다.
+
+   그래서 여기서는 **upstream 이 이미 잘라 배포하는 조각을 그대로 받아 그중 골라
+   담기만 한다.** 파일 이름은 내용 해시를 붙여 바꾸지만 RFN 이 거는 것은 폰트 안의
+   이름이지 파일 이름이 아니다 — 오히려 `@font-face` 의 이름은 원래대로 두어야 맞다.
+   `gen-fonts.mjs` 가 받은 바이트를 한 비트도 건드리지 않는 이유가 이것이다. */
 const TEXT_EXT = new Set(['.html', '.json', '.js', '.css']);
 
 /** public/ 아래(폰트 디렉터리는 빼고)에 등장하는 모든 코드포인트. */
