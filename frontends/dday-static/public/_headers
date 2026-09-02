@@ -1,0 +1,14 @@
+# Cloudflare 정적 자산의 응답 머리. 이 파일 자체는 배포되지 않고 규칙으로만 쓰인다.
+#
+# 글꼴 파일 이름에는 내용 해시가 박혀 있다(tools/gen-fonts.mjs) — 내용이 달라지면
+# 이름이 달라지므로 immutable 이 참말이다. fonts.css 는 이름이 고정이라 안 된다.
+/fonts/*.woff2
+  Cache-Control: public, max-age=31536000, immutable
+
+/fonts/fonts.css
+  Cache-Control: public, max-age=86400
+
+# 공유 카드도 국가 목록이 바뀔 때만 달라진다. 다만 이름이 고정(card/{cc}.png)이라
+# immutable 은 아니다 — 하루 두고 CDN 이 되받게 한다.
+/card/*
+  Cache-Control: public, max-age=86400

@@ -34,6 +34,9 @@ tools/                     전부 node 내장 모듈만 쓴다 (npm install 없�
 ├── gen-sky.mjs            astro.mjs   → public/data/sky.json
 ├── gen-pages.mjs          data        → 한국어·영어 두 벌의 HTML (418개)
 ├── gen-sitemap.mjs        git 커밋 날짜 → public/sitemap.xml
+├── gen-fonts.mjs          남의 오리진 셋 → public/fonts/ (손으로 돌리는 유일한 폰트 단계)
+├── fonts.mjs              어디서 받고 무엇을 남기나 (gen-fonts · check-pages 가 함께 쓴다)
+├── fonts-lock.json        생성물 — 버린 조각의 unicode-range 기록
 ├── gen-favicon.mjs        favicon-art.mjs → ico · svg · png 넷
 ├── favicon-art.mjs        16×16 픽셀맵 (모든 크기의 원화)
 ├── gen-card.mjs           card-art.mjs → public/card/*.png (공유 카드 206개)
@@ -48,6 +51,8 @@ public/
 ├── {cc}/index.html        생성물 — 국가별 공휴일·황금연휴 (3년치, HTML 에 박혀 있다)
 ├── en/index.html          생성물 — 영어 첫 화면
 ├── {sky,en/sky}/index.html 생성물 — 하늘 허브 (국가 축이 아니다. 표는 없다)
+├── fonts/                 생성물 — woff2 조각 84개 + fonts.css + LICENSE.txt
+├── _headers               Cloudflare 응답 머리 (글꼴 immutable · 카드 하루)
 ├── sky/{term,moon,meteor}/ 생성물 — 갈래별 3년치 (검색어가 갈래로 갈린다)
 ├── en/{cc}/index.html     생성물 — 영어 국가 페이지
 ├── 404.html · en/404.html 생성물 — 언어 칸마다 하나씩
@@ -85,6 +90,7 @@ node tools/gen-holidays.mjs    # 1. Nager 에서 자료를 새로 받는다 (유
 node tools/gen-sky.mjs         # 2. 절기·삭망을 다시 계산한다 (네트워크 없음)
 node tools/gen-pages.mjs       # 3. 자료로 HTML 을 다시 만든다
 node tools/gen-card.mjs        # 3.5. 국가 목록이 바뀌었으면 공유 카드도
+node tools/gen-fonts.mjs       # 3.6. 새 글자가 들어왔으면 글꼴 조각도 (네트워크)
 git add -A && git commit       # 4. lastmod 가 여기서 정해진다
 node tools/gen-sitemap.mjs     # 5. sitemap.xml
 node tools/check-pages.mjs     # 6. 실패하면 밀지 않는다 (종료 코드 1)
@@ -230,6 +236,51 @@ hreflang 세 줄(ko · en · x-default→en)이 **양쪽에 똑같이** 들어�
 국가 목록 정렬은 **보이는 이름** 기준이다. `countries.json` 은 한글 이름순으로
 저장돼 있어서, 영어 화면에서 그대로 쓰면 Ghana(가나)가 맨 앞에 오는 무작위 순서가 된다.
 
+## 글꼴
+
+머리에 남의 오리진이 셋 있었다 — `fonts.googleapis.com` · `fonts.gstatic.com` ·
+`cdn.jsdelivr.net`. `public/` 을 Cloudflare 에 그대로 얹는 사이트인데 DNS+TLS
+핸드셰이크를 세 번 더 했고, 그중 둘은 첫 페인트를 막는 CSS 였다. 지금은 조각을 받아
+`public/fonts/` 에 커밋해 둔다 — 같은 오리진 · 같은 연결 · 같은 CDN 캐시고,
+이 디렉터리의 "의존성 없음" 원칙에도 맞는다.
+
+| | 전 | 후 |
+|---|---|---|
+| 렌더 경로의 오리진 | 3 | **0** |
+| 렌더를 막는 외부 CSS | 2 | 0 |
+| 글꼴 CSS (gzip) | 145 KB | **8.4 KB** |
+| 한 페이지가 받는 글꼴 | (같음) | 258 ~ 414 KB |
+
+**조각을 다 받지는 않는다.** dynamic subset 은 `unicode-range` 로 갈려 있어서 사이트가
+쓰지 않는 글자의 조각은 아무도 내려받지 않는다 — 커밋해 봐야 저장소만 무겁다.
+`public/` 을 통째로 훑어(HTML·JSON·JS·CSS) 쓰는 글자 1,142자를 모으고 걸리는 것만 남긴다.
+upstream 1,030면 → **84면 · 1,074 KB**.
+
+가지치기의 위험은 하나뿐이다. 나라가 하나 늘어 새 한글 음절이 들어오면 그 글자만
+대체 글꼴로 나오는데, **화면으로도 잘 안 보인다.** 그래서 버린 조각의
+`unicode-range` 를 `tools/fonts-lock.json` 에 적어 두고 `check-pages` 가 그 기록으로
+"버린 조각이 이제 필요해졌다" 를 잡는다.
+
+**가변본을 먼저 붙였다가 물렸다.** `base.css` 의 `--sans` 첫 자리가
+`'Pretendard Variable'` 이라 가변 dynamic-subset 을 실었는데, 조각 하나가 25.4 KB 로
+정적본 10.5 KB 의 **2.4배**다 — 무게 축을 통째로 이고 다닌다. `--sans` 가 실제로
+쓰는 무게는 400 과 500 둘뿐이라(700 은 serif 쪽이다) 정적 두 벌이 저장소에서도
+방문자 쪽에서도 이긴다. 그러면서 드러난 것: **첫 자리에 적힌 이름을 우리가 나른 적이
+없었다.** 그 글꼴을 이미 깔아 둔 사람만 다르게 보였고 아무 데서도 티가 안 났다.
+지금은 `check-pages` 가 `base.css` 를 진짜로 놓고 `fonts.css` 와 견준다.
+
+파일 이름에 내용 해시가 박혀 있다(`pretendard.172.9a3f1c22.woff2`). `_headers` 의
+`immutable` 이 참말이 되고, 덤으로 검사가 네트워크 없이 무결성을 본다.
+
+**preload 는 넣지 않았다.** 어느 조각이 필요한지가 페이지마다 다르다 — 한 벌을 골라
+418개 머리에 박으면 맞는 페이지에서는 1 RTT 를 벌지만 틀린 페이지에서는 아무도 안 쓰는
+파일을 통째로 받는다. 페이지마다 계산해 박으면 `gen-pages` 가 `gen-fonts` 의 출력을
+읽고 `gen-fonts` 는 페이지의 글자를 읽어, 생성기 둘이 서로를 물어 처음 한 번을 못 돌린다.
+
+`gen-fonts.mjs` 는 `gen-holidays.mjs` 처럼 **손으로 돌리는 네트워크 단계**고 Cloudflare
+빌드에는 없다. 빌드가 돌리는 것은 `check-pages.mjs` 뿐이고 그건 네트워크를 타지 않는다.
+`node tools/gen-fonts.mjs --check` 는 upstream 이 판을 올렸는지만 본다.
+
 ## 검사
 
 `tools/check-pages.mjs` 가 418개 페이지를 브라우저 없이 돌려 본다.
@@ -272,6 +323,11 @@ jsdom 을 쓰지 않는다 — `node:vm` + 최소 DOM·fetch 스텁이면 충분
     합친 결과가 기대한 주소이고, **완성된 주소가 소스 어디에도 없나**
 15. `robots.txt` 의 Sitemap 줄이 `BASE` 와 같나, CSS 계약(스크롤 목록·오늘 강조·
     어두운 테마·좁은 화면)이 살아 있나, 404 가 언어 칸마다 있고 noindex 인가
+16. **글꼴** — 렌더 경로(stylesheet·script·preload)에 남의 오리진이 다시 들어오지
+    않았나, 페이지가 `/fonts/fonts.css` 를 걸고 있나, `fonts.css` 가 가리키는 파일이
+    다 있고 이름의 해시가 내용과 맞나, 84면 전부에 `font-display:swap` 이 있나,
+    `base.css` 가 첫 자리에 부르는 글꼴 셋을 우리가 실제로 나르나, 그리고
+    **버린 조각이 이제 필요해지지 않았나**
 
 ## 홈은 늘 내 지역
 

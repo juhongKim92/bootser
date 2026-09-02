@@ -18,12 +18,16 @@
   --sat:#1b4f7a;
   --sun:#b0392c;
 
+  /* 앞의 이름 셋은 우리가 public/fonts/ 에 실어 나르는 것과 정확히 같아야 한다 —
+     check-pages 가 base.css 를 진짜로 놓고 fonts.css 와 견준다. 예전에 첫 자리에
+     'Pretendard Variable' 이 있었는데 정작 나르던 건 정적본이었다: 그 글꼴을 이미
+     깔아 둔 사람만 다르게 보였고 아무 데서도 티가 안 났다. */
   --serif:'Gowun Batang', 'Noto Serif KR', Georgia, serif;
-  --sans:'Pretendard Variable', Pretendard, -apple-system, system-ui, sans-serif;
+  --sans:Pretendard, -apple-system, system-ui, sans-serif;
   /* JetBrains Mono 에는 한글 글리프가 없다. 폰트 폴백은 글리프 단위라 Pretendard 를
      뒤에 두면 숫자·라틴은 JetBrains Mono 를 그대로 쓰고(tabular-nums 가 유지된다)
      한글만 Pretendard 로 간다. */
-  --mono:'JetBrains Mono', 'Pretendard Variable', Pretendard, ui-monospace, 'SF Mono', Menlo, monospace;
+  --mono:'JetBrains Mono', Pretendard, ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
 @media (prefers-color-scheme: dark){

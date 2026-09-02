@@ -32,14 +32,16 @@
     12. 어느 페이지도 localStorage 에 아무것도 남기지 않나
     13. data/month/*.json 이 국가별 파일과 한 건도 어긋나지 않나
     14. robots.txt · CSS 계약 · 404 가 언어 칸마다 있고 noindex 인가
+    15. 글꼴이 전부 우리 오리진이고, 커밋한 조각이 사이트가 쓰는 글자를 다 덮나
 
    실패가 하나라도 있으면 종료 코드 1 이다.
    ============================================================ */
 import { boot, pages, PUB, DATA } from './harness.mjs';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { BASE, EXTRA, YEARS, today } from './config.mjs';
+import { join, sep } from 'node:path';
+import { BASE, EXTRA, YEARS, today, HERE } from './config.mjs';
 import { pngSize } from './png.mjs';
+import { FONT_DIR, FONT_CSS, LICENSE_FILE, codepoints, parseFaces, parseRanges, used, parseName, hash8 } from './fonts.mjs';
 import { SHOWERS } from './astro.mjs';
 import { EQUINOXES, TOLERANCE_MINUTES } from './sky-fixture.mjs';
 
@@ -164,6 +166,135 @@ check('favicon.svg', (file) => {
         [/@media \(max-width:\s*640px\)/, '좁은 화면 대응이 없다'],
     ];
     for (const [re, msg] of need) if (!re.test(css)) bad('shared/*.css', msg);
+}
+
+/* ------------------------------------------------------------------- 글꼴
+   여기 오기 전 머리에는 남의 오리진이 셋 있었다(googleapis · gstatic · jsdelivr).
+   `tools/gen-fonts.mjs` 가 조각을 받아 public/fonts/ 에 커밋해 두고, 여기서는
+   그것이 성립하는지만 본다 — 네트워크 없이. Cloudflare 빌드가 이 파일을 돌린다.
+
+   무는 것 여섯.
+     · 렌더 경로에 남의 오리진이 다시 들어오지 않았나 (이 항목이 되돌려지는 유일한 길)
+     · 페이지가 /fonts/fonts.css 를 걸고 있나
+     · fonts.css 가 가리키는 파일이 다 있고, 이름의 해시가 내용과 맞나
+     · 모든 면에 font-display:swap 이 있나 (없으면 최대 3초 빈 글자다)
+     · base.css 가 첫 자리에 적은 글꼴 셋을 우리가 실제로 나르나
+     · **버린 조각이 이제 필요해지지 않았나** — 이게 가지치기의 유일한 위험이다.
+       나라가 하나 늘어 새 한글 음절이 들어오면 그 글자만 대체 글꼴로 나오는데
+       화면으로도 잘 안 보인다. fonts-lock.json 에 적어 둔 버린 범위로 잡는다. */
+{
+    const FDIR = join(PUB, FONT_DIR);
+    const cssFile = join(FDIR, FONT_CSS);
+    const P = `/${FONT_DIR}/${FONT_CSS}`;
+
+    if (!existsSync(cssFile)) bad(P, '없다 — node tools/gen-fonts.mjs');
+    else {
+        const css = readFileSync(cssFile, 'utf8');
+        const faces = parseFaces(css);
+        if (!faces.length) bad(P, '@font-face 가 하나도 없다');
+
+        /* 3-1. 가리키는 파일과 이름의 해시 */
+        const referenced = new Set();
+        for (const f of faces) {
+            if (!f.url.startsWith(`/${FONT_DIR}/`)) { bad(P, `우리 오리진이 아니다: ${f.url}`); continue; }
+            const name = f.url.slice(FONT_DIR.length + 2);
+            referenced.add(name);
+            const parsed = parseName(name);
+            if (!parsed) { bad(P, `이름 규칙에 안 맞는다: ${name}`); continue; }
+            const file = join(FDIR, name);
+            if (!existsSync(file)) { bad(P, `가리키는 파일이 없다: ${name}`); continue; }
+            const buf = readFileSync(file);
+            if (hash8(buf) !== parsed.hash)
+                bad(P, `${name} — 이름의 해시(${parsed.hash})가 내용(${hash8(buf)})과 다르다`);
+            if (buf.subarray(0, 4).toString('latin1') !== 'wOF2')
+                bad(P, `${name} — woff2 가 아니다`);
+        }
+
+        /* 3-2. font-display */
+        const swap = (css.match(/font-display:\s*swap/g) || []).length;
+        if (swap !== faces.length)
+            bad(P, `font-display:swap 이 ${swap}면뿐이다 — ${faces.length}면 전부에 있어야 한다`);
+
+        /* 3-3. 커밋된 woff2 중 아무도 안 가리키는 것 */
+        for (const name of readdirSync(FDIR)) {
+            if (name === FONT_CSS || name === LICENSE_FILE) continue;
+            if (!referenced.has(name)) bad(`/${FONT_DIR}/`, `fonts.css 가 안 가리키는 파일이 남아 있다: ${name}`);
+        }
+        if (!existsSync(join(FDIR, LICENSE_FILE)))
+            bad(`/${FONT_DIR}/`, `${LICENSE_FILE} 이 없다 — 셋 다 OFL 이라 같이 실어야 한다`);
+
+        /* 3-4. base.css 가 첫 자리에 적은 이름을 우리가 나르나.
+           기대값은 여기 적지 않는다 — base.css 가 진짜고, 그것과 fonts.css 가
+           어긋나는 순간이 고장이다. */
+        const base = readFileSync(join(PUB, 'shared', 'base.css'), 'utf8');
+        const shipped = new Set(faces.map((f) => f.family));
+        for (const tok of ['serif', 'sans', 'mono']) {
+            const stack = (new RegExp(`--${tok}:([^;]+);`).exec(base) || [])[1];
+            if (!stack) { bad('shared/base.css', `--${tok} 토큰이 없다`); continue; }
+            const m = /^\s*(?:'([^']+)'|([A-Za-z][\w-]*))/.exec(stack) || [];
+            const first = m[1] || m[2];
+            if (!first) { bad('shared/base.css', `--${tok} 의 첫 글꼴 이름을 못 읽었다`); continue; }
+            if (!shipped.has(first))
+                bad(P, `base.css 의 --${tok} 은 '${first}' 를 먼저 부르는데 우리는 안 나른다`);
+        }
+
+        /* 3-5. 버린 조각이 이제 필요해졌나 */
+        const lockFile = join(HERE, 'fonts-lock.json');
+        if (!existsSync(lockFile)) bad('tools/fonts-lock.json', '없다 — node tools/gen-fonts.mjs');
+        else {
+            const cps = codepoints(PUB);
+            const lock = JSON.parse(readFileSync(lockFile, 'utf8'));
+            for (const fam of lock.families) {
+                if (!shipped.has(fam.family)) { bad(P, `lock 에 있는 '${fam.family}' 를 fonts.css 가 안 나른다`); continue; }
+                for (const d of fam.dropped) {
+                    if (!used(parseRanges(d.range), cps)) continue;
+                    const miss = [];
+                    for (const [a, b] of parseRanges(d.range))
+                        for (const c of cps) if (c >= a && c <= b && miss.length < 6) miss.push(String.fromCodePoint(c));
+                    bad('tools/fonts-lock.json',
+                        `${fam.family} 의 버린 조각 ${d.index} 가 이제 필요하다 (${miss.join(' ')}) — node tools/gen-fonts.mjs`);
+                }
+            }
+        }
+    }
+
+    /* 3-6. 렌더 경로의 오리진. canonical · hreflang · og:url 은 절대주소가 맞으므로
+       스타일시트 · 스크립트 · preload 계열만 본다. 남의 오리진이 다시 들어오는
+       길은 실질적으로 여기뿐이다. */
+    const htmls = [];
+    (function walk(dir) {
+        for (const e of readdirSync(dir, { withFileTypes: true })) {
+            if (e.isDirectory()) walk(join(dir, e.name));
+            else if (e.name.endsWith('.html')) htmls.push(join(dir, e.name));
+        }
+    })(PUB);
+    /* 소유확인 파일(naver*.html)은 한 줄짜리라 여기 걸릴 것이 없지만 세어는 둔다. */
+    let checked = 0;
+    for (const file of htmls) {
+        const rel = '/' + file.slice(PUB.length + 1).split(sep).join('/');
+        const html = readFileSync(file, 'utf8');
+        if (!/<link |<script /.test(html)) continue;
+        checked++;
+        for (const m of html.matchAll(/<link\b[^>]*>/g)) {
+            const tag = m[0];
+            const relAttr = (/rel="([^"]+)"/.exec(tag) || [])[1] || '';
+            if (!/^(stylesheet|preload|preconnect|dns-prefetch|modulepreload)$/.test(relAttr)) continue;
+            const href = (/href="([^"]+)"/.exec(tag) || [])[1] || '';
+            if (!href.startsWith('/')) bad(rel, `남의 오리진: <link rel="${relAttr}" href="${href}">`);
+        }
+        for (const m of html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/g))
+            if (!m[1].startsWith('/')) bad(rel, `남의 오리진: <script src="${m[1]}">`);
+        if (rel.endsWith('/index.html') || rel === '/404.html') {
+            if (!html.includes(`href="${P}"`)) bad(rel, `${P} 를 안 건다`);
+        }
+    }
+    /* CSS 안에서도 샐 수 있다 — @import 나 url(https://...). */
+    for (const name of ['base.css', 'dday.css']) {
+        const css = readFileSync(join(PUB, 'shared', name), 'utf8');
+        if (/@import/.test(css)) bad(`shared/${name}`, '@import 가 있다 — 렌더를 한 번 더 막는다');
+        for (const m of css.matchAll(/url\((['"]?)(https?:)?\/\//g)) bad(`shared/${name}`, `url() 이 밖을 본다: ${m[0]}`);
+    }
+    console.log(`글꼴 — 우리 오리진만 · HTML ${checked}개 확인`);
 }
 
 /* --------------------------------------------------------------- 날짜 검사

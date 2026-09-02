@@ -329,7 +329,19 @@ const L = {
 /* 두 언어가 서로를 가리키는 주소. 셋 다 양쪽 페이지에 똑같이 들어가야 한다. */
 const url = (lang, slug) => `${BASE}${L[lang].dir}/${slug}`;
 
-/* ------------------------------------------------------------------ 머리 */
+/* ------------------------------------------------------------------ 머리
+
+   글꼴은 `/fonts/fonts.css` 한 줄이다. 예전에는 남의 오리진 셋(googleapis ·
+   gstatic · jsdelivr)을 물었고 그중 둘이 렌더를 막는 CSS 였다. `tools/gen-fonts.mjs`
+   가 조각을 받아 커밋해 두므로 이제 같은 오리진 · 같은 연결로 들어온다.
+
+   preload 는 넣지 않았다. dynamic subset 은 unicode-range 로 갈려 있어서 어느
+   조각이 필요한지가 페이지마다 다르다 — 한 벌을 골라 418개 머리에 박으면 맞는
+   페이지에서는 1 RTT 를 벌지만 틀린 페이지에서는 아무도 안 쓰는 파일을 통째로
+   받는다. 페이지마다 맞는 조각을 계산해 박을 수는 있지만 그러면 gen-pages 가
+   gen-fonts 의 출력(파일 이름)을 읽어야 하고, gen-fonts 는 페이지의 글자를 읽는다 —
+   생성기 둘이 서로를 물어 처음 한 번을 돌릴 수 없게 된다. 남의 오리진 셋을 없애는
+   것이 이 항목의 몫이고 preload 는 그 뒤에 잴 것이다. */
 
 function head(t, { title, desc, slug, card, alt }) {
     return `<!DOCTYPE html>
@@ -358,10 +370,7 @@ function head(t, { title, desc, slug, card, alt }) {
   <meta property="og:image:height" content="${CARD_H}">
   <meta property="og:image:alt" content="${esc(alt)}">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+  <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/shared/base.css">
   <link rel="stylesheet" href="/shared/dday.css">
 </head>`;
@@ -929,10 +938,7 @@ function notFoundPage(t) {
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <title>${esc(t.nfTitle)}</title>
   <meta name="robots" content="noindex">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+  <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="stylesheet" href="/shared/base.css">
   <link rel="stylesheet" href="/shared/dday.css">
 </head>
