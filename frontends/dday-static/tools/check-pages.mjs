@@ -14,6 +14,9 @@
      4.6. 하늘 허브가 표를 이고 있지 않고 세 갈래로 다 링크하나, 그리고 갈래
         페이지가 제 갈래의 자료만 담고 제 갈래의 카드 줄만 두었나
      5. HTML 표의 날짜 집합이 data/<CC>.json 과 정확히 같나
+     5.2. 요약 문장과 description 이 나르는 사실이 자료와 같나 — 공휴일 수 ·
+        주말 겹침 · 연휴 횟수 · 가장 긴 연휴. 숫자는 문맥에 붙여 본다
+        (그냥 "어딘가에 있나" 로 보면 다른 숫자가 대신 물어 준다)
         (생성기가 자료를 흘리거나 겹쳐 쓰지 않았나)
      5.5. 황금연휴가 스스로 앞뒤가 맞나 — 3일 이상인가, 우리가 담은 공휴일에
         걸려 있나, 징검다리가 구간 안의 평일인가 — 그리고 표가 그 자료와 같나
@@ -35,7 +38,7 @@
 import { boot, pages, PUB, DATA } from './harness.mjs';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { BASE, EXTRA, today } from './config.mjs';
+import { BASE, EXTRA, YEARS, today } from './config.mjs';
 import { pngSize } from './png.mjs';
 import { SHOWERS } from './astro.mjs';
 import { EQUINOXES, TOLERANCE_MINUTES } from './sky-fixture.mjs';
@@ -152,6 +155,7 @@ check('favicon.svg', (file) => {
         [/td\.date \.at\{/, '하늘 표의 시각 스타일이 없다'],
         [/td\.ev\{/, '하늘 표의 이름 칸 스타일이 없다'],
         [/\.cardinal\{/, '분점·지점 배지 스타일이 없다'],
+        [/\.sum\{/, '요약 문장 스타일이 없다 — lede 와 붙어 한 문단으로 보인다'],
         /* .now .pair dd .dd 는 카드 안에만 걸린다. 첫 화면 목록에도 같은 모양이
            필요한데 그걸 빠뜨려서 "D-10다음 절기" 처럼 붙어 나온 적이 있다. */
         [/\.worldwide \.what \.dd\{/, '첫 화면 하늘 목록의 D-day 가 붙어 나온다'],
@@ -166,6 +170,15 @@ check('favicon.svg', (file) => {
    하니스가 쓰는 것과 겹치지 않게, 기대값은 여기서 따로 계산한다.
    같은 함수로 만들고 같은 함수로 검사하면 아무것도 검사하지 않는 것과 같다. */
 const TODAY = today();
+
+/* 표지 연도 — 요약 문장이 어느 해를 말하는지. gen-pages 의 규칙을 여기 다시 적는다:
+   담긴 세 해 중 가운데(올해)를 쓰되, 그 해 자료가 없으면 가장 이른 해다.
+   저쪽 값을 가져오면 둘이 같이 틀려도 통과한다. */
+const MID = YEARS()[1];
+const coverYear = (data) => {
+    const years = [...new Set(data.days.map((d) => +d.d.slice(0, 4)))].sort((a, b) => a - b);
+    return years.includes(MID) ? MID : years[0];
+};
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 /* 카드에 나와야 하는 말. dday.js 의 STR 을 가져다 쓰지 않고 여기 따로 적는다 —
@@ -524,6 +537,82 @@ for (const { page, lang, slug, kind, label } of ALL) {
     if (rowDates.join(',') !== jsonDates.join(',')) {
         bad(label, '표의 날짜 순서·집합이 자료와 다르다');
     }
+    /* 5.2. 요약 문장 ↔ 자료
+       빌드 타임에 확정된 사실을 HTML 에 박아 두었다. 스니펫에 담길 문장이라
+       자료와 갈라지면 사이트가 검색결과에서 조용히 거짓말을 한다.
+
+       **기대값을 여기서 다시 센다.** gen-pages 의 facts() 를 가져다 쓰면 둘이 같이
+       틀려도 통과한다 — 이 저장소가 늘 경계하는 그 함정이다. 세는 규칙도 저쪽과
+       같은 말로 적어 둔다: 표지 연도로 거르고, 연휴 수는 Nager 가 준 구간을 그대로
+       (같은 명절에 대해 여러 벌 주는 것까지) 센다 — 표에 찍히는 것과 같아야 한다. */
+    {
+        const y = String(coverYear(data));
+        const days = data.days.filter((d) => d.d.startsWith(y));
+        const breaks = (data.long || []).filter((w) => w.s.startsWith(y));
+        let longest = 0;
+        for (const w of breaks) {
+            const n = epochDayRef(w.e) - epochDayRef(w.s) + 1;
+            if (n > longest) longest = n;
+        }
+        const weekend = days.filter((d) => {
+            const w = new Date(d.d + 'T00:00:00Z').getUTCDay();
+            return w === 0 || w === 6;
+        }).length;
+
+        const sum = (html.match(/<p class="sum">([^<]*)<\/p>/) || [])[1] || '';
+        if (!sum) bad(label, '요약 문장(<p class="sum">)이 없다');
+        else {
+            /* **숫자를 문맥에 붙여 본다.** 처음에는 "그 숫자가 문장 어딘가에 있나" 로
+               썼는데 KR 요약의 "(2월 14~18일)" 이 공휴일 수 18 을 대신 물어 줘서,
+               18 을 19 로 바꿔도 통과했다. 일부러 깨뜨려 보고서야 알았다.
+
+               말을 여기 다시 적는 것은 WORDS 와 같은 방식이다 — 문안을 다듬으면
+               검사가 시끄럽게 깨지는 쪽이 맞다. 조용히 통과하는 것보다 낫다. */
+            const pats = lang === 'ko'
+                ? [[`공휴일은 ${days.length}일`, '공휴일 수'],
+                   [`그중 ${weekend}일이 주말`, '주말 겹침'],
+                   ...(longest ? [[`구간은 ${breaks.length}번`, '연휴 횟수'],
+                                  [`${longest}일(`, '가장 긴 연휴']] : [])]
+                : [[`has ${days.length} public holidays`, '공휴일 수'],
+                   [`${weekend} of which fall on a weekend`, '주말 겹침'],
+                   ...(longest ? [[`are ${breaks.length} long weekends`, '연휴 횟수'],
+                                  [`runs ${longest} days`, '가장 긴 연휴']] : [])];
+            for (const [want, what] of pats) {
+                if (!sum.includes(want)) bad(label, `요약의 ${what} 가 자료와 다르다 — "${want}" 이 없다: "${sum}"`);
+            }
+            for (const smell of ['undefined', 'NaN', 'null']) {
+                if (sum.includes(smell)) bad(label, `요약에 "${smell}" 가 있다 — "${sum}"`);
+            }
+        }
+
+        /* description 도 같은 사실을 나른다. 여기서 갈라지면 검색결과와 화면이
+           서로 다른 말을 한다.
+
+           **뽑아서 견준다 — 있나 없나로 보지 않는다.** description 은 160자를 넘으면
+           뒤쪽 절이 통째로 빠지도록 fit 을 사슬로 걸어 두었다(국가명이 44자인 곳이
+           있다). 그래서 "이 문구가 있어야 한다" 로 쓰면 정상적으로 빠진 절까지
+           실패로 잡는다. 절이 있으면 그 숫자가 맞아야 한다, 로 쓴다.
+
+           처음에는 공휴일 수와 연휴 길이만 봤는데, 그러면 연휴 횟수를 틀려도
+           조용했다 — 일부러 깨뜨려 보고서야 알았다. */
+        const d = (html.match(/name="description" content="([^"]*)"/) || [])[1] || '';
+        const dPats = lang === 'ko'
+            ? [[/공휴일 (\d+)일/, days.length, '공휴일 수'],
+               [/가장 긴 연휴는 (?:.*?)?(\d+)일입니다/, longest, '가장 긴 연휴'],
+               [/구간은 (\d+)번/, breaks.length, '연휴 횟수']]
+            : [[/^(\d+) public holidays/, days.length, '공휴일 수'],
+               [/Longest break: (\d+) days/, longest, '가장 긴 연휴'],
+               [/(\d+) long weekends/, breaks.length, '연휴 횟수']];
+        for (const [re, want, what] of dPats) {
+            const m = d.match(re);
+            if (m && +m[1] !== want) {
+                bad(label, `description 의 ${what} 가 ${m[1]} 이다 — 자료는 ${want} — "${d}"`);
+            }
+        }
+        /* 공휴일 수는 절이 빠질 자리가 아니다. 이것만은 반드시 있어야 한다. */
+        if (!dPats[0][0].test(d)) bad(label, `description 에 공휴일 수가 없다 — "${d}"`);
+    }
+
     const localInHtml = (html.match(/class="local"/g) || []).length;
     const localInJson = data.days.filter((d) => d.r).length;
     if (localInHtml !== localInJson) {

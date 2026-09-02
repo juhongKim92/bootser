@@ -85,7 +85,11 @@ h2{
   font-family:var(--serif);
   font-size:19px;font-weight:700;margin-bottom:12px;
 }
-.lede{color:var(--ink-2);font-size:16px;margin-bottom:28px;max-width:62ch}
+.lede{color:var(--ink-2);font-size:16px;margin-bottom:12px;max-width:62ch}
+
+/* 빌드 타임에 확정된 사실을 적어 두는 자리. 스니펫에 담길 문장이라 화면에서도
+   실제로 읽혀야 한다 — 숨기면 구글이 감춘 텍스트로 본다. */
+.sum{color:var(--ink-2);font-size:15px;line-height:1.7;margin-bottom:28px;max-width:62ch}
 
 section{margin-bottom:34px}
 

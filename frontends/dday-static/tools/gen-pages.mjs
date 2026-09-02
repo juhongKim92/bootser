@@ -107,9 +107,18 @@ const L = {
         noCountry: '찾는 국가가 없습니다.',
         pickerLabel: '국가 선택',
         title: (c, y) => `${y}년 ${c.ko} 공휴일 — 날짜와 D-day`,
-        desc: (c, y, n, local) => fit(
-            `${y}년 ${c.ko}(${c.name})의 공휴일 ${n}일을 날짜순으로. 다음 공휴일까지 남은 날을 함께 보여줍니다.`,
+        /* 뒷문장이 204개 페이지에서 똑같으면 구글이 무시하고 본문에서 스니펫을
+           자체 생성한다 — CTR 통제권을 잃는다. 나라마다 실제로 다른 사실을 넣는다. */
+        desc: (c, y, f, local) => fit(fit(fit(
+            `${y}년 ${c.ko}(${c.name})의 공휴일 ${f.count}일.`,
+            f.longest ? ` 가장 긴 연휴는 ${f.lead ? `${f.lead.n} ` : ''}${f.longest.n}일입니다.` : ' 사흘 이상 이어지는 연휴는 없습니다.'),
+            f.longest ? ` 사흘 이상 쉬는 구간은 ${f.breaks}번입니다.` : ''),
             local ? ' 일부 지역만 쉬는 날은 지역을 표시합니다.' : ''),
+        /* 화면에 박히는 요약. 스니펫에 담길 문장이기도 하다. */
+        sum: (c, y, f) => `${y}년 ${c.ko}의 공휴일은 ${f.count}일이고, 그중 ${f.weekend}일이 주말과 겹칩니다.`
+            + (f.longest
+                ? ` 사흘 이상 쉬는 구간은 ${f.breaks}번이며, 가장 긴 것은 ${f.lead ? `${f.lead.n} ` : ''}${f.longest.n}일(${DATE_SPAN.ko(f.longest.s, f.longest.e)})입니다.`
+                : ' 주말과 이어져 사흘 이상 쉬는 구간은 없습니다.'),
         h1: (c) => `${c.ko} 공휴일`,
         lede: (c, local) => `${c.ko}${c.ko === c.name ? '' : `(${c.name})`}의 법정 공휴일입니다. 오늘이 쉬는 날인지, 다음 공휴일까지 며칠 남았는지 바로 보여줍니다.`
             + (local ? ' 일부 지역만 쉬는 날에는 해당 지역을 함께 적었습니다.' : ''),
@@ -219,9 +228,17 @@ const L = {
         noCountry: 'No country matches.',
         pickerLabel: 'Country',
         title: (c, y) => `${c.name} Public Holidays ${y}`,
-        desc: (c, y, n, local) => fit(
-            `All ${n} public holidays in ${c.name} for ${y}, in date order, with the days until the next one.`,
+        /* fit 을 사슬로 건다 — 국가명이 44자인 곳(SH)이 있어서 한 벌로 쓰면 넘친다.
+           덜 중요한 절이 먼저 빠지고, 나라가 하나 늘어도 다시 재지 않아도 된다. */
+        desc: (c, y, f, local) => fit(fit(fit(
+            `${f.count} public holidays in ${c.name} for ${y}.`,
+            f.longest ? ` Longest break: ${f.longest.n} days${f.lead ? ` around ${f.lead.e || f.lead.n}` : ''}.` : ' No long weekends of three days or more.'),
+            f.longest ? ` ${f.breaks} long weekends of three days or more.` : ''),
             local ? ' Region-only days are marked.' : ''),
+        sum: (c, y, f) => `${c.name} has ${f.count} public holidays in ${y}, ${f.weekend} of which fall on a weekend.`
+            + (f.longest
+                ? ` There are ${f.breaks} long weekends of three days or more; the longest runs ${f.longest.n} days${f.lead ? ` around ${f.lead.e || f.lead.n}` : ''} (${DATE_SPAN.en(f.longest.s, f.longest.e)}).`
+                : ' No public holiday joins a weekend into a break of three days or more.'),
         h1: (c) => `${c.name} Public Holidays`,
         lede: (c, local) => `Statutory public holidays in ${c.name}. See at a glance whether today is a day off and how long until the next one.`
             + (local ? ' Days observed only in some regions carry the regions they apply to.' : ''),
@@ -431,6 +448,55 @@ ${rows}
    때문이다. 연휴 칸은 우리가 쓰는 말이므로 그 면제를 받으면 안 된다. */
 const NUM = (iso) => { const [y, m, d] = iso.split('-'); return { y, m, d }; };
 
+/* 요약 문장 안의 날짜 구간. 표의 breakSpan 과 달리 여기는 산문이라 요일도
+   연도도 넣지 않는다 — 문장이 길어지면 스니펫에서 잘리는 쪽이 그 뒤다. */
+const EN_MONTH = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+const DATE_SPAN = {
+    ko: (s, e) => {
+        const a = NUM(s), b = NUM(e);
+        return a.m === b.m ? `${+a.m}월 ${+a.d}~${+b.d}일` : `${+a.m}월 ${+a.d}일~${+b.m}월 ${+b.d}일`;
+    },
+    en: (s, e) => {
+        const a = NUM(s), b = NUM(e);
+        return a.m === b.m
+            ? `${+a.d}–${+b.d} ${EN_MONTH[+a.m - 1]}`
+            : `${+a.d} ${EN_MONTH[+a.m - 1]} – ${+b.d} ${EN_MONTH[+b.m - 1]}`;
+    },
+};
+
+/* ------------------------------------------------------------ 요약할 사실
+   스니펫에 담길 문장을 만들 재료다. **연 단위로 확정되는 것만 담는다** —
+   게이트 1번이다. D-day 나 "오늘 쉬는가" 처럼 날짜에 따라 변하는 것은 여기 없고
+   그대로 브라우저가 맡는다. 여기 있는 넷은 자료를 받은 순간 고정된다.
+
+   왜 이것을 굳이 HTML 에 박나 — title 에 "D-day" 라고 적어 두고 정작 본문은
+   "계산하는 중…" 이었다. 구글이 JS 를 렌더하긴 하지만 렌더 큐가 며칠씩 밀리고,
+   스니펫은 대개 원본 HTML 에서 뽑는다. 클릭을 만드는 것이 스니펫인데 거기 담길
+   문장이 없었다. */
+function facts(data, year) {
+    const y = String(year);
+    const days = data.days.filter((d) => d.d.startsWith(y));
+    /* 연휴 수는 표에 찍히는 것과 같아야 한다 — Nager 는 같은 명절에 대해 길이가
+       다른 구간을 여러 벌 주는데, 표가 그것을 그대로 싣기 때문이다. */
+    const breaks = (data.long || []).filter((w) => w.s.startsWith(y));
+
+    let longest = null;
+    for (const w of breaks) {
+        const n = epochDay(w.e) - epochDay(w.s) + 1;
+        if (!longest || n > longest.n) longest = { s: w.s, e: w.e, n };
+    }
+    /* 가장 긴 연휴가 낀 공휴일. 여럿이면 첫 것 — 이름을 붙여야 문장이 산다
+       ("5일" 보다 "설날 5일" 이 검색결과에서 읽힌다).
+       조사는 쓰지 않는다 — 이름이 어느 문자로 올지 모른다(みどりの日 · Jour de l'an). */
+    const lead = longest ? days.find((d) => d.d >= longest.s && d.d <= longest.e) : null;
+    /* 주말과 겹치는 날. "쉬는 날이 며칠 늘어나나" 에 답하는 값이라 사람들이 찾는다. */
+    const weekend = days.filter((d) => { const w = dow(d.d); return w === 0 || w === 6; }).length;
+
+    return { count: days.length, breaks: breaks.length, longest, lead, weekend };
+}
+
 function breakSpan(t, s, e) {
     const a = NUM(s), b = NUM(e);
     const cell = (p, iso, withYear) => {
@@ -525,6 +591,8 @@ ${body}
   </details>`;
     }).join('\n\n');
 
+    const f = facts(data, main);
+
     const crumbs = {
         '@context': 'https://schema.org',
         '@type': 'BreadcrumbList',
@@ -536,7 +604,7 @@ ${body}
 
     return `${head(t, {
         title: t.title(data, main),
-        desc: t.desc(data, main, byYear.get(main).length, localCount),
+        desc: t.desc(data, main, f, localCount),
         slug,
         card: data.code.toLowerCase(),
         alt: `${t.crumbCountry(data)} — ${SITE}`,
@@ -549,6 +617,7 @@ ${top(t, { slug, label: `<span class="flag">${flag(data.code)}</span>${esc(t.nam
 
   <h1>${esc(t.h1(data))}</h1>
   <p class="lede">${esc(t.lede(data, localCount))}</p>
+  <p class="sum">${esc(t.sum(data, main, f))}</p>
 
   <div class="now" id="now">
     <div class="asof">${esc(t.checking)}</div>
