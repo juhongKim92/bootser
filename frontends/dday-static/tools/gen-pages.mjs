@@ -10,7 +10,7 @@
    실제로 그 문자열이 문서에 있다.
    날짜에 따라 달라지는 것(D-day · 오늘 여부)만 shared/dday.js 가 붙인다.
 
-   선택기 <ul> 은 어느 페이지에서도 비워 둔다 — 204개 <li> × 410개 페이지면
+   선택기 <ul> 은 어느 페이지에서도 비워 둔다 — 204개 <li> × 418개 페이지면
    HTML 만 7MB 가 된다. dday.js 가 countries.json 으로 채운다.
    첫 화면의 국가 목록은 그와 별개로 HTML 에 박혀 있어서, 자바스크립트가 없어도
    204개국으로 갈 수 있다.
@@ -132,12 +132,50 @@ const L = {
         crumbCountry: (c) => `${c.ko} 공휴일`,
 
         /* --- 하늘 --- */
-        skyTitle: (y) => `${y}년 절기와 삭망 — 24절기 날짜와 D-day`,
-        skyDesc: (y) => `${y}년 24절기와 삭·보름, 유성우 극대기를 날짜순으로. 다음 절기까지 남은 날을 함께 보여줍니다. 한국 표준시 기준.`,
-        skyH1: '절기와 삭망',
-        skyLede: '24절기와 삭·보름, 유성우 극대기입니다. 다음 절기까지 며칠 남았는지 바로 보여줍니다.',
-        skyCrumb: '절기와 삭망',
-        skyLink: '절기와 삭망 전체 보기 →',
+        /* 허브(/sky/) — 갈래로 보내는 자리다. 표를 이고 있지 않으므로 제목도 갈래
+           하나를 가리키지 않는다. 갈래 페이지와 제목이 겹치면 서로 잡아먹는다. */
+        skyTitle: (y) => `${y}년 하늘 — 절기·삭망·유성우 D-day`,
+        skyDesc: (y) => `${y}년 24절기와 삭·보름, 유성우 극대기. 갈래별로 나누어 보고 다음까지 며칠 남았는지 함께 봅니다. 한국 표준시 기준.`,
+        skyH1: '하늘',
+        skyLede: '절기와 삭망, 유성우입니다. 갈래를 골라 들어가면 3년치를 날짜순으로 봅니다.',
+        skyCrumb: '하늘',
+        skyLink: '하늘 전체 보기 →',
+        skyTopicsCap: '갈래',
+        skyTopicsH2: '갈래별로 보기',
+        skyBackHub: '하늘 전체 보기 →',
+        skyCount: (n) => `${n}건`,
+
+        /* 갈래 세 벌. 제목·설명·H1 이 갈래마다 따로여야 검색어에 대응한다 —
+           한 URL 에 176건을 몰아 두면 어느 쿼리에도 정확히 대응하지 못한다. */
+        sky: {
+            term: {
+                title: (y) => `${y}년 24절기 — 날짜와 D-day`,
+                desc: (y) => `${y}년 24절기를 날짜와 시각까지 날짜순으로. 입춘·춘분·하지·동지가 언제인지, 다음 절기까지 며칠 남았는지 봅니다. 한국 표준시 기준.`,
+                h1: '24절기',
+                lede: '입춘부터 대한까지 24절기입니다. 절기가 드는 날짜와 시각을 3년치로 담았습니다.',
+                crumb: '24절기',
+                hub: '24절기',
+                hubNote: '입춘 · 춘분 · 하지 · 동지',
+            },
+            moon: {
+                title: (y) => `${y}년 삭과 보름 — 보름달 날짜와 D-day`,
+                desc: (y) => `${y}년 삭(그믐)과 보름의 날짜와 시각을 날짜순으로. 다음 보름달까지 며칠 남았는지 함께 보여줍니다. 한국 표준시 기준.`,
+                h1: '삭과 보름',
+                lede: '달이 완전히 차는 순간과 완전히 비는 순간입니다. 날짜와 시각을 3년치로 담았습니다.',
+                crumb: '삭과 보름',
+                hub: '삭과 보름',
+                hubNote: '보름달 · 그믐달',
+            },
+            meteor: {
+                title: (y) => `${y}년 유성우 — 극대기 날짜와 D-day`,
+                desc: (y) => `${y}년 유성우 극대기를 날짜와 시각까지 날짜순으로. 페르세우스자리·쌍둥이자리 유성우가 언제인지, 다음까지 며칠 남았는지 봅니다.`,
+                h1: '유성우 극대기',
+                lede: '유성우가 가장 많이 떨어지는 순간입니다. 시간당 몇 개까지 보이는지 함께 적었습니다.',
+                crumb: '유성우',
+                hub: '유성우',
+                hubNote: '페르세우스자리 · 쌍둥이자리',
+            },
+        },
         skyHomeCap: '하늘',
         skyHomeH2: '다가오는 절기와 삭망',
         termsCap: (y, n) => `${y}년 · 절기 ${n}개`,
@@ -206,12 +244,46 @@ const L = {
         crumbCountry: (c) => `${c.name} public holidays`,
 
         /* --- 하늘 --- */
-        skyTitle: (y) => `Solar Terms and Moon Phases ${y}`,
-        skyDesc: (y) => `All 24 solar terms for ${y} with new and full moons and meteor shower peaks, in date order, with the days until the next one. Times in UTC.`,
-        skyH1: 'Solar Terms and Moon Phases',
-        skyLede: 'The 24 solar terms, new and full moons, and meteor shower peaks. See at a glance how long until the next one.',
-        skyCrumb: 'solar terms and moon phases',
-        skyLink: 'All solar terms and moon phases →',
+        skyTitle: (y) => `The Sky in ${y} — Solar Terms, Moons, Meteors`,
+        skyDesc: (y) => `The 24 solar terms, new and full moons and meteor shower peaks of ${y}. Pick a kind to see three years in date order, with the days until the next one.`,
+        skyH1: 'The Sky',
+        skyLede: 'Solar terms, moon phases and meteor showers. Pick a kind to see three years in date order.',
+        skyCrumb: 'the sky',
+        skyLink: 'The whole sky →',
+        skyTopicsCap: 'Kinds',
+        skyTopicsH2: 'Browse by kind',
+        skyBackHub: 'The whole sky →',
+        skyCount: (n) => `${n}`,
+
+        sky: {
+            term: {
+                title: (y) => `The 24 Solar Terms of ${y} — Dates and D-day`,
+                desc: (y) => `Every one of the 24 solar terms in ${y} with its exact date and time, in date order, and the days until the next one. Times in UTC.`,
+                h1: 'The 24 Solar Terms',
+                lede: 'The 24 solar terms, from Start of Spring to Great Cold, with the moment each one falls. Three years of them.',
+                crumb: 'solar terms',
+                hub: 'Solar terms',
+                hubNote: 'Equinoxes and solstices',
+            },
+            moon: {
+                title: (y) => `New and Full Moons ${y} — Dates and D-day`,
+                desc: (y) => `Every new and full moon of ${y} with its exact date and time, in date order, and the days until the next full moon. Times in UTC.`,
+                h1: 'New and Full Moons',
+                lede: 'The moment the Moon is exactly full, and the moment it is exactly new. Three years of them.',
+                crumb: 'moon phases',
+                hub: 'Moon phases',
+                hubNote: 'Full moons and new moons',
+            },
+            meteor: {
+                title: (y) => `Meteor Showers ${y} — Peak Dates and D-day`,
+                desc: (y) => `Every meteor shower peak in ${y} with its exact date and time — Perseids, Geminids and the rest — and the days until the next one. Times in UTC.`,
+                h1: 'Meteor Shower Peaks',
+                lede: 'The moment each shower peaks, with how many meteors an hour to expect in good conditions.',
+                crumb: 'meteor showers',
+                hub: 'Meteor showers',
+                hubNote: 'Perseids and Geminids',
+            },
+        },
         skyHomeCap: 'The sky',
         skyHomeH2: 'Coming up in the sky',
         termsCap: (y, n) => `${y} · ${n} solar terms`,
@@ -290,7 +362,7 @@ ${picker(t, label)}
 }
 
 /* 선택기. <ul> 은 늘 비워 두고 dday.js 가 countries.json 으로 채운다 —
-   204개 <li> 를 410개 페이지에 인라인하면 HTML 만 7MB 가 된다.
+   204개 <li> 를 418개 페이지에 인라인하면 HTML 만 7MB 가 된다.
    자바스크립트가 없으면 선택기는 빈 채로 남지만, 첫 화면의 국가 목록은
    HTML 에 그대로 박혀 있어서 거기서 고를 수 있다. */
 function picker(t, label) {
@@ -568,31 +640,62 @@ const groupBy = (list, key) => {
     return m;
 };
 
-function skyPage(t, sky) {
+/* 하늘의 세 갈래.
+   slug 는 config 의 EXTRA · key 는 sky.json 의 키 · kind 는 <tr data-sky> 의 값이고
+   card 는 그 갈래 페이지의 카드에 놓을 줄이다. 넷이 서로 어긋나면 조용히 반쪽이 되므로
+   한 곳에 적어 두고 gen-pages · gen-card · check-pages 가 같이 본다. */
+export const SKY_TOPICS = [
+    { slug: 'term',   key: 'terms',   kind: 'term',   cap: 'termsCap',   h2: 'termsH2',
+      card: [['dtTerm', 'next-term']] },
+    { slug: 'moon',   key: 'moons',   kind: 'moon',   cap: 'moonsCap',   h2: 'moonsH2',
+      card: [['dtNew', 'next-new'], ['dtFull', 'next-full']] },
+    { slug: 'meteor', key: 'showers', kind: 'shower', cap: 'showersCap', h2: 'showersH2',
+      card: [['dtShower', 'next-shower']] },
+];
+
+/* 갈래마다 행 모양이 다르다 — 절기는 분점·지점 배지가 붙고, 삭망은 이름이 자료가
+   아니라 f 플래그에서 나오고, 유성우는 시간당 개수가 붙는다. */
+function skyBuild(t, topic) {
+    if (topic.slug === 'term') {
+        return (e) => {
+            const badge = CARDINAL[e.k]
+                ? `<span class="cardinal">${esc(t.cardinal[CARDINAL[e.k]])}</span>` : '';
+            return skyRow(t, e, 'term', t.lang === 'en' ? e.e : e.n, e.h, badge);
+        };
+    }
+    if (topic.slug === 'moon') {
+        return (e) => skyRow(t, e, 'moon', e.f ? t.fullMoon : t.newMoon, e.f ? t.han.full : t.han.new);
+    }
+    return (e) => skyRow(t, e, 'shower', t.showerName(t.lang === 'en' ? e.e : e.n), t.zhr(e.z));
+}
+
+const skyCrumbs = (t, slug, name) => ({
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+        { '@type': 'ListItem', position: 1, name: SITE, item: `${BASE}${t.dir}/` },
+        { '@type': 'ListItem', position: 2, name: t.skyCrumb, item: url(t.lang, 'sky/') },
+        ...(slug === 'sky/' ? [] : [{ '@type': 'ListItem', position: 3, name, item: url(t.lang, slug) }]),
+    ],
+});
+
+/* -------------------------------------------------------------- 하늘 허브
+   표를 이고 있지 않다. 176건을 한 URL 에 몰아 두면 어느 검색어에도 정확히
+   대응하지 못해서 갈래로 쪼갰고, 여기는 그 갈래로 보내는 자리만 맡는다.
+
+   "다가오는" 칸은 첫 화면과 같은 것이다 — dday.js 의 initSkyHome 이 #skylist 를
+   보고 sky.json 을 받아 채운다. 두 화면이 같은 코드를 쓰므로 답이 갈라지지 않는다. */
+function skyHubPage(t, sky) {
     const slug = 'sky/';
-    const by = (list) => groupBy(list, (e) => skyDate(e, t));
-
-    const terms = skyGroup(t, by(sky.terms), t.termsCap, t.termsH2, (e) => {
-        const badge = CARDINAL[e.k]
-            ? `<span class="cardinal">${esc(t.cardinal[CARDINAL[e.k]])}</span>` : '';
-        return skyRow(t, e, 'term', t.lang === 'en' ? e.e : e.n, e.h, badge);
-    });
-    const moons = skyGroup(t, by(sky.moons), t.moonsCap, t.moonsH2, (e) =>
-        skyRow(t, e, 'moon', e.f ? t.fullMoon : t.newMoon, e.f ? t.han.full : t.han.new));
-    const showers = skyGroup(t, by(sky.showers), t.showersCap, t.showersH2, (e) =>
-        skyRow(t, e, 'shower', t.showerName(t.lang === 'en' ? e.e : e.n), t.zhr(e.z)));
-
-    const crumbs = {
-        '@context': 'https://schema.org',
-        '@type': 'BreadcrumbList',
-        itemListElement: [
-            { '@type': 'ListItem', position: 1, name: SITE, item: `${BASE}${t.dir}/` },
-            { '@type': 'ListItem', position: 2, name: t.skyCrumb, item: url(t.lang, slug) },
-        ],
-    };
+    const links = SKY_TOPICS.map((topic) => {
+        const s = t.sky[topic.slug];
+        return `      <li><a href="${t.dir}/sky/${topic.slug}/">${esc(s.hub)}` +
+            `<span class="en">${esc(s.hubNote)}</span>` +
+            `<span class="cc">${esc(t.skyCount(sky[topic.key].length))}</span></a></li>`;
+    }).join('\n');
 
     return `${head(t, { title: t.skyTitle(MID), desc: t.skyDesc(MID), slug, card: 'sky', alt: `${t.skyCrumb} — ${SITE}` })}
-<body data-sky="1">
+<body data-sky-hub="1">
 
 ${top(t, { slug, label: esc(t.pickerLabel) })}
 
@@ -601,24 +704,21 @@ ${top(t, { slug, label: esc(t.pickerLabel) })}
   <h1>${esc(t.skyH1)}</h1>
   <p class="lede">${esc(t.skyLede)}</p>
 
-  <div class="now" id="now">
-    <div class="asof">${esc(t.checking)}</div>
-    <div class="verdict">${esc(t.skyVerdict)}</div>
-    <dl class="pair">
-      <dt>${esc(t.dtTerm)}</dt><dd id="next-term"><em>${esc(t.computing)}</em></dd>
-      <dt>${esc(t.dtNew)}</dt><dd id="next-new"><em>${esc(t.computing)}</em></dd>
-      <dt>${esc(t.dtFull)}</dt><dd id="next-full"><em>${esc(t.computing)}</em></dd>
-      <dt>${esc(t.dtShower)}</dt><dd id="next-shower"><em>${esc(t.computing)}</em></dd>
-    </dl>
-  </div>
+  <section id="sky">
+    <span class="cap">${esc(t.skyHomeCap)}</span>
+    <h2>${esc(t.skyHomeH2)}</h2>
+    <ul class="worldwide" id="skylist"></ul>
+  </section>
+
+  <section>
+    <span class="cap">${esc(t.skyTopicsCap)}</span>
+    <h2>${esc(t.skyTopicsH2)}</h2>
+    <ul class="countries">
+${links}
+    </ul>
+  </section>
 
   <p class="note">${esc(t.skyNote)}</p>
-
-${terms}
-
-${moons}
-
-${showers}
 
   <section>
     <p><a href="${t.dir}/#countries">${esc(t.otherCountries)}</a></p>
@@ -630,7 +730,7 @@ ${showers}
   </div>
 </main>
 
-<script type="application/ld+json">${JSON.stringify(crumbs)}</script>
+<script type="application/ld+json">${JSON.stringify(skyCrumbs(t, slug))}</script>
 <script src="/shared/dday.js"></script>
 <script src="/shared/contact.js"></script>
 </body>
@@ -638,7 +738,58 @@ ${showers}
 `;
 }
 
-/* -------------------------------------------------------------- 첫 화면 */
+/* ----------------------------------------------------------- 하늘 갈래 한 장
+   자료는 허브와 같은 sky.json 한 벌이고, 여기서는 갈래 하나만 3년치로 편다.
+   카드 줄도 그 갈래 것만 둔다 — dday.js 의 fill() 이 없는 id 를 그냥 건너뛴다. */
+function skyTopicPage(t, sky, topic) {
+    const slug = `sky/${topic.slug}/`;
+    const s = t.sky[topic.slug];
+    const by = groupBy(sky[topic.key], (e) => skyDate(e, t));
+    const body = skyGroup(t, by, t[topic.cap], t[topic.h2], skyBuild(t, topic));
+
+    const pairs = topic.card.map(([label, id]) =>
+        `      <dt>${esc(t[label])}</dt><dd id="${id}"><em>${esc(t.computing)}</em></dd>`).join('\n');
+
+    return `${head(t, { title: s.title(MID), desc: s.desc(MID), slug, card: `sky-${topic.slug}`, alt: `${s.crumb} — ${SITE}` })}
+<body data-sky="1">
+
+${top(t, { slug, label: esc(t.pickerLabel) })}
+
+<main class="wrap">
+
+  <h1>${esc(s.h1)}</h1>
+  <p class="lede">${esc(s.lede)}</p>
+
+  <div class="now" id="now">
+    <div class="asof">${esc(t.checking)}</div>
+    <div class="verdict">${esc(t.skyVerdict)}</div>
+    <dl class="pair">
+${pairs}
+    </dl>
+  </div>
+
+  <p class="note">${esc(t.skyNote)}</p>
+
+${body}
+
+  <section>
+    <p><a href="${t.dir}/sky/">${esc(t.skyBackHub)}</a></p>
+    <p><a href="${t.dir}/#countries">${esc(t.otherCountries)}</a></p>
+  </section>
+
+  <div class="foot">
+    <p>${esc(t.skyFoot)}</p>
+    <p>${t.contact} ${CONTACT}</p>
+  </div>
+</main>
+
+<script type="application/ld+json">${JSON.stringify(skyCrumbs(t, slug, s.crumb))}</script>
+<script src="/shared/dday.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>
+`;
+}
 
 function homePage(t, index, generated) {
     const n = index.length;
@@ -798,11 +949,18 @@ for (const lang of ['ko', 'en']) {
         count++;
     }
 
-    /* 하늘 페이지. 국가 축이 아니라 전 세계 공통 축이라 자료가 한 벌이다. */
+    /* 하늘. 국가 축이 아니라 전 세계 공통 축이라 자료가 한 벌인데, 갈래가 셋이라
+       페이지는 넷이다 — 허브 하나와 갈래 셋. 허브는 표를 이고 있지 않다. */
     const skyDir = join(root, 'sky');
     mkdirSync(skyDir, { recursive: true });
-    writeFileSync(join(skyDir, 'index.html'), skyPage(t, sky));
+    writeFileSync(join(skyDir, 'index.html'), skyHubPage(t, sky));
     count++;
+    for (const topic of SKY_TOPICS) {
+        const dir = join(skyDir, topic.slug);
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, 'index.html'), skyTopicPage(t, sky, topic));
+        count++;
+    }
 
     mkdirSync(root, { recursive: true });
     writeFileSync(join(root, 'index.html'), homePage(t, sorted, generated));

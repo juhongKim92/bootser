@@ -202,9 +202,20 @@ function homeCard() {
 
 const countries = JSON.parse(readFileSync(join(DATA, 'countries.json'), 'utf8'));
 
+/* 하늘은 허브 하나와 갈래 셋이다. 이름은 gen-pages 의 SKY_TOPICS 와 짝이지만
+   여기서 따로 적는다 — 거기서 가져오면 그 파일이 카드를 다시 그리게 만든다
+   (gen-pages 는 생성기라 import 하는 순간 412개 HTML 이 다시 쓰인다).
+   짝이 어긋나면 check-pages 가 "페이지가 가리키는데 파일이 없다" 로 문다. */
+const SKY_CARDS = [
+    ['sky',        'SKY',    'SOLAR TERMS, MOON PHASES AND METEOR SHOWERS'],
+    ['sky-term',   'TERM',   'THE 24 SOLAR TERMS'],
+    ['sky-moon',   'MOON',   'NEW AND FULL MOONS'],
+    ['sky-meteor', 'METEOR', 'METEOR SHOWER PEAKS'],
+];
+
 const out = [
     ['home.png', homeCard()],
-    ['sky.png', card({ code: 'SKY', name: 'SOLAR TERMS, MOON PHASES AND METEOR SHOWERS' })],
+    ...SKY_CARDS.map(([file, code, name]) => [`${file}.png`, card({ code, name })]),
     ...countries.map((c) => [
         `${c.code.toLowerCase()}.png`,
         card({ code: c.code, name: normalize(c.name) }),

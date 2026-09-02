@@ -2693,6 +2693,54 @@
   </url>
 
   <url>
+    <loc>https://this-is-the.day/sky/meteor/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/meteor/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/meteor/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/meteor/"/>
+    <lastmod>2026-09-02</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/sky/meteor/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/meteor/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/meteor/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/meteor/"/>
+    <lastmod>2026-09-02</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/sky/moon/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/moon/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/moon/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/moon/"/>
+    <lastmod>2026-09-02</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/sky/moon/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/moon/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/moon/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/moon/"/>
+    <lastmod>2026-09-02</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/sky/term/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/term/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/term/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/term/"/>
+    <lastmod>2026-09-02</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/sky/term/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/term/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/term/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/term/"/>
+    <lastmod>2026-09-02</lastmod>
+  </url>
+
+  <url>
     <loc>https://this-is-the.day/sl/</loc>
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sl/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sl/"/>

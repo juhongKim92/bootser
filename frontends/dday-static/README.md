@@ -32,7 +32,7 @@ tools/                     전부 node 내장 모듈만 쓴다 (npm install 없�
 ├── gen-vsop87.mjs         CDS VI/81   → vsop87.mjs (한 번 돌리고 마는 도구)
 ├── sky-fixture.mjs        분점·지점 공표 시각 12건 — 검사 전용
 ├── gen-sky.mjs            astro.mjs   → public/data/sky.json
-├── gen-pages.mjs          data        → 한국어·영어 두 벌의 HTML (412개)
+├── gen-pages.mjs          data        → 한국어·영어 두 벌의 HTML (418개)
 ├── gen-sitemap.mjs        git 커밋 날짜 → public/sitemap.xml
 ├── gen-favicon.mjs        favicon-art.mjs → ico · svg · png 넷
 ├── favicon-art.mjs        16×16 픽셀맵 (모든 크기의 원화)
@@ -41,13 +41,14 @@ tools/                     전부 node 내장 모듈만 쓴다 (npm install 없�
 ├── png.mjs                손으로 쓴 PNG 인코더 — 파비콘과 카드가 함께 쓴다
 ├── harness.mjs            node:vm DOM·fetch 스텁 — 브라우저 없이 페이지를 돌린다
 ├── inject-beacon.mjs      Cloudflare 웹 분석 비콘 주입 (빌드 단계)
-└── check-pages.mjs        배포 전 검사 412개 페이지
+└── check-pages.mjs        배포 전 검사 418개 페이지
 
 public/
 ├── index.html             생성물 — 국가 목록 + 감지된 국가 요약 카드 (한국어)
 ├── {cc}/index.html        생성물 — 국가별 공휴일·황금연휴 (3년치, HTML 에 박혀 있다)
 ├── en/index.html          생성물 — 영어 첫 화면
-├── {sky,en/sky}/index.html 생성물 — 절기·삭망·유성우 (국가 축이 아니다)
+├── {sky,en/sky}/index.html 생성물 — 하늘 허브 (국가 축이 아니다. 표는 없다)
+├── sky/{term,moon,meteor}/ 생성물 — 갈래별 3년치 (검색어가 갈래로 갈린다)
 ├── en/{cc}/index.html     생성물 — 영어 국가 페이지
 ├── 404.html · en/404.html 생성물 — 언어 칸마다 하나씩
 ├── card/*.png             생성물 — og:image 공유 카드 (1200×630, 언어 무관 한 벌)
@@ -124,7 +125,7 @@ Workers Builds 가 push 를 받아 배포한다. 설정 네 칸이 전부인데,
 
 빌드 명령에 검사를 물려 두었으므로 **깨진 페이지는 배포되지 않는다.**
 `inject-beacon.mjs` 는 검사 뒤에 와야 한다 — 커밋된 HTML 을 제자리에서 고치기 때문에
-먼저 돌리면 412개가 전부 수정본이 된다.
+먼저 돌리면 418개가 전부 수정본이 된다.
 
 빌드 단계에서는 `gen-holidays` · `gen-sky` · `gen-pages` 를 돌리지 않는다. 생성물이 이미 커밋돼
 있고, 빌드 때마다 Nager 를 1224번 치면 자료가 조용히 바뀌어 배포될 수 있다.
@@ -231,7 +232,7 @@ hreflang 세 줄(ko · en · x-default→en)이 **양쪽에 똑같이** 들어�
 
 ## 검사
 
-`tools/check-pages.mjs` 가 412개 페이지를 브라우저 없이 돌려 본다.
+`tools/check-pages.mjs` 가 418개 페이지를 브라우저 없이 돌려 본다.
 jsdom 을 쓰지 않는다 — `node:vm` + 최소 DOM·fetch 스텁이면 충분하고, 의존성이 늘지 않는다.
 
 보는 것:

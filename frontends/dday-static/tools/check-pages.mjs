@@ -11,6 +11,8 @@
         (파비콘은 파일까지 열어 정사각 + 48 의 배수인지 본다 — 구글 검색결과 아이콘 조건)
      4.5. og:image · twitter:card 가 있고, 가리키는 공유 카드가 실제로 있으며
         HTML 이 적어 둔 크기와 PNG 머리의 크기가 같나
+     4.6. 하늘 허브가 표를 이고 있지 않고 세 갈래로 다 링크하나, 그리고 갈래
+        페이지가 제 갈래의 자료만 담고 제 갈래의 카드 줄만 두었나
      5. HTML 표의 날짜 집합이 data/<CC>.json 과 정확히 같나
         (생성기가 자료를 흘리거나 겹쳐 쓰지 않았나)
      5.5. 황금연휴가 스스로 앞뒤가 맞나 — 3일 이상인가, 우리가 담은 공휴일에
@@ -58,8 +60,17 @@ const ICON_LINKS = [
 const NEED_IDS = {
     country: ['picker', 'now', 'next', 'prev'],
     home: ['picker', 'home', 'tcap', 'tnote', 'tlist', 'csearch', 'clist', 'cnone', 'sky', 'skylist'],
-    sky: ['picker', 'now', 'next-term', 'next-new', 'next-full', 'next-shower'],
+    /* 하늘 허브는 표도 카드도 없다. 첫 화면과 같은 #skylist 하나로 굴러간다. */
+    sky: ['picker', 'skylist'],
+    'sky/term': ['picker', 'now', 'next-term'],
+    'sky/moon': ['picker', 'now', 'next-new', 'next-full'],
+    'sky/meteor': ['picker', 'now', 'next-shower'],
 };
+
+/* 하늘 갈래. gen-pages 의 SKY_TOPICS 와 짝이지만 여기서 따로 적는다 —
+   거기서 가져오면 둘이 같이 틀려도 통과한다. */
+const SKY_KIND = { 'sky/term': 'term', 'sky/moon': 'moon', 'sky/meteor': 'shower' };
+const SKY_DATA = { 'sky/term': 'terms', 'sky/moon': 'moons', 'sky/meteor': 'showers' };
 
 /* 슬러그를 언어와 갈래로 가른다.  '' | 'en' | 'kr' | 'en/kr' | 'sky' | 'en/sky'
    갈래가 셋이다 — 첫 화면 · 국가 페이지 · 국가가 아닌 페이지(EXTRA).
@@ -345,7 +356,7 @@ for (const { page, lang, slug, kind, label } of ALL) {
     /* 4.5. 공유 카드. 기대하는 이름을 여기서 따로 짓는다 —
        gen-pages 가 쓴 값을 가져다 쓰면 둘이 같이 틀려도 통과한다.
        og:image 는 절대 주소여야 한다. 상대 주소면 카카오톡·페이스북이 못 읽는다. */
-    const wantCard = slug === '' ? 'home' : slug;
+    const wantCard = slug === '' ? 'home' : slug.split('/').join('-');
     cardsUsed.add(wantCard);
     for (const need of [`property="og:image" content="${BASE}/card/${wantCard}.png"`,
                         'property="og:image:width" content="1200"',
@@ -387,35 +398,55 @@ for (const { page, lang, slug, kind, label } of ALL) {
         continue;
     }
 
-    /* ------------------------------------------------------------ 하늘 페이지
-       국가 축이 아니라 전 세계 공통 축이라 자료가 한 벌이고, 갈리는 것은 날짜뿐이다
-       (ko=KST · en=UTC). 여기서는 "표가 자료와 같은가" 와 "카드가 표와 같은 답을
-       내는가" 를 본다. 자료 자체의 검산은 아래 천문 검산점 칸에서 따로 한다. */
+    /* ------------------------------------------------------------ 하늘 허브
+       표를 이고 있지 않다 — 176건을 한 URL 에 몰아 두면 어느 검색어에도 정확히
+       대응하지 못해서 갈래로 내렸다. 여기서 볼 것은 셋이다.
+       표가 정말 없나(있으면 갈래 페이지와 겹친다) · 세 갈래로 다 링크하나
+       (빠지면 그 갈래는 sitemap 에만 있는 쪽이 된다) · 첫 화면과 같은 손잡이를 쓰나. */
     if (kind === 'sky') {
+        if (r.dday.isSky) bad(label, 'dday.js 가 허브를 갈래 페이지로 잡았다');
+        /* 실제 행은 `<tr data-d="..." data-sky="...">` 다. data-sky 가 <tr 바로
+           뒤에 온다고 보면 아무것도 안 잡힌다 — 처음에 그렇게 썼다가 일부러
+           깨뜨려 보고서야 알았다. 갈래 쪽 검사와 같은 무늬를 쓴다. */
+        const rows = (html.match(/<tr data-d="[\d-]+" data-sky="[a-z]+">/g) || []).length;
+        if (rows) bad(label, `허브에 하늘 표 ${rows}행이 있다 — 갈래 페이지와 겹친다`);
+        for (const t of Object.keys(SKY_KIND)) {
+            const href = `${dir}/${t}/`;
+            if (!html.includes(`href="${href}"`)) bad(label, `갈래로 가는 링크가 없다: ${href}`);
+        }
+        continue;
+    }
+
+    /* -------------------------------------------------------- 하늘 갈래 한 장
+       국가 축이 아니라 전 세계 공통 축이라 자료가 한 벌이고, 갈리는 것은 날짜뿐이다
+       (ko=KST · en=UTC). 여기서는 "표가 그 갈래의 자료와 정확히 같은가" 와 "카드가
+       표와 같은 답을 내는가" 를 본다. 자료 자체의 검산은 아래 천문 검산점 칸이 한다. */
+    if (SKY_KIND[kind]) {
         if (!r.dday.isSky) bad(label, 'dday.js 가 하늘 페이지로 알아보지 못했다');
         const zone = lang === 'en' ? 'utc' : 'kst';
+        const only = SKY_KIND[kind];
+        const mine = SKY[SKY_DATA[kind]];
 
-        const want = [
-            ...SKY.terms.map((e) => `${e[zone]}|term`),
-            ...SKY.moons.map((e) => `${e[zone]}|moon`),
-            ...SKY.showers.map((e) => `${e[zone]}|shower`),
-        ];
+        const want = mine.map((e) => `${e[zone]}|${only}`);
         const got = [...html.matchAll(/<tr data-d="([\d-]+)" data-sky="([a-z]+)">/g)]
             .map((m) => `${m[1]}|${m[2]}`);
         const sortKey = (a) => [...a].sort().join(',');
         if (sortKey(got) !== sortKey(want)) {
             bad(label, `하늘 표 ${got.length}행 / 자료 ${want.length}건 — 집합이 다르다 (${zone} 기준)`);
         }
-        /* 갈래마다 날짜순이어야 한다. 연도 구획이 셋이라 눈으로는 안 보인다. */
-        for (const g of ['term', 'moon', 'shower']) {
-            const seq = got.filter((x) => x.endsWith('|' + g)).map((x) => x.split('|')[0]);
-            const asc = [...seq].sort();
-            if (seq.join(',') !== asc.join(',')) bad(label, `하늘 표(${g})가 날짜순이 아니다`);
+        /* 다른 갈래가 새어 들어오면 갈래를 나눈 뜻이 없다 */
+        for (const g of got) {
+            if (!g.endsWith('|' + only)) { bad(label, `다른 갈래의 행이 섞였다: ${g}`); break; }
         }
-        /* 분점 둘 · 지점 둘, 해마다 넷 */
+        /* 날짜순이어야 한다. 연도 구획이 셋이라 눈으로는 안 보인다. */
+        const seq = got.map((x) => x.split('|')[0]);
+        if (seq.join(',') !== [...seq].sort().join(',')) bad(label, '하늘 표가 날짜순이 아니다');
+
+        /* 분점 둘 · 지점 둘, 해마다 넷 — 절기 페이지에만 있어야 한다 */
         const cardinals = (html.match(/class="cardinal"/g) || []).length;
-        if (cardinals !== SKY.years.length * 4) {
-            bad(label, `분점·지점 배지 ${cardinals}개 / 기대 ${SKY.years.length * 4}개`);
+        const wantCardinals = only === 'term' ? SKY.years.length * 4 : 0;
+        if (cardinals !== wantCardinals) {
+            bad(label, `분점·지점 배지 ${cardinals}개 / 기대 ${wantCardinals}개`);
         }
 
         /* 카드. 기대값은 sky.json 에서 여기가 따로 뽑는다 —
@@ -430,13 +461,23 @@ for (const { page, lang, slug, kind, label } of ALL) {
             return best;
         };
         const w = WORDS[lang];
-        const lines = [
-            ['#next-term', nextOf(SKY.terms), (e) => (lang === 'en' ? e.e : e.n)],
-            ['#next-new', nextOf(SKY.moons.filter((m) => !m.f)), () => w.newMoon],
-            ['#next-full', nextOf(SKY.moons.filter((m) => m.f)), () => w.fullMoon],
-            ['#next-shower', nextOf(SKY.showers), (e) => (lang === 'en' ? e.e : e.n)],
-        ];
-        for (const [sel, e, name] of lines) {
+        const lines = {
+            'sky/term': [['#next-term', SKY.terms, (e) => (lang === 'en' ? e.e : e.n)]],
+            'sky/moon': [['#next-new', SKY.moons.filter((m) => !m.f), () => w.newMoon],
+                         ['#next-full', SKY.moons.filter((m) => m.f), () => w.fullMoon]],
+            'sky/meteor': [['#next-shower', SKY.showers, (e) => (lang === 'en' ? e.e : e.n)]],
+        }[kind];
+
+        /* 다른 갈래의 카드 줄이 남아 있으면 안 된다 — 그 줄은 영영 '-' 로 남는다 */
+        for (const id of ['next-term', 'next-new', 'next-full', 'next-shower']) {
+            const mineIds = lines.map(([sel]) => sel.slice(1));
+            if (!mineIds.includes(id) && html.includes(`id="${id}"`)) {
+                bad(label, `이 갈래에 없는 카드 줄이 있다: #${id}`);
+            }
+        }
+
+        for (const [sel, items, name] of lines) {
+            const e = nextOf(items);
             const el = r.doc.querySelector(sel);
             const drawn = el ? (el.innerHTML || '') : '';
             if (!drawn) { bad(label, `${sel} 이 비어 있다`); continue; }
@@ -452,10 +493,10 @@ for (const { page, lang, slug, kind, label } of ALL) {
             }
         }
 
-        /* 오늘 칸 */
+        /* 오늘 칸 — 이 갈래의 자료만 본다 */
         const now = r.doc.cache.get('#now');
         const verdict = now.querySelector('.verdict').textContent;
-        const todays = [...SKY.terms, ...SKY.moons, ...SKY.showers].filter((e) => e[zone] === TODAY);
+        const todays = mine.filter((e) => e[zone] === TODAY);
         if (!todays.length && verdict !== w.skyNone) {
             bad(label, `오늘 아무것도 없는데 오늘 칸이 "${verdict}" 다`);
         }

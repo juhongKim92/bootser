@@ -28,8 +28,14 @@ export const YEARS = (now = new Date()) => {
    그 가정을 깬다. 한 군데 적어 두고 gen-pages · gen-sitemap · check-pages 가 같이 본다.
 
    두 글자가 아니어야 한다 — 국가 코드(ISO 3166-1 alpha-2)와 부딪히면 국가 페이지를
-   조용히 덮어쓴다. gen-pages 가 그것도 확인한다. */
-export const EXTRA = ['sky'];
+   조용히 덮어쓴다. gen-pages 가 그것도 확인한다.
+
+   하늘은 다시 갈래 셋으로 갈렸다. 176건을 한 URL 에 몰아 두면 어느 검색어에도
+   정확히 대응하지 못한다 — 유성우는 8월·12월에, 절기는 입춘·동지에 수요가 몰리는데
+   그 어느 것도 "절기와 삭망" 한 장으로는 받지 못했다. /sky/ 는 허브로 남고 표는
+   갈래로 내려갔다. 중첩 슬러그라 EXTRA 항목에 '/' 가 들어간다 — 아래 청소는
+   맨 앞 'sky' 로 걸려 하위까지 통째로 지우므로 그대로 맞는다. */
+export const EXTRA = ['sky', 'sky/term', 'sky/moon', 'sky/meteor'];
 
 /* 'Public' 만 남긴다. Nager 의 types 에는 Bank · Observance · Optional · School ·
    Authorities 가 섞여 있는데, 그건 공휴일이 아니라 관습일이거나 일부 직군만 쉬는 날이다.

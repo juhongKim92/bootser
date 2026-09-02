@@ -8,7 +8,7 @@
 
    **이 스크립트는 커밋된 HTML 을 제자리에서 고친다.** 배포 파이프라인의
    맨 마지막(검사 다음, wrangler deploy 직전)에 와야 한다. 먼저 돌리면
-   205개 HTML 이 전부 "커밋 안 된 수정본" 이 되어 gen-sitemap.mjs 의
+   420개 HTML 이 전부 "커밋 안 된 수정본" 이 되어 gen-sitemap.mjs 의
    lastmod 가 죄다 오늘로 찍힌다.
    ============================================================ */
 import { readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
