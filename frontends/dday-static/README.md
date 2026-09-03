@@ -46,6 +46,7 @@ tools/                     전부 node 내장 모듈만 쓴다 (npm install 없�
 ├── card-art.mjs           5×7 픽셀 대문자 글꼴 · 카드 규격 (원화)
 ├── png.mjs                손으로 쓴 PNG 인코더 — 파비콘과 카드가 함께 쓴다
 ├── harness.mjs            node:vm DOM·fetch 스텁 — 브라우저 없이 페이지를 돌린다
+├── serve.mjs              개발용 정적 서버 (배포에는 쓰이지 않는다)
 ├── inject-beacon.mjs      Cloudflare 웹 분석 비콘 주입 (빌드 단계)
 └── check-pages.mjs        배포 전 검사 544개 페이지
 
@@ -78,6 +79,87 @@ public/
 생성물도 커밋한다. 그래야 (1) Nager 가 죽어도 배포할 수 있고, (2) 이번 달에 어떤
 공휴일이 바뀌었는지 git diff 로 보이고, (3) `gen-sitemap.mjs` 가 `lastmod` 를
 커밋 날짜에서 뽑을 수 있다.
+
+## 로컬에서 보기
+
+### `index.html` 을 그냥 열면 CSS 가 하나도 안 붙는다
+
+고장이 아니다. 자산 링크가 전부 절대경로(`/shared/base.css`)라서 `file://` 로 열면
+드라이브 루트(`C:sharedase.css`)를 뒤진다. 페이지가 `/` · `/kr/` ·
+`/holiday/christmas/` 처럼 깊이가 다른 자리에 놓이므로 상대경로로 둘 수 없다 —
+깊이마다 `../` 를 다시 세야 하고, 그러면 생성기가 페이지마다 다른 링크를 찍어야 한다.
+
+**정적 서버로 띄우면 된다.** 저장소 루트에서:
+
+```bash
+npm run dev:dday-static
+```
+
+이 디렉터리 안에서라면 같은 것을 직접 부른다.
+
+```bash
+node tools/serve.mjs                # http://localhost:8000
+node tools/serve.mjs --port 8001    # 포트가 이미 잡혀 있을 때
+```
+
+의존성은 없다 — node 내장 모듈만 쓴다. `npm install` 도 필요 없다.
+(다른 프런트엔드의 `dev:*` 는 `npm run dev -w @booster/...` 로 워크스페이스에
+넘기는데, 여기는 `package.json` 이 없어서 워크스페이스 구성원이 아니다.
+그래서 루트 스크립트가 `node` 를 직접 부른다 — 일부러 그렇게 두었다.)
+
+### 켜고 끄기
+
+| | |
+| --- | --- |
+| 켜기 | 터미널에서 위 명령. 그 창은 서버가 도는 동안 붙잡혀 있는 게 정상이고 요청 로그가 찍힌다 |
+| 끄기 | 그 창에서 **Ctrl+C** |
+| 창을 잃어버렸을 때 | 아래 PowerShell 한 줄 |
+
+```powershell
+# 누가 8000 을 잡고 있나
+Get-NetTCPConnection -LocalPort 8000 -State Listen | Select-Object OwningProcess
+
+# 죽이기
+Get-NetTCPConnection -LocalPort 8000 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+```
+
+창을 따로 안 열고 떼어 놓으려면 `Start-Process node -ArgumentList 'frontends/dday-static/tools/serve.mjs' -WindowStyle Hidden`
+로 띄우고 위 명령으로 죽인다. 포트가 이미 잡혀 있으면 서버가 그 사실과 함께
+죽일 명령까지 찍고 멈춘다.
+
+### 볼 만한 주소
+
+| | |
+| --- | --- |
+| 첫 화면 | `/` · 영어 `/en/` |
+| 국가 | `/kr/` `/us/` |
+| 이름 축 | `/holiday/` · `/holiday/christmas/` · `/holiday/independence-day/` |
+| 순위 | `/rank/` |
+| 하늘 | `/sky/` · `/sky/term/` `/sky/moon/` `/sky/meteor/` `/sky/lunar/` |
+| 404 | 없는 주소를 아무거나 (`/en/…` 으로 들어가면 영어 안내가 나온다) |
+
+### 배포와 무엇이 같고 무엇이 다른가
+
+- **같다 — 404 흐름.** `wrangler.toml` 의 `not_found_handling = "404-page"` 를 흉내 내
+  경로를 거슬러 올라가며 가장 가까운 `404.html` 을 쓴다. 언어 칸마다 404 를 하나씩
+  둔 것이 실제로 맞는지 여기서 확인된다 — python 의 `http.server` 로는 볼 수 없다.
+- **다르다 — `_headers`.** 글꼴 `immutable` 같은 캐시 머리는 안 붙는다. 오히려 반대로
+  `Cache-Control: no-store` 를 붙인다. 고친 CSS 가 브라우저 캐시에 걸려 "왜 안 바뀌지"
+  로 시간을 버리는 쪽이 훨씬 잦다.
+- **다르다 — 비콘.** `inject-beacon.mjs` 는 빌드 단계에서만 돈다.
+- `serve.mjs` 는 **Cloudflare 빌드 명령에 없다.** 빌드가 돌리는 것은 `check-pages` 와
+  `inject-beacon` 뿐이다.
+
+### 화면을 고친 뒤
+
+HTML·CSS 를 고쳤으면 새로고침만 하면 된다. 다만 **`gen-pages.mjs` 의 템플릿을 고쳤으면
+다시 돌려야** 하고(`public/` 의 HTML 은 생성물이다), CSS 규칙 이름을 바꿨거나 지웠으면
+`check-pages` 의 **CSS 계약**(아래 「검사」 15·16번)이 문다 — 그건 화면으로만 확인되는
+것을 검사가 붙들고 있는 자리이므로, 규칙을 옮겼으면 그 목록도 같이 옮긴다.
+
+```bash
+node tools/gen-pages.mjs && node tools/check-pages.mjs
+```
 
 ## 자료 갱신
 

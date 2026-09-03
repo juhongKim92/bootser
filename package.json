@@ -10,6 +10,7 @@
     "dev:dday-web": "npm run dev -w @booster/dday-web",
     "build:dday-web": "npm run build -w @booster/dday-web",
     "dev:damagochi-web": "npm run dev -w @booster/damagochi-web",
-    "build:damagochi-web": "npm run build -w @booster/damagochi-web"
+    "build:damagochi-web": "npm run build -w @booster/damagochi-web",
+    "dev:dday-static": "node frontends/dday-static/tools/serve.mjs"
   }
 }
