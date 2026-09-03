@@ -25,6 +25,7 @@ import { BASE, PUB, DATA, YEARS, EXTRA, NAME_PAGE, today } from './config.mjs';
 import { CARDINAL } from './astro.mjs';
 import { CARD_W, CARD_H, CARD_DIR } from './card-art.mjs';
 import { NORM, NAMES, MIN, NAME_ROOT } from './holiday-names.mjs';
+import { flagImg } from './flags.mjs';
 
 const SITE = 'this is the day';
 const MID = YEARS()[1];                                   /* 표지로 삼을 해 = 올해 */
@@ -32,9 +33,11 @@ const MID = YEARS()[1];                                   /* 표지로 삼을 �
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-const flag = (cc) => /^[A-Z]{2}$/.test(cc)
-    ? String.fromCodePoint(0x1F1E6 + cc.charCodeAt(0) - 65, 0x1F1E6 + cc.charCodeAt(1) - 65)
-    : '';
+/* 국기. 예전에는 지역 표시 기호 두 개(이모지)였는데 **윈도우에서 국기로
+   그려지지 않는다** — 글리프를 합치지 않아서 'GH' 두 글자로 보였다.
+   지금은 우리 오리진의 SVG 다 (tools/flags.mjs · public/flags/).
+   목록은 lazy, 머리말처럼 첫 화면에 드는 자리는 eager 다. */
+const flag = (cc, opt) => (/^[A-Z]{2}$/.test(cc) ? flagImg(cc, opt) : '');
 
 const dow = (iso) => {
     const [y, m, d] = iso.split('-').map(Number);
@@ -108,6 +111,8 @@ const L = {
         searchHint: '국가 검색 — 한글·영어·코드',
         noCountry: '찾는 국가가 없습니다.',
         pickerLabel: '국가 선택',
+        /* 머리말의 축 탭. 자리가 좁으므로 짧게 — 긴 이름은 좁은 화면에서 밀린다. */
+        axes: { country: '국가', rank: '순위', name: '공휴일 이름', sky: '하늘' },
         title: (c, y) => `${y}년 ${c.ko} 공휴일 — 날짜와 D-day`,
         /* 뒷문장이 204개 페이지에서 똑같으면 구글이 무시하고 본문에서 스니펫을
            자체 생성한다 — CTR 통제권을 잃는다. 나라마다 실제로 다른 사실을 넣는다. */
@@ -150,9 +155,6 @@ const L = {
         nameHubDesc: (n, y, m) => `같은 이름의 공휴일을 쓰는 나라를 이름별로 모았습니다.`
             + ` 이름 ${n}가지와, ${y}년에 ${m}개국 이상이 함께 쉬는 날을 날짜순으로 봅니다.`,
         nameHubH1: '공휴일 이름으로 보기',
-        nameHubNote: '크리스마스 · 독립기념일 · 노동절',
-        axesCap: '다른 축',
-        axesH2: '나라 말고 다른 축으로 보기',
         nameHubLede: '크리스마스처럼 온 세계가 같은 날 쉬는 이름도 있고, 독립기념일처럼 나라마다 다른 날 쉬는 이름도 있습니다. 이름을 골라 들어가면 어느 나라가 언제 쉬는지 봅니다.',
         nameHubCrumb: '공휴일 이름',
         nameListCap: (n) => `이름 ${n}가지`,
@@ -195,7 +197,6 @@ const L = {
             + ` 가장 긴 황금연휴는 ${f.long.label} ${f.long.n}일입니다.`,
         rankH1: '나라끼리 견주기',
         rankLede: '국가 페이지는 한 나라만 보여 줍니다. 여기서는 담긴 나라 전부를 한 줄에 세워 봅니다.',
-        rankNoteShort: '공휴일이 많은 나라 · 가장 긴 연휴',
         rankCrumb: '나라끼리 견주기',
         rankLink: '나라끼리 견주기 →',
         rankNote: (y, n) => `${y}년 자료를 담긴 ${n}개국에 대해 세었습니다. 세는 단위는 "공휴일이 있는 날짜" 입니다 — 한 날짜에 공휴일이 둘 겹치는 나라가 있어 건수와는 다릅니다.`,
@@ -322,6 +323,7 @@ const L = {
         searchHint: 'Search — name or code',
         noCountry: 'No country matches.',
         pickerLabel: 'Country',
+        axes: { country: 'Countries', rank: 'Rankings', name: 'By name', sky: 'The sky' },
         title: (c, y) => `${c.name} Public Holidays ${y}`,
         /* fit 을 사슬로 건다 — 국가명이 44자인 곳(SH)이 있어서 한 벌로 쓰면 넘친다.
            덜 중요한 절이 먼저 빠지고, 나라가 하나 늘어도 다시 재지 않아도 된다. */
@@ -360,9 +362,6 @@ const L = {
         nameHubDesc: (n, y, m) => `Public holidays grouped by name across countries.`
             + ` ${n} names, plus the ${y} dates on which ${m} or more countries take the day off.`,
         nameHubH1: 'Holidays by name',
-        nameHubNote: 'Christmas · Independence Day · Labour Day',
-        axesCap: 'Other axes',
-        axesH2: 'Ways in other than by country',
         nameHubLede: 'Some names fall on the same day the world over, like Christmas. Others fall on a different day in every country, like Independence Day. Pick a name to see who takes it off and when.',
         nameHubCrumb: 'holidays by name',
         nameListCap: (n) => `${n} names`,
@@ -403,7 +402,6 @@ const L = {
             + ` The longest break runs ${f.long.n} days in ${f.long.label}.`,
         rankH1: 'Countries compared',
         rankLede: 'A country page shows one country. This one lines up every country in the data.',
-        rankNoteShort: 'Most holidays · longest breaks',
         rankCrumb: 'countries compared',
         rankLink: 'Countries compared →',
         rankNote: (y, n) => `Counted over ${y} for all ${n} countries in the data. The unit is “dates carrying a public holiday” — a few countries stack two holidays on one date, so this differs from a count of entries.`,
@@ -556,11 +554,36 @@ function head(t, { title, desc, slug, card, alt }) {
 </head>`;
 }
 
-function top(t, { slug, home, label }) {
+/* ------------------------------------------------------------------ 축 탭
+
+   축이 넷이 되면서(국가 · 순위 · 이름 · 하늘) 첫 화면에 「다른 축으로 보기」 칸을
+   두는 것으로는 모자라졌다. 그 칸은 첫 화면에만 있어서, 국가 페이지에서 순위로
+   가려면 첫 화면을 거쳐야 했다.
+
+   그래서 **모든 페이지의 머리말**로 올렸다. 지금 보고 있는 축에 aria-current 를
+   달아 두므로 어느 축에 있는지가 화면과 보조기술 양쪽에서 읽힌다.
+
+   순서는 자주 쓸 순이다 — 국가가 이 사이트의 본체이고, 순위는 한 장이라 값이 싸고,
+   이름 축은 60장이라 들어가면 오래 머문다. 하늘은 성격이 가장 다르니 끝이다. */
+const AXES = ['country', 'rank', 'name', 'sky'];
+const AXIS_HREF = { country: '/', rank: '/rank/', name: `/${NAME_ROOT}/`, sky: '/sky/' };
+
+function tabs(t, axis) {
+    return `    <nav class="tabs">
+${AXES.map((k) => {
+        const here = k === axis;
+        return `      <a class="tab${here ? ' here' : ''}" href="${t.dir}${AXIS_HREF[k]}"`
+            + `${here ? ' aria-current="page"' : ''}>${esc(t.axes[k])}</a>`;
+    }).join('\n')}
+    </nav>`;
+}
+
+function top(t, { slug, home, label, axis }) {
     const o = L[t.other];
     return `<div class="top"><div class="wrap">
   <a class="brand" href="${t.dir}/">${home ? '' : '← '}${SITE}</a>
-  <nav>
+${tabs(t, axis)}
+  <nav class="side">
 ${picker(t, label)}
     <a class="btn" href="${o.dir}/${slug}" hreflang="${o.lang}" lang="${o.lang}">${t.otherLabel}</a>
   </nav>
@@ -800,7 +823,7 @@ ${body}
     })}
 <body data-cc="${data.code}">
 
-${top(t, { slug, label: `<span class="flag">${flag(data.code)}</span>${esc(t.name(data))}` })}
+${top(t, { slug, axis: 'country', label: `${flag(data.code, { eager: true })}${esc(t.name(data))}` })}
 
 <main class="wrap">
 
@@ -969,7 +992,7 @@ function skyHubPage(t, sky) {
     return `${head(t, { title: t.skyTitle(MID), desc: t.skyDesc(MID), slug, card: 'sky', alt: `${t.skyCrumb} — ${SITE}` })}
 <body data-sky-hub="1">
 
-${top(t, { slug, label: esc(t.pickerLabel) })}
+${top(t, { slug, axis: 'sky', label: esc(t.pickerLabel) })}
 
 <main class="wrap">
 
@@ -1025,7 +1048,7 @@ function skyTopicPage(t, sky, topic) {
     return `${head(t, { title: s.title(MID), desc: s.desc(MID), slug, card: `sky-${topic.slug}`, alt: `${s.crumb} — ${SITE}` })}
 <body data-sky="1">
 
-${top(t, { slug, label: esc(t.pickerLabel) })}
+${top(t, { slug, axis: 'sky', label: esc(t.pickerLabel) })}
 
 <main class="wrap">
 
@@ -1228,7 +1251,7 @@ function chips(t, ccs, byCode) {
     return ccs
         .map((cc) => byCode.get(cc) || { code: cc, ko: cc, name: cc })
         .sort((a, b) => t.name(a).localeCompare(t.name(b), t.lang))
-        .map((c) => `<span class="one">${flag(c.code)} <a href="${t.dir}/${c.code.toLowerCase()}/">`
+        .map((c) => `<span class="one">${flag(c.code)}<a href="${t.dir}/${c.code.toLowerCase()}/">`
             + `${esc(t.name(c))}</a></span>`)
         .join('');
 }
@@ -1298,7 +1321,7 @@ ${table}
     })}
 <body data-list="name">
 
-${top(t, { slug, label: esc(t.pickerLabel) })}
+${top(t, { slug, axis: 'name', label: esc(t.pickerLabel) })}
 
 <main class="wrap">
 
@@ -1374,7 +1397,7 @@ function nameHubPage(t, names, together, main, generated) {
     })}
 <body data-list="hub">
 
-${top(t, { slug, label: esc(t.pickerLabel) })}
+${top(t, { slug, axis: 'name', label: esc(t.pickerLabel) })}
 
 <main class="wrap">
 
@@ -1424,7 +1447,7 @@ ${foot(t, generated)}
 function rankRows(t, rows, cell) {
     return rows.map((c, i) => `        <tr>
           <td class="no">${i + 1}</td>
-          <td class="who"><span class="flag">${flag(c.code)}</span><a href="${t.dir}/${c.code.toLowerCase()}/">${esc(t.name(c))}</a></td>
+          <td class="who">${flag(c.code)}<a href="${t.dir}/${c.code.toLowerCase()}/">${esc(t.name(c))}</a></td>
           <td class="len">${esc(cell(c))}</td>
         </tr>`).join('\n');
 }
@@ -1444,7 +1467,7 @@ ${rankRows(t, rows, cell)}
 function rankBreakTable(t, spans) {
     const rows = spans.map((w, i) => `        <tr data-s="${w.s}" data-e="${w.e}">
           <td class="no">${i + 1}</td>
-          <td class="who"><span class="flag">${flag(w.code)}</span><a href="${t.dir}/${w.code.toLowerCase()}/">${esc(t.name(w))}</a></td>
+          <td class="who">${flag(w.code)}<a href="${t.dir}/${w.code.toLowerCase()}/">${esc(t.name(w))}</a></td>
           <td class="range">${breakSpan(t, w.s, w.e)}</td>
           <td class="len">${esc(t.breakLen(w.n))}</td>
           <td class="mark"></td>
@@ -1481,7 +1504,7 @@ function rankPage(t, rank, main, generated) {
     })}
 <body data-list="rank">
 
-${top(t, { slug, label: esc(t.pickerLabel) })}
+${top(t, { slug, axis: 'rank', label: esc(t.pickerLabel) })}
 
 <main class="wrap">
 
@@ -1533,13 +1556,13 @@ ${foot(t, generated)}
 function homePage(t, index, generated) {
     const n = index.length;
     const links = index.map((c) =>
-        `      <li data-cc="${c.code}" data-key="${esc(searchKey(c))}"><a href="${t.dir}/${c.code.toLowerCase()}/">${flag(c.code)} ${esc(t.name(c))}<span class="cc">${c.code}</span></a></li>`
+        `      <li data-cc="${c.code}" data-key="${esc(searchKey(c))}"><a href="${t.dir}/${c.code.toLowerCase()}/">${flag(c.code)}<span class="cn">${esc(t.name(c))}</span><span class="cc">${c.code}</span></a></li>`
     ).join('\n');
 
     return `${head(t, { title: t.homeTitle(n), desc: t.homeDesc(n), slug: '', card: 'home', alt: SITE })}
 <body>
 
-${top(t, { slug: '', home: true, label: esc(t.pickerLabel) })}
+${top(t, { slug: '', home: true, axis: 'country', label: esc(t.pickerLabel) })}
 
 <main class="wrap">
 
@@ -1560,15 +1583,6 @@ ${top(t, { slug: '', home: true, label: esc(t.pickerLabel) })}
     <h2>${esc(t.skyHomeH2)}</h2>
     <ul class="worldwide" id="skylist"></ul>
     <p><a href="${t.dir}/sky/">${esc(t.skyLink)}</a></p>
-  </section>
-
-  <section id="axes">
-    <span class="cap">${esc(t.axesCap)}</span>
-    <h2>${esc(t.axesH2)}</h2>
-    <ul class="countries">
-      <li><a href="${t.dir}/${NAME_ROOT}/">${esc(t.nameHubH1)}<span class="en">${esc(t.nameHubNote)}</span></a></li>
-      <li><a href="${t.dir}/rank/">${esc(t.rankH1)}<span class="en">${esc(t.rankNoteShort)}</span></a></li>
-    </ul>
   </section>
 
   <section id="countries">

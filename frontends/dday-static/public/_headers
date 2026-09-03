@@ -12,3 +12,9 @@
 # immutable 은 아니다 — 하루 두고 CDN 이 되받게 한다.
 /card/*
   Cache-Control: public, max-age=86400
+
+# 국기도 같다. 이름이 flags/{cc}.svg 로 고정이고, 국기 도안이 실제로 바뀌는 일이
+# 있다(2011 리비아 · 2021 아프가니스탄). 목록 페이지는 lazy 로 걸려 있어서 첫
+# 방문에 다 받지 않고, 그 뒤로는 이 캐시에서 온다.
+/flags/*
+  Cache-Control: public, max-age=86400

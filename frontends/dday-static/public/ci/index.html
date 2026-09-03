@@ -32,9 +32,15 @@
 
 <div class="top"><div class="wrap">
   <a class="brand" href="/">← this is the day</a>
-  <nav>
+    <nav class="tabs">
+      <a class="tab here" href="/" aria-current="page">국가</a>
+      <a class="tab" href="/rank/">순위</a>
+      <a class="tab" href="/holiday/">공휴일 이름</a>
+      <a class="tab" href="/sky/">하늘</a>
+    </nav>
+  <nav class="side">
     <details class="picker" id="picker">
-      <summary><span class="flag">🇨🇮</span>코트디부아르</summary>
+      <summary><img class="flag" src="/flags/ci.svg" width="20" height="15" alt="" loading="eager" decoding="async">코트디부아르</summary>
       <div class="panel">
         <input type="search" placeholder="국가 검색 — 한글·영어·코드" aria-label="국가 검색" autocomplete="off">
         <ul></ul>

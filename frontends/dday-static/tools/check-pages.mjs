@@ -167,6 +167,11 @@ check('favicon.svg', (file) => {
         [/td\.ev\{/, '하늘 표의 이름 칸 스타일이 없다'],
         [/\.cardinal\{/, '분점·지점 배지 스타일이 없다'],
         [/\.leap\{/, '윤달 배지 스타일이 없다 — 표에서 안 보인다'],
+        [/\.tab\{/, '축 탭 스타일이 없다'],
+        [/img\.flag\{/, '국기 스타일이 없다'],
+        [/img\.flag\{[^}]*border/, '국기에 테두리가 없다 — 흰 국기(일본)가 바탕에 묻힌다'],
+        [/\.tab\.here\{[^}]*font-weight/, '잡힌 축 탭이 굵기로도 갈리지 않는다 — 색만으로는 부족하다'],
+        [/\.top \.tabs\{[^}]*overflow-x/, '좁은 화면에서 축 탭이 굴러가지 않는다 — 머리말이 넘친다'],
         [/table\.who td\.name\{/, '이름 축 표의 이름 칸 스타일이 없다'],
         [/\.ccs\{/, '이름 축의 나라 칩 스타일이 없다 — 176개국이 한 줄로 붙는다'],
         [/\.ccs \.one::after\{/, '나라 칩 사이 구분점이 없다 — 이름들이 붙어 읽힌다'],
@@ -508,8 +513,14 @@ const RANK_REF = (() => {
 
 /* 이름 축 페이지의 이름 칸에서 나라 코드를 뽑는다. 칩은 `<span class="one">` 하나에
    국기와 <a> 하나씩이라 좁은 무늬로 충분하다. */
-const ccsIn = (cell) => [...cell.matchAll(/<span class="one">[^<]*<a href="(?:\/en)?\/([a-z]{2})\/">/g)]
-    .map((m) => m[1].toUpperCase());
+const ccsIn = (cell) => [...cell.matchAll(
+    /<span class="one"><img class="flag" src="\/flags\/([a-z]{2})\.svg"[^>]*><a href="(?:\/en)?\/([a-z]{2})\/">/g
+)].map((m) => {
+    /* 국기와 링크가 같은 나라를 가리키는지 여기서 함께 본다 — 갈리면
+       "가나" 옆에 다른 나라 국기가 붙은 채로 통과한다 */
+    if (m[1] !== m[2]) bad("/holiday/", `나라 칩의 국기(${m[1]})와 링크(${m[2]})가 다르다`);
+    return m[2].toUpperCase();
+});
 
 /* 이름 칸의 앞머리(칩 앞)에 적힌 나라 수. "178개국" · "178 countries" */
 const countIn = (cell) => {
@@ -539,8 +550,8 @@ const inShownOrder = (ccs, lang) => {
 
 /* 순위 표의 행. 열이 셋(순위 · 국가 · 값)인 표와 다섯(연휴)인 표를 따로 뽑는다. */
 const rankRowsOf = (body) => [...body.matchAll(
-    /<td class="no">(\d+)<\/td>\s*<td class="who"><span class="flag">[^<]*<\/span><a href="[^"]*\/([a-z]{2})\/">([^<]*)<\/a><\/td>\s*<td class="len">([^<]*)<\/td>/g
-)].map((m) => ({ no: +m[1], cc: m[2].toUpperCase(), shown: m[3], cell: m[4] }));
+    /<td class="no">(\d+)<\/td>\s*<td class="who"><img class="flag" src="\/flags\/([a-z]{2})\.svg"[^>]*><a href="[^"]*\/([a-z]{2})\/">([^<]*)<\/a><\/td>\s*<td class="len">([^<]*)<\/td>/g
+)].map((m) => ({ no: +m[1], flagCc: m[2].toUpperCase(), cc: m[3].toUpperCase(), shown: m[4], cell: m[5] }));
 
 /* ------------------------------------------------------------ 페이지 순회 */
 const linkedFromHome = { ko: new Set(), en: new Set() };
@@ -614,6 +625,43 @@ for (const { page, lang, slug, kind, label } of ALL) {
         }
     }
 
+    /* 1.7. 축 탭 — 모든 페이지 머리말에 넷이 있고, 지금 축 하나만 잡혀 있어야 한다.
+       기대하는 축을 여기 따로 적는다: gen-pages 가 넘기는 값을 가져다 쓰면
+       거기서 잘못 넘겨도 통과한다. 탭이 통째로 빠지거나 엉뚱한 축이 잡히는 것은
+       화면으로만 보이는 종류의 고장이라 검사 말고 잡을 데가 없다. */
+    {
+        const wantAxis = {
+            home: 'country', country: 'country', rank: 'rank',
+            holiday: 'name', name: 'name',
+            sky: 'sky', 'sky/term': 'sky', 'sky/moon': 'sky', 'sky/meteor': 'sky', 'sky/lunar': 'sky',
+        }[kind];
+        const wantHref = { country: `${dir}/`, rank: `${dir}/rank/`, name: `${dir}/holiday/`, sky: `${dir}/sky/` };
+
+        const got = [...html.matchAll(/<a class="tab( here)?" href="([^"]+)"( aria-current="page")?>/g)]
+            .map((m) => ({ here: !!m[1], href: m[2], current: !!m[3] }));
+
+        if (got.length !== 4) bad(label, `축 탭이 ${got.length}개다 — 넷이어야 한다`);
+        for (const [axis, href] of Object.entries(wantHref)) {
+            if (!got.some((g) => g.href === href)) bad(label, `축 탭에 ${axis} 링크가 없다: ${href}`);
+        }
+        /* 언어 칸을 넘나드는 탭이 있으면 눌렀을 때 언어가 바뀐다 */
+        for (const g of got) {
+            const en = g.href.startsWith('/en/');
+            if (en !== (lang === 'en')) { bad(label, `축 탭이 다른 언어로 간다: ${g.href}`); break; }
+        }
+        const here = got.filter((g) => g.here);
+        if (here.length !== 1) bad(label, `잡혀 있는 축 탭이 ${here.length}개다 — 하나여야 한다`);
+        else {
+            if (here[0].href !== wantHref[wantAxis]) {
+                bad(label, `잡힌 축이 ${here[0].href} 다 (기대 ${wantHref[wantAxis]})`);
+            }
+            /* 색과 굵기만으로 표시하면 보조기술에는 아무것도 전달되지 않는다 */
+            if (!here[0].current) bad(label, '잡힌 축 탭에 aria-current="page" 가 없다');
+        }
+        const marked = got.filter((g) => g.current).length;
+        if (marked !== 1) bad(label, `aria-current="page" 가 ${marked}개다`);
+    }
+
     /* 2. 필요한 id */
     for (const id of (NEED_IDS[kind] || NEED_IDS.country)) {
         if (!html.includes(`id="${id}"`)) bad(label, `dday.js 가 찾는 #${id} 가 HTML 에 없다`);
@@ -624,6 +672,15 @@ for (const { page, lang, slug, kind, label } of ALL) {
         const o = (html.match(new RegExp('<' + t + '[\\s>]', 'g')) || []).length;
         const c = (html.match(new RegExp('</' + t + '>', 'g')) || []).length;
         if (o !== c) bad(label, `<${t}> 열림 ${o} / 닫힘 ${c}`);
+    }
+
+    /* 3.4. 이모지 국기가 남아 있지 않나.
+       지역 표시 기호(U+1F1E6..U+1F1FF)는 윈도우에서 국기로 합쳐지지 않아
+       'GH' 두 글자로 보인다. 그래서 SVG 로 옮겼는데, 국기를 찍는 자리가
+       다섯이라(머리말·첫 화면 목록·나라 칩·순위 두 표) 하나만 남아도
+       그 자리에서만 글자로 보인다 — 화면으로도 잘 안 걸린다. */
+    if (/[\u{1F1E6}-\u{1F1FF}]/u.test(html)) {
+        bad(label, '이모지 국기가 남아 있다 — flag() 를 안 거친 자리가 있다');
     }
 
     /* 3.5. 생성기 사고 흔적 — 템플릿에 값이 안 들어가면 이 문자열들이 남는다 */
@@ -666,10 +723,15 @@ for (const { page, lang, slug, kind, label } of ALL) {
     if (isHome) {
         /* 7. 첫 화면 국가 링크 — 같은 언어 칸 안으로만 걸려야 한다 */
         const seen = linkedFromHome[lang];
-        for (const m of html.matchAll(/<li data-cc="([A-Z]{2})" data-key="[^"]*"><a href="([^"]+)"/g)) {
+        for (const m of html.matchAll(
+            /<li data-cc="([A-Z]{2})" data-key="[^"]*"><a href="([^"]+)"><img class="flag" src="\/flags\/([a-z]{2})\.svg"/g
+        )) {
             seen.add(m[1]);
             const want = `${dir}/${m[1].toLowerCase()}/`;
             if (m[2] !== want) bad(label, `${m[1]} 링크가 ${m[2]} — ${want} 이어야 한다`);
+            if (m[3].toUpperCase() !== m[1]) {
+                bad(label, `${m[1]} 줄에 ${m[3].toUpperCase()} 국기가 붙었다`);
+            }
         }
         const shown = (html.match(/(\d+)(?:개국|\s*countries)/) || [])[1];
         if (shown && +shown !== seen.size) {
@@ -678,8 +740,12 @@ for (const { page, lang, slug, kind, label } of ALL) {
         /* 보이는 이름순인가. countries.json 은 한글 이름순으로 저장돼 있어서,
            영어 화면에서 그대로 쓰면 Ghana(가나)가 맨 앞에 오는 무작위 순서가 된다. */
         const shownNames = [...html.matchAll(
-            /<li data-cc="[A-Z]{2}" data-key="[^"]*"><a href="[^"]*">[^ ]+ ([^<]+)<span class="cc">/g
+            /<li data-cc="[A-Z]{2}" data-key="[^"]*"><a href="[^"]*"><img class="flag"[^>]*><span class="cn">([^<]+)<\/span><span class="cc">/g
         )].map((m) => m[1]);
+        if (shownNames.length !== seen.size) {
+            bad(label, `국가 목록에서 이름을 ${shownNames.length}개만 읽었다 (링크는 ${seen.size}개)`
+                + ' — 검사 무늬가 마크업과 어긋났다');
+        }
         const inOrder = [...shownNames].sort((a, b) => a.localeCompare(b, lang));
         if (shownNames.join('|') !== inOrder.join('|')) {
             const at = shownNames.findIndex((n, i) => n !== inOrder[i]);
@@ -988,6 +1054,7 @@ for (const { page, lang, slug, kind, label } of ALL) {
                 const w2 = rows[j];
                 if (g.no !== j + 1) bad(label, `${what} ${j + 1}번째 순위가 ${g.no} 다`);
                 if (g.cc !== w2.code) bad(label, `${what} ${j + 1}번째가 ${g.cc} 다 (기대 ${w2.code})`);
+                if (g.flagCc !== g.cc) bad(label, `${what} ${g.cc} 줄에 ${g.flagCc} 국기가 붙었다`);
                 const num = (/(\d+)/.exec(g.cell) || [])[1];
                 if (+num !== valueOf(w2)) bad(label, `${what} ${g.cc} 의 값이 ${num} 이다 (기대 ${valueOf(w2)})`);
                 if (g.shown !== esc(shownName(w2.code, lang))) {
@@ -997,7 +1064,7 @@ for (const { page, lang, slug, kind, label } of ALL) {
         });
 
         const spans = [...html.matchAll(
-            /<tr data-s="([\d-]+)" data-e="([\d-]+)">\s*<td class="no">(\d+)<\/td>\s*<td class="who"><span class="flag">[^<]*<\/span><a href="[^"]*\/([a-z]{2})\/">/g
+            /<tr data-s="([\d-]+)" data-e="([\d-]+)">\s*<td class="no">(\d+)<\/td>\s*<td class="who"><img class="flag" src="\/flags\/[a-z]{2}\.svg"[^>]*><a href="[^"]*\/([a-z]{2})\/">/g
         )].map((m) => ({ s: m[1], e: m[2], no: +m[3], cc: m[4].toUpperCase() }));
         const wantSpans = RANK_REF.longest;
         const key = (x) => `${x.cc}|${x.s}|${x.e}`;
@@ -1381,6 +1448,49 @@ for (const [what, missing] of [
     }
 }
 
+/* ------------------------------------------------------------- 7.7. 국기
+   글꼴과 같은 자리다 — 남의 오리진을 물지 않으려고 받아서 커밋해 두었으니,
+   페이지가 가리키는 파일이 실제로 있고 나라와 1:1 인지 여기서 본다.
+   og:image 처럼 없어도 페이지는 뜨고 그림만 깨지므로 검사 말고 잡을 데가 없다. */
+{
+    const dir = join(PUB, 'flags');
+    if (!existsSync(dir)) {
+        bad('/flags/', '없다 — node tools/gen-flags.mjs');
+    } else {
+        const have = new Set(readdirSync(dir));
+        const want = new Set([...indexCodes].map((cc) => `${cc.toLowerCase()}.svg`));
+        const missing = [...want].filter((f) => !have.has(f));
+        const orphan = [...have].filter((f) => f.endsWith('.svg') && !want.has(f));
+        if (missing.length) bad('/flags/', `나라는 있는데 국기가 없다 ${missing.length}개: ${missing.slice(0, 8).join(', ')}`);
+        if (orphan.length) bad('/flags/', `나라가 없는 국기 ${orphan.length}개: ${orphan.slice(0, 8).join(', ')}`);
+
+        /* MIT 는 저작권 표시와 허가문을 함께 배포하라고 한다. 글꼴의
+           /fonts/LICENSE.txt 와 같은 조건이라 같은 방식으로 지킨다. */
+        if (!have.has('LICENSE.txt')) bad('/flags/', 'LICENSE.txt 이 없다 — MIT 고지를 함께 실어야 한다');
+        else {
+            const lic = readFileSync(join(dir, 'LICENSE.txt'), 'utf8');
+            if (!/MIT/i.test(lic) || !/flag-icons/.test(lic)) {
+                bad('/flags/LICENSE.txt', '고지 내용이 이상하다 — MIT · flag-icons 가 적혀 있어야 한다');
+            }
+        }
+
+        /* 내용까지 본다. 받아 온 것이 404 HTML 이면 페이지에서 그림만 깨진다. */
+        let checked = 0;
+        for (const f of [...want].sort()) {
+            if (!have.has(f)) continue;
+            const body = readFileSync(join(dir, f), 'utf8');
+            if (!/<svg[\s>]/.test(body) || !body.includes('</svg>')) {
+                bad(`/flags/${f}`, 'SVG 가 아니다');
+                break;
+            }
+            checked++;
+        }
+        if (checked && checked !== indexCodes.size) {
+            bad('/flags/', `${checked}개만 확인됐다 / 나라 ${indexCodes.size}개`);
+        }
+    }
+}
+
 /* ---------------------------------------------------------- 8. sitemap */
 const smFile = join(PUB, 'sitemap.xml');
 if (!existsSync(smFile)) {
@@ -1462,13 +1572,32 @@ for (const [page, lang, langs, wantCc] of [
         if (n !== indexCodes.size) {
             bad(label, `선택기에 ${n}개가 찼다 / 기대 ${indexCodes.size}개`);
         }
-        const order = [...filled.matchAll(/<\/span>([^<]+)<span class="cc">/g)].map((m) => m[1]);
+        const order = [...filled.matchAll(/<span class="cn">([^<]+)<\/span>/g)].map((m) => m[1]);
+        /* **뽑은 개수를 먼저 본다.** 이 무늬가 마크업과 어긋나면 order 가 빈 배열이
+           되고, 빈 배열은 늘 "정렬돼 있다" 로 통과한다 — 국기를 <img> 로 옮기면서
+           실제로 그렇게 죽어 있었고 검사는 조용히 통과했다. */
+        if (order.length !== n) {
+            bad(label, `선택기에서 이름을 ${order.length}개만 읽었다 (줄은 ${n}개) — 검사 무늬가 마크업과 어긋났다`);
+        }
         const want = [...order].sort((a, b) => a.localeCompare(b, lang));
         if (order.join('|') !== want.join('|')) {
             const at = order.findIndex((x, i) => x !== want[i]);
             bad(label, `선택기가 이름순이 아니다 — ${at + 1}번째가 "${order[at]}" (기대 "${want[at]}")`);
         }
         if (!filled.includes(`href="${dir}/kr/"`)) bad(label, `선택기 링크가 ${dir} 칸을 안 쓴다`);
+
+        /* 국기는 dday.js 가 자기 손으로 조립한다 — tools/ 를 import 할 수 없어서
+           크기와 경로를 두 벌 들고 있는 유일한 자리다. 그 두 벌이 갈라지지 않았나,
+           그리고 국기와 링크가 같은 나라를 가리키나 본다. */
+        const drawnFlags = [...filled.matchAll(
+            /<img class="flag" src="\/flags\/([a-z]{2})\.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">[^<]*<\/span><span class="cc">([A-Z]{2})<\/span>/g
+        )];
+        if (drawnFlags.length !== n) {
+            bad(label, `선택기 국기가 ${drawnFlags.length}개다 (줄은 ${n}개) — dday.js 의 flag() 가 HTML 쪽과 다른 모양을 낸다`);
+        }
+        for (const m of drawnFlags) {
+            if (m[1].toUpperCase() !== m[2]) { bad(label, `선택기 국기(${m[1]})와 코드(${m[2]})가 다르다`); break; }
+        }
     }
 
     /* "오늘 공휴일인 나라" 가 실제로 무엇을 그리는지. 기대값은 달 색인에서

@@ -1,22 +1,29 @@
 /* ============================================================
    오늘 뭐 쉬나 — 공통 토큰
-   달력/연감의 인상. 종이 바탕 + 잉크. (backend-internals 와 같은 계열)
+   달력/연감의 인상. **찬 종이 바탕 + 잉크.**
+
+   ⚠ 2026-09-03 에 따뜻한 종이색(#f5f2ec 계열)에서 옮겨 왔다. 바탕이 누렇다는
+   판단이었고, 셋을 만들어 놓고 골랐다(하늘 · 민트 · 라즈베리 → 라즈베리).
+   backend-internals 와는 이제 계열이 갈린다 — 저쪽은 따뜻한 종이색 그대로다.
+
+   따뜻한 색을 **한 곳에만** 쓴다. --today 하나뿐이고 나머지는 전부 찬색이다.
+   그래서 표에서 오늘이 어디인지가 색만으로 잡힌다 — 이 사이트의 유일한 강조다.
    ============================================================ */
 :root{
-  --paper:#f5f2ec;
-  --paper-2:#ebe5d9;
-  --paper-3:#e0d9ca;
-  --ink:#1b1917;
-  --ink-2:#4e483f;
-  --ink-3:#8b8277;
-  --rule:#d5cdbe;
+  --paper:#fcfdfe;
+  --paper-2:#eef2f7;
+  --paper-3:#dee6ef;
+  --ink:#0f1620;
+  --ink-2:#3f4a5a;
+  --ink-3:#78849a;
+  --rule:#d4dce8;
 
-  --today:#c2410c;     /* 오늘 */
-  --soon:#1b4f7a;      /* 다가오는 공휴일 */
-  --past:#8b8277;      /* 지나간 날 */
-  --local:#a8791a;     /* 지역 한정 */
-  --sat:#1b4f7a;
-  --sun:#b0392c;
+  --today:#d81e5b;     /* 오늘 — 이 사이트의 유일한 따뜻한 색 */
+  --soon:#2c5f8a;      /* 다가오는 공휴일 */
+  --past:#78849a;      /* 지나간 날 */
+  --local:#9a7420;     /* 지역 한정 */
+  --sat:#2c5f8a;
+  --sun:#c2325c;
 
   /* 앞의 이름 셋은 우리가 public/fonts/ 에 실어 나르는 것과 정확히 같아야 한다 —
      check-pages 가 base.css 를 진짜로 놓고 fonts.css 와 견준다. 예전에 첫 자리에
@@ -32,11 +39,11 @@
 
 @media (prefers-color-scheme: dark){
   :root{
-    --paper:#17161a; --paper-2:#1f1e23; --paper-3:#2a282f;
-    --ink:#ece7dd; --ink-2:#b3ab9f; --ink-3:#7d766c;
-    --rule:#35323a;
-    --today:#ff7a18; --soon:#6aa9dd; --past:#7d766c; --local:#d9a83a;
-    --sat:#6aa9dd; --sun:#e2695a;
+    --paper:#0d1117; --paper-2:#151a22; --paper-3:#1f262f;
+    --ink:#e9edf3; --ink-2:#a6b0be; --ink-3:#737f8f;
+    --rule:#262d38;
+    --today:#ff5c8a; --soon:#7fb2e3; --past:#737f8f; --local:#d9a83a;
+    --sat:#7fb2e3; --sun:#ff8a9c;
   }
 }
 
@@ -61,7 +68,11 @@ body{
   background:color-mix(in srgb, var(--paper) 92%, transparent);
   backdrop-filter:blur(8px);
 }
-.top .wrap{display:flex;align-items:center;justify-content:space-between;height:52px;gap:16px}
+/* 머리말은 세 덩이다 — 상표 · 축 탭 · (선택기 + 언어).
+   justify-content 로 양끝에 밀지 않는다: 가운데 덩이가 생기면서 상표와 탭이
+   떨어져 버리고, 탭이 늘거나 줄 때 자리가 흔들린다. 마지막 덩이만 오른쪽으로 민다. */
+.top .wrap{display:flex;align-items:center;height:52px;gap:14px}
+.top nav.side{margin-left:auto;flex:0 0 auto}
 .brand{
   font-family:var(--mono);
   font-size:11px;letter-spacing:.2em;text-transform:uppercase;
@@ -69,6 +80,25 @@ body{
 }
 .brand:hover{color:var(--ink)}
 .top nav{display:flex;gap:8px;align-items:center}
+
+/* --- 축 탭 ---
+   축이 넷이라(국가 · 순위 · 이름 · 하늘) 첫 화면의 한 칸으로는 모자랐다.
+   모든 페이지 머리말에 두고, 지금 보는 축을 채워 표시한다.
+
+   좁은 화면에서 접지 않고 **옆으로 굴린다.** 접으면 머리말이 두 줄이 되는데
+   그건 sticky 라 화면 위쪽을 계속 먹는다. 스크롤바는 숨긴다 — 네 칸뿐이라
+   손가락으로 밀면 바로 끝이 보인다. */
+.top .tabs{display:flex;gap:2px;align-items:center;min-width:0;overflow-x:auto;
+  scrollbar-width:none;-ms-overflow-style:none}
+.top .tabs::-webkit-scrollbar{display:none}
+.tab{
+  font-size:13px;text-decoration:none;color:var(--ink-2);
+  padding:6px 11px;border-radius:6px;white-space:nowrap;
+}
+.tab:hover{background:var(--paper-2);color:var(--ink)}
+/* 지금 보고 있는 축. 색만으로 가르지 않는다 — 굵기까지 달라야 색을 못 보는
+   눈에서도 읽힌다. aria-current 는 gen-pages 가 같은 자리에 함께 찍는다. */
+.tab.here{background:var(--paper-3);color:var(--ink);font-weight:500}
 
 /* 언어 전환. 나란한 짝인 반대 언어 페이지로 간다 */
 .btn{
@@ -110,3 +140,31 @@ section{margin-bottom:34px}
 }
 .foot a{color:var(--ink-2)}
 a{color:var(--soon)}
+
+/* --- 국기 ---
+   예전에는 이모지였다. **윈도우에서 국기로 그려지지 않아서**(지역 표시 기호를
+   한 글리프로 합치지 않는다) 'GH' 두 글자로 보였고, 그래서 우리 오리진의 SVG 로
+   옮겼다 — tools/flags.mjs · public/flags/.
+
+   크기를 CSS 와 HTML 양쪽에 적는다. 속성(width/height)은 그림이 늦게 와도 줄이
+   밀리지 않게 자리를 미리 잡고, 여기 값은 글자 크기에 흔들리지 않게 못박는다.
+
+   테두리가 필요한 이유 — 일본·나이지리아처럼 흰 바탕이 큰 국기는 밝은 종이색
+   위에서 경계가 사라진다. 잉크색을 아주 연하게 깔면 어두운 테마에서도 함께
+   따라간다(리터럴 색을 쓰면 한쪽에서 안 보인다). */
+img.flag{
+  width:20px;height:15px;flex:0 0 auto;
+  border:1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius:2px;
+  /* baseline 에 얹으면 글자 밑선보다 아래로 처진다 */
+  vertical-align:-2px;
+}
+
+/* 좁은 화면에서 머리말이 넘치지 않게. 상표를 접는다 — 탭의 첫 칸이 첫 화면으로
+   가므로 길이 끊기지 않고, 그 자리를 비워야 탭 넷이 굴리지 않고 다 보인다.
+   (dday.css 에도 640px 블록이 있지만 .brand·.tab 은 이 파일 것이라 여기 둔다) */
+@media (max-width:640px){
+  .brand{display:none}
+  .tab{padding:6px 9px;font-size:12.5px}
+  .top .wrap{gap:10px}
+}

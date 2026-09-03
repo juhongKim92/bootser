@@ -32,7 +32,13 @@
 
 <div class="top"><div class="wrap">
   <a class="brand" href="/">this is the day</a>
-  <nav>
+    <nav class="tabs">
+      <a class="tab here" href="/" aria-current="page">국가</a>
+      <a class="tab" href="/rank/">순위</a>
+      <a class="tab" href="/holiday/">공휴일 이름</a>
+      <a class="tab" href="/sky/">하늘</a>
+    </nav>
+  <nav class="side">
     <details class="picker" id="picker">
       <summary>국가 선택</summary>
       <div class="panel">
@@ -66,224 +72,215 @@
     <p><a href="/sky/">하늘 전체 보기 →</a></p>
   </section>
 
-  <section id="axes">
-    <span class="cap">다른 축</span>
-    <h2>나라 말고 다른 축으로 보기</h2>
-    <ul class="countries">
-      <li><a href="/holiday/">공휴일 이름으로 보기<span class="en">크리스마스 · 독립기념일 · 노동절</span></a></li>
-      <li><a href="/rank/">나라끼리 견주기<span class="en">공휴일이 많은 나라 · 가장 긴 연휴</span></a></li>
-    </ul>
-  </section>
-
   <section id="countries">
     <span class="cap">국가 204개</span>
     <h2>국가별 공휴일</h2>
     <input type="search" class="find" id="csearch" placeholder="국가 검색 — 한글·영어·코드" aria-label="국가 검색" autocomplete="off">
     <ul class="countries" id="clist">
-      <li data-cc="GH" data-key="가나 ghana gh"><a href="/gh/">🇬🇭 가나<span class="cc">GH</span></a></li>
-      <li data-cc="GA" data-key="가봉 gabon ga"><a href="/ga/">🇬🇦 가봉<span class="cc">GA</span></a></li>
-      <li data-cc="GY" data-key="가이아나 guyana gy"><a href="/gy/">🇬🇾 가이아나<span class="cc">GY</span></a></li>
-      <li data-cc="GM" data-key="감비아 gambia gm"><a href="/gm/">🇬🇲 감비아<span class="cc">GM</span></a></li>
-      <li data-cc="GG" data-key="건지 guernsey gg"><a href="/gg/">🇬🇬 건지<span class="cc">GG</span></a></li>
-      <li data-cc="GP" data-key="과들루프 guadeloupe gp"><a href="/gp/">🇬🇵 과들루프<span class="cc">GP</span></a></li>
-      <li data-cc="GT" data-key="과테말라 guatemala gt"><a href="/gt/">🇬🇹 과테말라<span class="cc">GT</span></a></li>
-      <li data-cc="GD" data-key="그레나다 grenada gd"><a href="/gd/">🇬🇩 그레나다<span class="cc">GD</span></a></li>
-      <li data-cc="GR" data-key="그리스 greece gr"><a href="/gr/">🇬🇷 그리스<span class="cc">GR</span></a></li>
-      <li data-cc="GL" data-key="그린란드 greenland gl"><a href="/gl/">🇬🇱 그린란드<span class="cc">GL</span></a></li>
-      <li data-cc="GN" data-key="기니 guinea gn"><a href="/gn/">🇬🇳 기니<span class="cc">GN</span></a></li>
-      <li data-cc="GW" data-key="기니비사우 guinea-bissau gw"><a href="/gw/">🇬🇼 기니비사우<span class="cc">GW</span></a></li>
-      <li data-cc="NA" data-key="나미비아 namibia na"><a href="/na/">🇳🇦 나미비아<span class="cc">NA</span></a></li>
-      <li data-cc="NR" data-key="나우루 nauru nr"><a href="/nr/">🇳🇷 나우루<span class="cc">NR</span></a></li>
-      <li data-cc="NG" data-key="나이지리아 nigeria ng"><a href="/ng/">🇳🇬 나이지리아<span class="cc">NG</span></a></li>
-      <li data-cc="SS" data-key="남수단 south sudan ss"><a href="/ss/">🇸🇸 남수단<span class="cc">SS</span></a></li>
-      <li data-cc="ZA" data-key="남아프리카 south africa za"><a href="/za/">🇿🇦 남아프리카<span class="cc">ZA</span></a></li>
-      <li data-cc="NL" data-key="네덜란드 netherlands nl"><a href="/nl/">🇳🇱 네덜란드<span class="cc">NL</span></a></li>
-      <li data-cc="BQ" data-key="네덜란드령 카리브 caribbean netherlands bq"><a href="/bq/">🇧🇶 네덜란드령 카리브<span class="cc">BQ</span></a></li>
-      <li data-cc="NO" data-key="노르웨이 norway no"><a href="/no/">🇳🇴 노르웨이<span class="cc">NO</span></a></li>
-      <li data-cc="NF" data-key="노퍽섬 norfolk island nf"><a href="/nf/">🇳🇫 노퍽섬<span class="cc">NF</span></a></li>
-      <li data-cc="NZ" data-key="뉴질랜드 new zealand nz"><a href="/nz/">🇳🇿 뉴질랜드<span class="cc">NZ</span></a></li>
-      <li data-cc="NC" data-key="뉴칼레도니아 new caledonia nc"><a href="/nc/">🇳🇨 뉴칼레도니아<span class="cc">NC</span></a></li>
-      <li data-cc="NU" data-key="니우에 niue nu"><a href="/nu/">🇳🇺 니우에<span class="cc">NU</span></a></li>
-      <li data-cc="NE" data-key="니제르 niger ne"><a href="/ne/">🇳🇪 니제르<span class="cc">NE</span></a></li>
-      <li data-cc="NI" data-key="니카라과 nicaragua ni"><a href="/ni/">🇳🇮 니카라과<span class="cc">NI</span></a></li>
-      <li data-cc="KR" data-key="대한민국 south korea kr"><a href="/kr/">🇰🇷 대한민국<span class="cc">KR</span></a></li>
-      <li data-cc="DK" data-key="덴마크 denmark dk"><a href="/dk/">🇩🇰 덴마크<span class="cc">DK</span></a></li>
-      <li data-cc="DM" data-key="도미니카 dominica dm"><a href="/dm/">🇩🇲 도미니카<span class="cc">DM</span></a></li>
-      <li data-cc="DO" data-key="도미니카 공화국 dominican republic do"><a href="/do/">🇩🇴 도미니카 공화국<span class="cc">DO</span></a></li>
-      <li data-cc="DE" data-key="독일 germany de"><a href="/de/">🇩🇪 독일<span class="cc">DE</span></a></li>
-      <li data-cc="LR" data-key="라이베리아 liberia lr"><a href="/lr/">🇱🇷 라이베리아<span class="cc">LR</span></a></li>
-      <li data-cc="LV" data-key="라트비아 latvia lv"><a href="/lv/">🇱🇻 라트비아<span class="cc">LV</span></a></li>
-      <li data-cc="RU" data-key="러시아 russia ru"><a href="/ru/">🇷🇺 러시아<span class="cc">RU</span></a></li>
-      <li data-cc="LS" data-key="레소토 lesotho ls"><a href="/ls/">🇱🇸 레소토<span class="cc">LS</span></a></li>
-      <li data-cc="RO" data-key="루마니아 romania ro"><a href="/ro/">🇷🇴 루마니아<span class="cc">RO</span></a></li>
-      <li data-cc="LU" data-key="룩셈부르크 luxembourg lu"><a href="/lu/">🇱🇺 룩셈부르크<span class="cc">LU</span></a></li>
-      <li data-cc="RW" data-key="르완다 rwanda rw"><a href="/rw/">🇷🇼 르완다<span class="cc">RW</span></a></li>
-      <li data-cc="LY" data-key="리비아 libya ly"><a href="/ly/">🇱🇾 리비아<span class="cc">LY</span></a></li>
-      <li data-cc="LT" data-key="리투아니아 lithuania lt"><a href="/lt/">🇱🇹 리투아니아<span class="cc">LT</span></a></li>
-      <li data-cc="LI" data-key="리히텐슈타인 liechtenstein li"><a href="/li/">🇱🇮 리히텐슈타인<span class="cc">LI</span></a></li>
-      <li data-cc="MG" data-key="마다가스카르 madagascar mg"><a href="/mg/">🇲🇬 마다가스카르<span class="cc">MG</span></a></li>
-      <li data-cc="MQ" data-key="마르티니크 martinique mq"><a href="/mq/">🇲🇶 마르티니크<span class="cc">MQ</span></a></li>
-      <li data-cc="MH" data-key="마셜 제도 marshall islands mh"><a href="/mh/">🇲🇭 마셜 제도<span class="cc">MH</span></a></li>
-      <li data-cc="MW" data-key="말라위 malawi mw"><a href="/mw/">🇲🇼 말라위<span class="cc">MW</span></a></li>
-      <li data-cc="ML" data-key="말리 mali ml"><a href="/ml/">🇲🇱 말리<span class="cc">ML</span></a></li>
-      <li data-cc="IM" data-key="맨섬 isle of man im"><a href="/im/">🇮🇲 맨섬<span class="cc">IM</span></a></li>
-      <li data-cc="MX" data-key="멕시코 mexico mx"><a href="/mx/">🇲🇽 멕시코<span class="cc">MX</span></a></li>
-      <li data-cc="MC" data-key="모나코 monaco mc"><a href="/mc/">🇲🇨 모나코<span class="cc">MC</span></a></li>
-      <li data-cc="MA" data-key="모로코 morocco ma"><a href="/ma/">🇲🇦 모로코<span class="cc">MA</span></a></li>
-      <li data-cc="MR" data-key="모리타니 mauritania mr"><a href="/mr/">🇲🇷 모리타니<span class="cc">MR</span></a></li>
-      <li data-cc="MZ" data-key="모잠비크 mozambique mz"><a href="/mz/">🇲🇿 모잠비크<span class="cc">MZ</span></a></li>
-      <li data-cc="ME" data-key="몬테네그로 montenegro me"><a href="/me/">🇲🇪 몬테네그로<span class="cc">ME</span></a></li>
-      <li data-cc="MS" data-key="몬트세라트 montserrat ms"><a href="/ms/">🇲🇸 몬트세라트<span class="cc">MS</span></a></li>
-      <li data-cc="MD" data-key="몰도바 moldova md"><a href="/md/">🇲🇩 몰도바<span class="cc">MD</span></a></li>
-      <li data-cc="MT" data-key="몰타 malta mt"><a href="/mt/">🇲🇹 몰타<span class="cc">MT</span></a></li>
-      <li data-cc="MN" data-key="몽골 mongolia mn"><a href="/mn/">🇲🇳 몽골<span class="cc">MN</span></a></li>
-      <li data-cc="US" data-key="미국 united states us"><a href="/us/">🇺🇸 미국<span class="cc">US</span></a></li>
-      <li data-cc="VI" data-key="미국령 버진아일랜드 united states virgin islands vi"><a href="/vi/">🇻🇮 미국령 버진아일랜드<span class="cc">VI</span></a></li>
-      <li data-cc="FM" data-key="미크로네시아 micronesia fm"><a href="/fm/">🇫🇲 미크로네시아<span class="cc">FM</span></a></li>
-      <li data-cc="VU" data-key="바누아투 vanuatu vu"><a href="/vu/">🇻🇺 바누아투<span class="cc">VU</span></a></li>
-      <li data-cc="BH" data-key="바레인 bahrain bh"><a href="/bh/">🇧🇭 바레인<span class="cc">BH</span></a></li>
-      <li data-cc="BB" data-key="바베이도스 barbados bb"><a href="/bb/">🇧🇧 바베이도스<span class="cc">BB</span></a></li>
-      <li data-cc="VA" data-key="바티칸 시국 vatican city va"><a href="/va/">🇻🇦 바티칸 시국<span class="cc">VA</span></a></li>
-      <li data-cc="BS" data-key="바하마 bahamas bs"><a href="/bs/">🇧🇸 바하마<span class="cc">BS</span></a></li>
-      <li data-cc="BD" data-key="방글라데시 bangladesh bd"><a href="/bd/">🇧🇩 방글라데시<span class="cc">BD</span></a></li>
-      <li data-cc="BM" data-key="버뮤다 bermuda bm"><a href="/bm/">🇧🇲 버뮤다<span class="cc">BM</span></a></li>
-      <li data-cc="BJ" data-key="베냉 benin bj"><a href="/bj/">🇧🇯 베냉<span class="cc">BJ</span></a></li>
-      <li data-cc="VE" data-key="베네수엘라 venezuela ve"><a href="/ve/">🇻🇪 베네수엘라<span class="cc">VE</span></a></li>
-      <li data-cc="VN" data-key="베트남 vietnam vn"><a href="/vn/">🇻🇳 베트남<span class="cc">VN</span></a></li>
-      <li data-cc="BE" data-key="벨기에 belgium be"><a href="/be/">🇧🇪 벨기에<span class="cc">BE</span></a></li>
-      <li data-cc="BY" data-key="벨라루스 belarus by"><a href="/by/">🇧🇾 벨라루스<span class="cc">BY</span></a></li>
-      <li data-cc="BZ" data-key="벨리즈 belize bz"><a href="/bz/">🇧🇿 벨리즈<span class="cc">BZ</span></a></li>
-      <li data-cc="BA" data-key="보스니아 헤르체고비나 bosnia and herzegovina ba"><a href="/ba/">🇧🇦 보스니아 헤르체고비나<span class="cc">BA</span></a></li>
-      <li data-cc="BW" data-key="보츠와나 botswana bw"><a href="/bw/">🇧🇼 보츠와나<span class="cc">BW</span></a></li>
-      <li data-cc="BO" data-key="볼리비아 bolivia bo"><a href="/bo/">🇧🇴 볼리비아<span class="cc">BO</span></a></li>
-      <li data-cc="BI" data-key="부룬디 burundi bi"><a href="/bi/">🇧🇮 부룬디<span class="cc">BI</span></a></li>
-      <li data-cc="BF" data-key="부르키나파소 burkina faso bf"><a href="/bf/">🇧🇫 부르키나파소<span class="cc">BF</span></a></li>
-      <li data-cc="MP" data-key="북마리아나제도 northern mariana islands mp"><a href="/mp/">🇲🇵 북마리아나제도<span class="cc">MP</span></a></li>
-      <li data-cc="MK" data-key="북마케도니아 north macedonia mk"><a href="/mk/">🇲🇰 북마케도니아<span class="cc">MK</span></a></li>
-      <li data-cc="BG" data-key="불가리아 bulgaria bg"><a href="/bg/">🇧🇬 불가리아<span class="cc">BG</span></a></li>
-      <li data-cc="BR" data-key="브라질 brazil br"><a href="/br/">🇧🇷 브라질<span class="cc">BR</span></a></li>
-      <li data-cc="WS" data-key="사모아 samoa ws"><a href="/ws/">🇼🇸 사모아<span class="cc">WS</span></a></li>
-      <li data-cc="SM" data-key="산마리노 san marino sm"><a href="/sm/">🇸🇲 산마리노<span class="cc">SM</span></a></li>
-      <li data-cc="ST" data-key="상투메 프린시페 são tomé and príncipe st"><a href="/st/">🇸🇹 상투메 프린시페<span class="cc">ST</span></a></li>
-      <li data-cc="MF" data-key="생마르탱 saint martin mf"><a href="/mf/">🇲🇫 생마르탱<span class="cc">MF</span></a></li>
-      <li data-cc="BL" data-key="생바르텔레미 saint barthélemy bl"><a href="/bl/">🇧🇱 생바르텔레미<span class="cc">BL</span></a></li>
-      <li data-cc="PM" data-key="생피에르 미클롱 saint pierre and miquelon pm"><a href="/pm/">🇵🇲 생피에르 미클롱<span class="cc">PM</span></a></li>
-      <li data-cc="SN" data-key="세네갈 senegal sn"><a href="/sn/">🇸🇳 세네갈<span class="cc">SN</span></a></li>
-      <li data-cc="RS" data-key="세르비아 serbia rs"><a href="/rs/">🇷🇸 세르비아<span class="cc">RS</span></a></li>
-      <li data-cc="SC" data-key="세이셸 seychelles sc"><a href="/sc/">🇸🇨 세이셸<span class="cc">SC</span></a></li>
-      <li data-cc="LC" data-key="세인트루시아 saint lucia lc"><a href="/lc/">🇱🇨 세인트루시아<span class="cc">LC</span></a></li>
-      <li data-cc="VC" data-key="세인트빈센트그레나딘 saint vincent and the grenadines vc"><a href="/vc/">🇻🇨 세인트빈센트그레나딘<span class="cc">VC</span></a></li>
-      <li data-cc="KN" data-key="세인트키츠 네비스 saint kitts and nevis kn"><a href="/kn/">🇰🇳 세인트키츠 네비스<span class="cc">KN</span></a></li>
-      <li data-cc="SH" data-key="세인트헬레나 saint helena, ascension and tristan da cunha sh"><a href="/sh/">🇸🇭 세인트헬레나<span class="cc">SH</span></a></li>
-      <li data-cc="SO" data-key="소말리아 somalia so"><a href="/so/">🇸🇴 소말리아<span class="cc">SO</span></a></li>
-      <li data-cc="SB" data-key="솔로몬 제도 solomon islands sb"><a href="/sb/">🇸🇧 솔로몬 제도<span class="cc">SB</span></a></li>
-      <li data-cc="SD" data-key="수단 sudan sd"><a href="/sd/">🇸🇩 수단<span class="cc">SD</span></a></li>
-      <li data-cc="SR" data-key="수리남 suriname sr"><a href="/sr/">🇸🇷 수리남<span class="cc">SR</span></a></li>
-      <li data-cc="SJ" data-key="스발바르제도-얀마웬섬 svalbard and jan mayen sj"><a href="/sj/">🇸🇯 스발바르제도-얀마웬섬<span class="cc">SJ</span></a></li>
-      <li data-cc="SE" data-key="스웨덴 sweden se"><a href="/se/">🇸🇪 스웨덴<span class="cc">SE</span></a></li>
-      <li data-cc="CH" data-key="스위스 switzerland ch"><a href="/ch/">🇨🇭 스위스<span class="cc">CH</span></a></li>
-      <li data-cc="ES" data-key="스페인 spain es"><a href="/es/">🇪🇸 스페인<span class="cc">ES</span></a></li>
-      <li data-cc="SK" data-key="슬로바키아 slovakia sk"><a href="/sk/">🇸🇰 슬로바키아<span class="cc">SK</span></a></li>
-      <li data-cc="SI" data-key="슬로베니아 slovenia si"><a href="/si/">🇸🇮 슬로베니아<span class="cc">SI</span></a></li>
-      <li data-cc="SY" data-key="시리아 syria sy"><a href="/sy/">🇸🇾 시리아<span class="cc">SY</span></a></li>
-      <li data-cc="SL" data-key="시에라리온 sierra leone sl"><a href="/sl/">🇸🇱 시에라리온<span class="cc">SL</span></a></li>
-      <li data-cc="SX" data-key="신트마르턴 sint maarten sx"><a href="/sx/">🇸🇽 신트마르턴<span class="cc">SX</span></a></li>
-      <li data-cc="SG" data-key="싱가포르 singapore sg"><a href="/sg/">🇸🇬 싱가포르<span class="cc">SG</span></a></li>
-      <li data-cc="AW" data-key="아루바 aruba aw"><a href="/aw/">🇦🇼 아루바<span class="cc">AW</span></a></li>
-      <li data-cc="AM" data-key="아르메니아 armenia am"><a href="/am/">🇦🇲 아르메니아<span class="cc">AM</span></a></li>
-      <li data-cc="AR" data-key="아르헨티나 argentina ar"><a href="/ar/">🇦🇷 아르헨티나<span class="cc">AR</span></a></li>
-      <li data-cc="IS" data-key="아이슬란드 iceland is"><a href="/is/">🇮🇸 아이슬란드<span class="cc">IS</span></a></li>
-      <li data-cc="HT" data-key="아이티 haiti ht"><a href="/ht/">🇭🇹 아이티<span class="cc">HT</span></a></li>
-      <li data-cc="IE" data-key="아일랜드 ireland ie"><a href="/ie/">🇮🇪 아일랜드<span class="cc">IE</span></a></li>
-      <li data-cc="AD" data-key="안도라 andorra ad"><a href="/ad/">🇦🇩 안도라<span class="cc">AD</span></a></li>
-      <li data-cc="AL" data-key="알바니아 albania al"><a href="/al/">🇦🇱 알바니아<span class="cc">AL</span></a></li>
-      <li data-cc="DZ" data-key="알제리 algeria dz"><a href="/dz/">🇩🇿 알제리<span class="cc">DZ</span></a></li>
-      <li data-cc="AO" data-key="앙골라 angola ao"><a href="/ao/">🇦🇴 앙골라<span class="cc">AO</span></a></li>
-      <li data-cc="AG" data-key="앤티가 바부다 antigua and barbuda ag"><a href="/ag/">🇦🇬 앤티가 바부다<span class="cc">AG</span></a></li>
-      <li data-cc="AI" data-key="앵귈라 anguilla ai"><a href="/ai/">🇦🇮 앵귈라<span class="cc">AI</span></a></li>
-      <li data-cc="ER" data-key="에리트리아 eritrea er"><a href="/er/">🇪🇷 에리트리아<span class="cc">ER</span></a></li>
-      <li data-cc="SZ" data-key="에스와티니 eswatini sz"><a href="/sz/">🇸🇿 에스와티니<span class="cc">SZ</span></a></li>
-      <li data-cc="EE" data-key="에스토니아 estonia ee"><a href="/ee/">🇪🇪 에스토니아<span class="cc">EE</span></a></li>
-      <li data-cc="EC" data-key="에콰도르 ecuador ec"><a href="/ec/">🇪🇨 에콰도르<span class="cc">EC</span></a></li>
-      <li data-cc="ET" data-key="에티오피아 ethiopia et"><a href="/et/">🇪🇹 에티오피아<span class="cc">ET</span></a></li>
-      <li data-cc="SV" data-key="엘살바도르 el salvador sv"><a href="/sv/">🇸🇻 엘살바도르<span class="cc">SV</span></a></li>
-      <li data-cc="GB" data-key="영국 united kingdom gb"><a href="/gb/">🇬🇧 영국<span class="cc">GB</span></a></li>
-      <li data-cc="VG" data-key="영국령 버진아일랜드 british virgin islands vg"><a href="/vg/">🇻🇬 영국령 버진아일랜드<span class="cc">VG</span></a></li>
-      <li data-cc="YE" data-key="예멘 yemen ye"><a href="/ye/">🇾🇪 예멘<span class="cc">YE</span></a></li>
-      <li data-cc="AU" data-key="오스트레일리아 australia au"><a href="/au/">🇦🇺 오스트레일리아<span class="cc">AU</span></a></li>
-      <li data-cc="AT" data-key="오스트리아 austria at"><a href="/at/">🇦🇹 오스트리아<span class="cc">AT</span></a></li>
-      <li data-cc="HN" data-key="온두라스 honduras hn"><a href="/hn/">🇭🇳 온두라스<span class="cc">HN</span></a></li>
-      <li data-cc="AX" data-key="올란드 제도 åland islands ax"><a href="/ax/">🇦🇽 올란드 제도<span class="cc">AX</span></a></li>
-      <li data-cc="WF" data-key="왈리스-푸투나 제도 wallis and futuna wf"><a href="/wf/">🇼🇫 왈리스-푸투나 제도<span class="cc">WF</span></a></li>
-      <li data-cc="UG" data-key="우간다 uganda ug"><a href="/ug/">🇺🇬 우간다<span class="cc">UG</span></a></li>
-      <li data-cc="UY" data-key="우루과이 uruguay uy"><a href="/uy/">🇺🇾 우루과이<span class="cc">UY</span></a></li>
-      <li data-cc="UA" data-key="우크라이나 ukraine ua"><a href="/ua/">🇺🇦 우크라이나<span class="cc">UA</span></a></li>
-      <li data-cc="IQ" data-key="이라크 iraq iq"><a href="/iq/">🇮🇶 이라크<span class="cc">IQ</span></a></li>
-      <li data-cc="EG" data-key="이집트 egypt eg"><a href="/eg/">🇪🇬 이집트<span class="cc">EG</span></a></li>
-      <li data-cc="IT" data-key="이탈리아 italy it"><a href="/it/">🇮🇹 이탈리아<span class="cc">IT</span></a></li>
-      <li data-cc="ID" data-key="인도네시아 indonesia id"><a href="/id/">🇮🇩 인도네시아<span class="cc">ID</span></a></li>
-      <li data-cc="JP" data-key="일본 japan jp"><a href="/jp/">🇯🇵 일본<span class="cc">JP</span></a></li>
-      <li data-cc="JM" data-key="자메이카 jamaica jm"><a href="/jm/">🇯🇲 자메이카<span class="cc">JM</span></a></li>
-      <li data-cc="ZM" data-key="잠비아 zambia zm"><a href="/zm/">🇿🇲 잠비아<span class="cc">ZM</span></a></li>
-      <li data-cc="JE" data-key="저지 jersey je"><a href="/je/">🇯🇪 저지<span class="cc">JE</span></a></li>
-      <li data-cc="GQ" data-key="적도 기니 equatorial guinea gq"><a href="/gq/">🇬🇶 적도 기니<span class="cc">GQ</span></a></li>
-      <li data-cc="GE" data-key="조지아 georgia ge"><a href="/ge/">🇬🇪 조지아<span class="cc">GE</span></a></li>
-      <li data-cc="CN" data-key="중국 china cn"><a href="/cn/">🇨🇳 중국<span class="cc">CN</span></a></li>
-      <li data-cc="CF" data-key="중앙 아프리카 공화국 central african republic cf"><a href="/cf/">🇨🇫 중앙 아프리카 공화국<span class="cc">CF</span></a></li>
-      <li data-cc="DJ" data-key="지부티 djibouti dj"><a href="/dj/">🇩🇯 지부티<span class="cc">DJ</span></a></li>
-      <li data-cc="GI" data-key="지브롤터 gibraltar gi"><a href="/gi/">🇬🇮 지브롤터<span class="cc">GI</span></a></li>
-      <li data-cc="ZW" data-key="짐바브웨 zimbabwe zw"><a href="/zw/">🇿🇼 짐바브웨<span class="cc">ZW</span></a></li>
-      <li data-cc="TD" data-key="차드 chad td"><a href="/td/">🇹🇩 차드<span class="cc">TD</span></a></li>
-      <li data-cc="CZ" data-key="체코 czechia cz"><a href="/cz/">🇨🇿 체코<span class="cc">CZ</span></a></li>
-      <li data-cc="CL" data-key="칠레 chile cl"><a href="/cl/">🇨🇱 칠레<span class="cc">CL</span></a></li>
-      <li data-cc="CM" data-key="카메룬 cameroon cm"><a href="/cm/">🇨🇲 카메룬<span class="cc">CM</span></a></li>
-      <li data-cc="CV" data-key="카보베르데 cape verde cv"><a href="/cv/">🇨🇻 카보베르데<span class="cc">CV</span></a></li>
-      <li data-cc="KZ" data-key="카자흐스탄 kazakhstan kz"><a href="/kz/">🇰🇿 카자흐스탄<span class="cc">KZ</span></a></li>
-      <li data-cc="KH" data-key="캄보디아 cambodia kh"><a href="/kh/">🇰🇭 캄보디아<span class="cc">KH</span></a></li>
-      <li data-cc="CA" data-key="캐나다 canada ca"><a href="/ca/">🇨🇦 캐나다<span class="cc">CA</span></a></li>
-      <li data-cc="KE" data-key="케냐 kenya ke"><a href="/ke/">🇰🇪 케냐<span class="cc">KE</span></a></li>
-      <li data-cc="KY" data-key="케이맨 제도 cayman islands ky"><a href="/ky/">🇰🇾 케이맨 제도<span class="cc">KY</span></a></li>
-      <li data-cc="KM" data-key="코모로 comoros km"><a href="/km/">🇰🇲 코모로<span class="cc">KM</span></a></li>
-      <li data-cc="CR" data-key="코스타리카 costa rica cr"><a href="/cr/">🇨🇷 코스타리카<span class="cc">CR</span></a></li>
-      <li data-cc="CC" data-key="코코스 제도 cocos (keeling) islands cc"><a href="/cc/">🇨🇨 코코스 제도<span class="cc">CC</span></a></li>
-      <li data-cc="CI" data-key="코트디부아르 ivory coast ci"><a href="/ci/">🇨🇮 코트디부아르<span class="cc">CI</span></a></li>
-      <li data-cc="CO" data-key="콜롬비아 colombia co"><a href="/co/">🇨🇴 콜롬비아<span class="cc">CO</span></a></li>
-      <li data-cc="CG" data-key="콩고-브라자빌 congo cg"><a href="/cg/">🇨🇬 콩고-브라자빌<span class="cc">CG</span></a></li>
-      <li data-cc="CD" data-key="콩고-킨샤사 dr congo cd"><a href="/cd/">🇨🇩 콩고-킨샤사<span class="cc">CD</span></a></li>
-      <li data-cc="CU" data-key="쿠바 cuba cu"><a href="/cu/">🇨🇺 쿠바<span class="cc">CU</span></a></li>
-      <li data-cc="CK" data-key="쿡 제도 cook islands ck"><a href="/ck/">🇨🇰 쿡 제도<span class="cc">CK</span></a></li>
-      <li data-cc="CW" data-key="퀴라소 curaçao cw"><a href="/cw/">🇨🇼 퀴라소<span class="cc">CW</span></a></li>
-      <li data-cc="HR" data-key="크로아티아 croatia hr"><a href="/hr/">🇭🇷 크로아티아<span class="cc">HR</span></a></li>
-      <li data-cc="CX" data-key="크리스마스섬 christmas island cx"><a href="/cx/">🇨🇽 크리스마스섬<span class="cc">CX</span></a></li>
-      <li data-cc="KI" data-key="키리바시 kiribati ki"><a href="/ki/">🇰🇮 키리바시<span class="cc">KI</span></a></li>
-      <li data-cc="CY" data-key="키프로스 cyprus cy"><a href="/cy/">🇨🇾 키프로스<span class="cc">CY</span></a></li>
-      <li data-cc="TZ" data-key="탄자니아 tanzania tz"><a href="/tz/">🇹🇿 탄자니아<span class="cc">TZ</span></a></li>
-      <li data-cc="TC" data-key="터크스 케이커스 제도 turks and caicos islands tc"><a href="/tc/">🇹🇨 터크스 케이커스 제도<span class="cc">TC</span></a></li>
-      <li data-cc="TG" data-key="토고 togo tg"><a href="/tg/">🇹🇬 토고<span class="cc">TG</span></a></li>
-      <li data-cc="TK" data-key="토켈라우 tokelau tk"><a href="/tk/">🇹🇰 토켈라우<span class="cc">TK</span></a></li>
-      <li data-cc="TO" data-key="통가 tonga to"><a href="/to/">🇹🇴 통가<span class="cc">TO</span></a></li>
-      <li data-cc="TV" data-key="투발루 tuvalu tv"><a href="/tv/">🇹🇻 투발루<span class="cc">TV</span></a></li>
-      <li data-cc="TN" data-key="튀니지 tunisia tn"><a href="/tn/">🇹🇳 튀니지<span class="cc">TN</span></a></li>
-      <li data-cc="TR" data-key="튀르키예 türkiye tr"><a href="/tr/">🇹🇷 튀르키예<span class="cc">TR</span></a></li>
-      <li data-cc="TT" data-key="트리니다드 토바고 trinidad and tobago tt"><a href="/tt/">🇹🇹 트리니다드 토바고<span class="cc">TT</span></a></li>
-      <li data-cc="PA" data-key="파나마 panama pa"><a href="/pa/">🇵🇦 파나마<span class="cc">PA</span></a></li>
-      <li data-cc="PY" data-key="파라과이 paraguay py"><a href="/py/">🇵🇾 파라과이<span class="cc">PY</span></a></li>
-      <li data-cc="PG" data-key="파푸아뉴기니 papua new guinea pg"><a href="/pg/">🇵🇬 파푸아뉴기니<span class="cc">PG</span></a></li>
-      <li data-cc="PW" data-key="팔라우 palau pw"><a href="/pw/">🇵🇼 팔라우<span class="cc">PW</span></a></li>
-      <li data-cc="FO" data-key="페로 제도 faroe islands fo"><a href="/fo/">🇫🇴 페로 제도<span class="cc">FO</span></a></li>
-      <li data-cc="PE" data-key="페루 peru pe"><a href="/pe/">🇵🇪 페루<span class="cc">PE</span></a></li>
-      <li data-cc="PT" data-key="포르투갈 portugal pt"><a href="/pt/">🇵🇹 포르투갈<span class="cc">PT</span></a></li>
-      <li data-cc="FK" data-key="포클랜드 제도 falkland islands fk"><a href="/fk/">🇫🇰 포클랜드 제도<span class="cc">FK</span></a></li>
-      <li data-cc="PL" data-key="폴란드 poland pl"><a href="/pl/">🇵🇱 폴란드<span class="cc">PL</span></a></li>
-      <li data-cc="PR" data-key="푸에르토리코 puerto rico pr"><a href="/pr/">🇵🇷 푸에르토리코<span class="cc">PR</span></a></li>
-      <li data-cc="FR" data-key="프랑스 france fr"><a href="/fr/">🇫🇷 프랑스<span class="cc">FR</span></a></li>
-      <li data-cc="GF" data-key="프랑스령 기아나 french guiana gf"><a href="/gf/">🇬🇫 프랑스령 기아나<span class="cc">GF</span></a></li>
-      <li data-cc="PF" data-key="프랑스령 폴리네시아 french polynesia pf"><a href="/pf/">🇵🇫 프랑스령 폴리네시아<span class="cc">PF</span></a></li>
-      <li data-cc="FI" data-key="핀란드 finland fi"><a href="/fi/">🇫🇮 핀란드<span class="cc">FI</span></a></li>
-      <li data-cc="PH" data-key="필리핀 philippines ph"><a href="/ph/">🇵🇭 필리핀<span class="cc">PH</span></a></li>
-      <li data-cc="PN" data-key="핏케언 제도 pitcairn islands pn"><a href="/pn/">🇵🇳 핏케언 제도<span class="cc">PN</span></a></li>
-      <li data-cc="HU" data-key="헝가리 hungary hu"><a href="/hu/">🇭🇺 헝가리<span class="cc">HU</span></a></li>
-      <li data-cc="HK" data-key="홍콩(중국 특별행정구) hong kong hk"><a href="/hk/">🇭🇰 홍콩(중국 특별행정구)<span class="cc">HK</span></a></li>
+      <li data-cc="GH" data-key="가나 ghana gh"><a href="/gh/"><img class="flag" src="/flags/gh.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">가나</span><span class="cc">GH</span></a></li>
+      <li data-cc="GA" data-key="가봉 gabon ga"><a href="/ga/"><img class="flag" src="/flags/ga.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">가봉</span><span class="cc">GA</span></a></li>
+      <li data-cc="GY" data-key="가이아나 guyana gy"><a href="/gy/"><img class="flag" src="/flags/gy.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">가이아나</span><span class="cc">GY</span></a></li>
+      <li data-cc="GM" data-key="감비아 gambia gm"><a href="/gm/"><img class="flag" src="/flags/gm.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">감비아</span><span class="cc">GM</span></a></li>
+      <li data-cc="GG" data-key="건지 guernsey gg"><a href="/gg/"><img class="flag" src="/flags/gg.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">건지</span><span class="cc">GG</span></a></li>
+      <li data-cc="GP" data-key="과들루프 guadeloupe gp"><a href="/gp/"><img class="flag" src="/flags/gp.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">과들루프</span><span class="cc">GP</span></a></li>
+      <li data-cc="GT" data-key="과테말라 guatemala gt"><a href="/gt/"><img class="flag" src="/flags/gt.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">과테말라</span><span class="cc">GT</span></a></li>
+      <li data-cc="GD" data-key="그레나다 grenada gd"><a href="/gd/"><img class="flag" src="/flags/gd.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">그레나다</span><span class="cc">GD</span></a></li>
+      <li data-cc="GR" data-key="그리스 greece gr"><a href="/gr/"><img class="flag" src="/flags/gr.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">그리스</span><span class="cc">GR</span></a></li>
+      <li data-cc="GL" data-key="그린란드 greenland gl"><a href="/gl/"><img class="flag" src="/flags/gl.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">그린란드</span><span class="cc">GL</span></a></li>
+      <li data-cc="GN" data-key="기니 guinea gn"><a href="/gn/"><img class="flag" src="/flags/gn.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">기니</span><span class="cc">GN</span></a></li>
+      <li data-cc="GW" data-key="기니비사우 guinea-bissau gw"><a href="/gw/"><img class="flag" src="/flags/gw.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">기니비사우</span><span class="cc">GW</span></a></li>
+      <li data-cc="NA" data-key="나미비아 namibia na"><a href="/na/"><img class="flag" src="/flags/na.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">나미비아</span><span class="cc">NA</span></a></li>
+      <li data-cc="NR" data-key="나우루 nauru nr"><a href="/nr/"><img class="flag" src="/flags/nr.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">나우루</span><span class="cc">NR</span></a></li>
+      <li data-cc="NG" data-key="나이지리아 nigeria ng"><a href="/ng/"><img class="flag" src="/flags/ng.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">나이지리아</span><span class="cc">NG</span></a></li>
+      <li data-cc="SS" data-key="남수단 south sudan ss"><a href="/ss/"><img class="flag" src="/flags/ss.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">남수단</span><span class="cc">SS</span></a></li>
+      <li data-cc="ZA" data-key="남아프리카 south africa za"><a href="/za/"><img class="flag" src="/flags/za.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">남아프리카</span><span class="cc">ZA</span></a></li>
+      <li data-cc="NL" data-key="네덜란드 netherlands nl"><a href="/nl/"><img class="flag" src="/flags/nl.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">네덜란드</span><span class="cc">NL</span></a></li>
+      <li data-cc="BQ" data-key="네덜란드령 카리브 caribbean netherlands bq"><a href="/bq/"><img class="flag" src="/flags/bq.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">네덜란드령 카리브</span><span class="cc">BQ</span></a></li>
+      <li data-cc="NO" data-key="노르웨이 norway no"><a href="/no/"><img class="flag" src="/flags/no.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">노르웨이</span><span class="cc">NO</span></a></li>
+      <li data-cc="NF" data-key="노퍽섬 norfolk island nf"><a href="/nf/"><img class="flag" src="/flags/nf.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">노퍽섬</span><span class="cc">NF</span></a></li>
+      <li data-cc="NZ" data-key="뉴질랜드 new zealand nz"><a href="/nz/"><img class="flag" src="/flags/nz.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">뉴질랜드</span><span class="cc">NZ</span></a></li>
+      <li data-cc="NC" data-key="뉴칼레도니아 new caledonia nc"><a href="/nc/"><img class="flag" src="/flags/nc.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">뉴칼레도니아</span><span class="cc">NC</span></a></li>
+      <li data-cc="NU" data-key="니우에 niue nu"><a href="/nu/"><img class="flag" src="/flags/nu.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">니우에</span><span class="cc">NU</span></a></li>
+      <li data-cc="NE" data-key="니제르 niger ne"><a href="/ne/"><img class="flag" src="/flags/ne.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">니제르</span><span class="cc">NE</span></a></li>
+      <li data-cc="NI" data-key="니카라과 nicaragua ni"><a href="/ni/"><img class="flag" src="/flags/ni.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">니카라과</span><span class="cc">NI</span></a></li>
+      <li data-cc="KR" data-key="대한민국 south korea kr"><a href="/kr/"><img class="flag" src="/flags/kr.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">대한민국</span><span class="cc">KR</span></a></li>
+      <li data-cc="DK" data-key="덴마크 denmark dk"><a href="/dk/"><img class="flag" src="/flags/dk.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">덴마크</span><span class="cc">DK</span></a></li>
+      <li data-cc="DM" data-key="도미니카 dominica dm"><a href="/dm/"><img class="flag" src="/flags/dm.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">도미니카</span><span class="cc">DM</span></a></li>
+      <li data-cc="DO" data-key="도미니카 공화국 dominican republic do"><a href="/do/"><img class="flag" src="/flags/do.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">도미니카 공화국</span><span class="cc">DO</span></a></li>
+      <li data-cc="DE" data-key="독일 germany de"><a href="/de/"><img class="flag" src="/flags/de.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">독일</span><span class="cc">DE</span></a></li>
+      <li data-cc="LR" data-key="라이베리아 liberia lr"><a href="/lr/"><img class="flag" src="/flags/lr.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">라이베리아</span><span class="cc">LR</span></a></li>
+      <li data-cc="LV" data-key="라트비아 latvia lv"><a href="/lv/"><img class="flag" src="/flags/lv.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">라트비아</span><span class="cc">LV</span></a></li>
+      <li data-cc="RU" data-key="러시아 russia ru"><a href="/ru/"><img class="flag" src="/flags/ru.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">러시아</span><span class="cc">RU</span></a></li>
+      <li data-cc="LS" data-key="레소토 lesotho ls"><a href="/ls/"><img class="flag" src="/flags/ls.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">레소토</span><span class="cc">LS</span></a></li>
+      <li data-cc="RO" data-key="루마니아 romania ro"><a href="/ro/"><img class="flag" src="/flags/ro.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">루마니아</span><span class="cc">RO</span></a></li>
+      <li data-cc="LU" data-key="룩셈부르크 luxembourg lu"><a href="/lu/"><img class="flag" src="/flags/lu.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">룩셈부르크</span><span class="cc">LU</span></a></li>
+      <li data-cc="RW" data-key="르완다 rwanda rw"><a href="/rw/"><img class="flag" src="/flags/rw.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">르완다</span><span class="cc">RW</span></a></li>
+      <li data-cc="LY" data-key="리비아 libya ly"><a href="/ly/"><img class="flag" src="/flags/ly.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">리비아</span><span class="cc">LY</span></a></li>
+      <li data-cc="LT" data-key="리투아니아 lithuania lt"><a href="/lt/"><img class="flag" src="/flags/lt.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">리투아니아</span><span class="cc">LT</span></a></li>
+      <li data-cc="LI" data-key="리히텐슈타인 liechtenstein li"><a href="/li/"><img class="flag" src="/flags/li.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">리히텐슈타인</span><span class="cc">LI</span></a></li>
+      <li data-cc="MG" data-key="마다가스카르 madagascar mg"><a href="/mg/"><img class="flag" src="/flags/mg.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">마다가스카르</span><span class="cc">MG</span></a></li>
+      <li data-cc="MQ" data-key="마르티니크 martinique mq"><a href="/mq/"><img class="flag" src="/flags/mq.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">마르티니크</span><span class="cc">MQ</span></a></li>
+      <li data-cc="MH" data-key="마셜 제도 marshall islands mh"><a href="/mh/"><img class="flag" src="/flags/mh.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">마셜 제도</span><span class="cc">MH</span></a></li>
+      <li data-cc="MW" data-key="말라위 malawi mw"><a href="/mw/"><img class="flag" src="/flags/mw.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">말라위</span><span class="cc">MW</span></a></li>
+      <li data-cc="ML" data-key="말리 mali ml"><a href="/ml/"><img class="flag" src="/flags/ml.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">말리</span><span class="cc">ML</span></a></li>
+      <li data-cc="IM" data-key="맨섬 isle of man im"><a href="/im/"><img class="flag" src="/flags/im.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">맨섬</span><span class="cc">IM</span></a></li>
+      <li data-cc="MX" data-key="멕시코 mexico mx"><a href="/mx/"><img class="flag" src="/flags/mx.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">멕시코</span><span class="cc">MX</span></a></li>
+      <li data-cc="MC" data-key="모나코 monaco mc"><a href="/mc/"><img class="flag" src="/flags/mc.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">모나코</span><span class="cc">MC</span></a></li>
+      <li data-cc="MA" data-key="모로코 morocco ma"><a href="/ma/"><img class="flag" src="/flags/ma.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">모로코</span><span class="cc">MA</span></a></li>
+      <li data-cc="MR" data-key="모리타니 mauritania mr"><a href="/mr/"><img class="flag" src="/flags/mr.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">모리타니</span><span class="cc">MR</span></a></li>
+      <li data-cc="MZ" data-key="모잠비크 mozambique mz"><a href="/mz/"><img class="flag" src="/flags/mz.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">모잠비크</span><span class="cc">MZ</span></a></li>
+      <li data-cc="ME" data-key="몬테네그로 montenegro me"><a href="/me/"><img class="flag" src="/flags/me.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">몬테네그로</span><span class="cc">ME</span></a></li>
+      <li data-cc="MS" data-key="몬트세라트 montserrat ms"><a href="/ms/"><img class="flag" src="/flags/ms.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">몬트세라트</span><span class="cc">MS</span></a></li>
+      <li data-cc="MD" data-key="몰도바 moldova md"><a href="/md/"><img class="flag" src="/flags/md.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">몰도바</span><span class="cc">MD</span></a></li>
+      <li data-cc="MT" data-key="몰타 malta mt"><a href="/mt/"><img class="flag" src="/flags/mt.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">몰타</span><span class="cc">MT</span></a></li>
+      <li data-cc="MN" data-key="몽골 mongolia mn"><a href="/mn/"><img class="flag" src="/flags/mn.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">몽골</span><span class="cc">MN</span></a></li>
+      <li data-cc="US" data-key="미국 united states us"><a href="/us/"><img class="flag" src="/flags/us.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">미국</span><span class="cc">US</span></a></li>
+      <li data-cc="VI" data-key="미국령 버진아일랜드 united states virgin islands vi"><a href="/vi/"><img class="flag" src="/flags/vi.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">미국령 버진아일랜드</span><span class="cc">VI</span></a></li>
+      <li data-cc="FM" data-key="미크로네시아 micronesia fm"><a href="/fm/"><img class="flag" src="/flags/fm.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">미크로네시아</span><span class="cc">FM</span></a></li>
+      <li data-cc="VU" data-key="바누아투 vanuatu vu"><a href="/vu/"><img class="flag" src="/flags/vu.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">바누아투</span><span class="cc">VU</span></a></li>
+      <li data-cc="BH" data-key="바레인 bahrain bh"><a href="/bh/"><img class="flag" src="/flags/bh.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">바레인</span><span class="cc">BH</span></a></li>
+      <li data-cc="BB" data-key="바베이도스 barbados bb"><a href="/bb/"><img class="flag" src="/flags/bb.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">바베이도스</span><span class="cc">BB</span></a></li>
+      <li data-cc="VA" data-key="바티칸 시국 vatican city va"><a href="/va/"><img class="flag" src="/flags/va.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">바티칸 시국</span><span class="cc">VA</span></a></li>
+      <li data-cc="BS" data-key="바하마 bahamas bs"><a href="/bs/"><img class="flag" src="/flags/bs.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">바하마</span><span class="cc">BS</span></a></li>
+      <li data-cc="BD" data-key="방글라데시 bangladesh bd"><a href="/bd/"><img class="flag" src="/flags/bd.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">방글라데시</span><span class="cc">BD</span></a></li>
+      <li data-cc="BM" data-key="버뮤다 bermuda bm"><a href="/bm/"><img class="flag" src="/flags/bm.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">버뮤다</span><span class="cc">BM</span></a></li>
+      <li data-cc="BJ" data-key="베냉 benin bj"><a href="/bj/"><img class="flag" src="/flags/bj.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">베냉</span><span class="cc">BJ</span></a></li>
+      <li data-cc="VE" data-key="베네수엘라 venezuela ve"><a href="/ve/"><img class="flag" src="/flags/ve.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">베네수엘라</span><span class="cc">VE</span></a></li>
+      <li data-cc="VN" data-key="베트남 vietnam vn"><a href="/vn/"><img class="flag" src="/flags/vn.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">베트남</span><span class="cc">VN</span></a></li>
+      <li data-cc="BE" data-key="벨기에 belgium be"><a href="/be/"><img class="flag" src="/flags/be.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">벨기에</span><span class="cc">BE</span></a></li>
+      <li data-cc="BY" data-key="벨라루스 belarus by"><a href="/by/"><img class="flag" src="/flags/by.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">벨라루스</span><span class="cc">BY</span></a></li>
+      <li data-cc="BZ" data-key="벨리즈 belize bz"><a href="/bz/"><img class="flag" src="/flags/bz.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">벨리즈</span><span class="cc">BZ</span></a></li>
+      <li data-cc="BA" data-key="보스니아 헤르체고비나 bosnia and herzegovina ba"><a href="/ba/"><img class="flag" src="/flags/ba.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">보스니아 헤르체고비나</span><span class="cc">BA</span></a></li>
+      <li data-cc="BW" data-key="보츠와나 botswana bw"><a href="/bw/"><img class="flag" src="/flags/bw.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">보츠와나</span><span class="cc">BW</span></a></li>
+      <li data-cc="BO" data-key="볼리비아 bolivia bo"><a href="/bo/"><img class="flag" src="/flags/bo.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">볼리비아</span><span class="cc">BO</span></a></li>
+      <li data-cc="BI" data-key="부룬디 burundi bi"><a href="/bi/"><img class="flag" src="/flags/bi.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">부룬디</span><span class="cc">BI</span></a></li>
+      <li data-cc="BF" data-key="부르키나파소 burkina faso bf"><a href="/bf/"><img class="flag" src="/flags/bf.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">부르키나파소</span><span class="cc">BF</span></a></li>
+      <li data-cc="MP" data-key="북마리아나제도 northern mariana islands mp"><a href="/mp/"><img class="flag" src="/flags/mp.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">북마리아나제도</span><span class="cc">MP</span></a></li>
+      <li data-cc="MK" data-key="북마케도니아 north macedonia mk"><a href="/mk/"><img class="flag" src="/flags/mk.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">북마케도니아</span><span class="cc">MK</span></a></li>
+      <li data-cc="BG" data-key="불가리아 bulgaria bg"><a href="/bg/"><img class="flag" src="/flags/bg.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">불가리아</span><span class="cc">BG</span></a></li>
+      <li data-cc="BR" data-key="브라질 brazil br"><a href="/br/"><img class="flag" src="/flags/br.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">브라질</span><span class="cc">BR</span></a></li>
+      <li data-cc="WS" data-key="사모아 samoa ws"><a href="/ws/"><img class="flag" src="/flags/ws.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">사모아</span><span class="cc">WS</span></a></li>
+      <li data-cc="SM" data-key="산마리노 san marino sm"><a href="/sm/"><img class="flag" src="/flags/sm.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">산마리노</span><span class="cc">SM</span></a></li>
+      <li data-cc="ST" data-key="상투메 프린시페 são tomé and príncipe st"><a href="/st/"><img class="flag" src="/flags/st.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">상투메 프린시페</span><span class="cc">ST</span></a></li>
+      <li data-cc="MF" data-key="생마르탱 saint martin mf"><a href="/mf/"><img class="flag" src="/flags/mf.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">생마르탱</span><span class="cc">MF</span></a></li>
+      <li data-cc="BL" data-key="생바르텔레미 saint barthélemy bl"><a href="/bl/"><img class="flag" src="/flags/bl.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">생바르텔레미</span><span class="cc">BL</span></a></li>
+      <li data-cc="PM" data-key="생피에르 미클롱 saint pierre and miquelon pm"><a href="/pm/"><img class="flag" src="/flags/pm.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">생피에르 미클롱</span><span class="cc">PM</span></a></li>
+      <li data-cc="SN" data-key="세네갈 senegal sn"><a href="/sn/"><img class="flag" src="/flags/sn.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">세네갈</span><span class="cc">SN</span></a></li>
+      <li data-cc="RS" data-key="세르비아 serbia rs"><a href="/rs/"><img class="flag" src="/flags/rs.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">세르비아</span><span class="cc">RS</span></a></li>
+      <li data-cc="SC" data-key="세이셸 seychelles sc"><a href="/sc/"><img class="flag" src="/flags/sc.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">세이셸</span><span class="cc">SC</span></a></li>
+      <li data-cc="LC" data-key="세인트루시아 saint lucia lc"><a href="/lc/"><img class="flag" src="/flags/lc.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">세인트루시아</span><span class="cc">LC</span></a></li>
+      <li data-cc="VC" data-key="세인트빈센트그레나딘 saint vincent and the grenadines vc"><a href="/vc/"><img class="flag" src="/flags/vc.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">세인트빈센트그레나딘</span><span class="cc">VC</span></a></li>
+      <li data-cc="KN" data-key="세인트키츠 네비스 saint kitts and nevis kn"><a href="/kn/"><img class="flag" src="/flags/kn.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">세인트키츠 네비스</span><span class="cc">KN</span></a></li>
+      <li data-cc="SH" data-key="세인트헬레나 saint helena, ascension and tristan da cunha sh"><a href="/sh/"><img class="flag" src="/flags/sh.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">세인트헬레나</span><span class="cc">SH</span></a></li>
+      <li data-cc="SO" data-key="소말리아 somalia so"><a href="/so/"><img class="flag" src="/flags/so.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">소말리아</span><span class="cc">SO</span></a></li>
+      <li data-cc="SB" data-key="솔로몬 제도 solomon islands sb"><a href="/sb/"><img class="flag" src="/flags/sb.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">솔로몬 제도</span><span class="cc">SB</span></a></li>
+      <li data-cc="SD" data-key="수단 sudan sd"><a href="/sd/"><img class="flag" src="/flags/sd.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">수단</span><span class="cc">SD</span></a></li>
+      <li data-cc="SR" data-key="수리남 suriname sr"><a href="/sr/"><img class="flag" src="/flags/sr.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">수리남</span><span class="cc">SR</span></a></li>
+      <li data-cc="SJ" data-key="스발바르제도-얀마웬섬 svalbard and jan mayen sj"><a href="/sj/"><img class="flag" src="/flags/sj.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">스발바르제도-얀마웬섬</span><span class="cc">SJ</span></a></li>
+      <li data-cc="SE" data-key="스웨덴 sweden se"><a href="/se/"><img class="flag" src="/flags/se.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">스웨덴</span><span class="cc">SE</span></a></li>
+      <li data-cc="CH" data-key="스위스 switzerland ch"><a href="/ch/"><img class="flag" src="/flags/ch.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">스위스</span><span class="cc">CH</span></a></li>
+      <li data-cc="ES" data-key="스페인 spain es"><a href="/es/"><img class="flag" src="/flags/es.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">스페인</span><span class="cc">ES</span></a></li>
+      <li data-cc="SK" data-key="슬로바키아 slovakia sk"><a href="/sk/"><img class="flag" src="/flags/sk.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">슬로바키아</span><span class="cc">SK</span></a></li>
+      <li data-cc="SI" data-key="슬로베니아 slovenia si"><a href="/si/"><img class="flag" src="/flags/si.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">슬로베니아</span><span class="cc">SI</span></a></li>
+      <li data-cc="SY" data-key="시리아 syria sy"><a href="/sy/"><img class="flag" src="/flags/sy.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">시리아</span><span class="cc">SY</span></a></li>
+      <li data-cc="SL" data-key="시에라리온 sierra leone sl"><a href="/sl/"><img class="flag" src="/flags/sl.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">시에라리온</span><span class="cc">SL</span></a></li>
+      <li data-cc="SX" data-key="신트마르턴 sint maarten sx"><a href="/sx/"><img class="flag" src="/flags/sx.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">신트마르턴</span><span class="cc">SX</span></a></li>
+      <li data-cc="SG" data-key="싱가포르 singapore sg"><a href="/sg/"><img class="flag" src="/flags/sg.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">싱가포르</span><span class="cc">SG</span></a></li>
+      <li data-cc="AW" data-key="아루바 aruba aw"><a href="/aw/"><img class="flag" src="/flags/aw.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">아루바</span><span class="cc">AW</span></a></li>
+      <li data-cc="AM" data-key="아르메니아 armenia am"><a href="/am/"><img class="flag" src="/flags/am.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">아르메니아</span><span class="cc">AM</span></a></li>
+      <li data-cc="AR" data-key="아르헨티나 argentina ar"><a href="/ar/"><img class="flag" src="/flags/ar.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">아르헨티나</span><span class="cc">AR</span></a></li>
+      <li data-cc="IS" data-key="아이슬란드 iceland is"><a href="/is/"><img class="flag" src="/flags/is.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">아이슬란드</span><span class="cc">IS</span></a></li>
+      <li data-cc="HT" data-key="아이티 haiti ht"><a href="/ht/"><img class="flag" src="/flags/ht.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">아이티</span><span class="cc">HT</span></a></li>
+      <li data-cc="IE" data-key="아일랜드 ireland ie"><a href="/ie/"><img class="flag" src="/flags/ie.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">아일랜드</span><span class="cc">IE</span></a></li>
+      <li data-cc="AD" data-key="안도라 andorra ad"><a href="/ad/"><img class="flag" src="/flags/ad.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">안도라</span><span class="cc">AD</span></a></li>
+      <li data-cc="AL" data-key="알바니아 albania al"><a href="/al/"><img class="flag" src="/flags/al.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">알바니아</span><span class="cc">AL</span></a></li>
+      <li data-cc="DZ" data-key="알제리 algeria dz"><a href="/dz/"><img class="flag" src="/flags/dz.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">알제리</span><span class="cc">DZ</span></a></li>
+      <li data-cc="AO" data-key="앙골라 angola ao"><a href="/ao/"><img class="flag" src="/flags/ao.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">앙골라</span><span class="cc">AO</span></a></li>
+      <li data-cc="AG" data-key="앤티가 바부다 antigua and barbuda ag"><a href="/ag/"><img class="flag" src="/flags/ag.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">앤티가 바부다</span><span class="cc">AG</span></a></li>
+      <li data-cc="AI" data-key="앵귈라 anguilla ai"><a href="/ai/"><img class="flag" src="/flags/ai.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">앵귈라</span><span class="cc">AI</span></a></li>
+      <li data-cc="ER" data-key="에리트리아 eritrea er"><a href="/er/"><img class="flag" src="/flags/er.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">에리트리아</span><span class="cc">ER</span></a></li>
+      <li data-cc="SZ" data-key="에스와티니 eswatini sz"><a href="/sz/"><img class="flag" src="/flags/sz.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">에스와티니</span><span class="cc">SZ</span></a></li>
+      <li data-cc="EE" data-key="에스토니아 estonia ee"><a href="/ee/"><img class="flag" src="/flags/ee.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">에스토니아</span><span class="cc">EE</span></a></li>
+      <li data-cc="EC" data-key="에콰도르 ecuador ec"><a href="/ec/"><img class="flag" src="/flags/ec.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">에콰도르</span><span class="cc">EC</span></a></li>
+      <li data-cc="ET" data-key="에티오피아 ethiopia et"><a href="/et/"><img class="flag" src="/flags/et.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">에티오피아</span><span class="cc">ET</span></a></li>
+      <li data-cc="SV" data-key="엘살바도르 el salvador sv"><a href="/sv/"><img class="flag" src="/flags/sv.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">엘살바도르</span><span class="cc">SV</span></a></li>
+      <li data-cc="GB" data-key="영국 united kingdom gb"><a href="/gb/"><img class="flag" src="/flags/gb.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">영국</span><span class="cc">GB</span></a></li>
+      <li data-cc="VG" data-key="영국령 버진아일랜드 british virgin islands vg"><a href="/vg/"><img class="flag" src="/flags/vg.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">영국령 버진아일랜드</span><span class="cc">VG</span></a></li>
+      <li data-cc="YE" data-key="예멘 yemen ye"><a href="/ye/"><img class="flag" src="/flags/ye.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">예멘</span><span class="cc">YE</span></a></li>
+      <li data-cc="AU" data-key="오스트레일리아 australia au"><a href="/au/"><img class="flag" src="/flags/au.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">오스트레일리아</span><span class="cc">AU</span></a></li>
+      <li data-cc="AT" data-key="오스트리아 austria at"><a href="/at/"><img class="flag" src="/flags/at.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">오스트리아</span><span class="cc">AT</span></a></li>
+      <li data-cc="HN" data-key="온두라스 honduras hn"><a href="/hn/"><img class="flag" src="/flags/hn.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">온두라스</span><span class="cc">HN</span></a></li>
+      <li data-cc="AX" data-key="올란드 제도 åland islands ax"><a href="/ax/"><img class="flag" src="/flags/ax.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">올란드 제도</span><span class="cc">AX</span></a></li>
+      <li data-cc="WF" data-key="왈리스-푸투나 제도 wallis and futuna wf"><a href="/wf/"><img class="flag" src="/flags/wf.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">왈리스-푸투나 제도</span><span class="cc">WF</span></a></li>
+      <li data-cc="UG" data-key="우간다 uganda ug"><a href="/ug/"><img class="flag" src="/flags/ug.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">우간다</span><span class="cc">UG</span></a></li>
+      <li data-cc="UY" data-key="우루과이 uruguay uy"><a href="/uy/"><img class="flag" src="/flags/uy.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">우루과이</span><span class="cc">UY</span></a></li>
+      <li data-cc="UA" data-key="우크라이나 ukraine ua"><a href="/ua/"><img class="flag" src="/flags/ua.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">우크라이나</span><span class="cc">UA</span></a></li>
+      <li data-cc="IQ" data-key="이라크 iraq iq"><a href="/iq/"><img class="flag" src="/flags/iq.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">이라크</span><span class="cc">IQ</span></a></li>
+      <li data-cc="EG" data-key="이집트 egypt eg"><a href="/eg/"><img class="flag" src="/flags/eg.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">이집트</span><span class="cc">EG</span></a></li>
+      <li data-cc="IT" data-key="이탈리아 italy it"><a href="/it/"><img class="flag" src="/flags/it.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">이탈리아</span><span class="cc">IT</span></a></li>
+      <li data-cc="ID" data-key="인도네시아 indonesia id"><a href="/id/"><img class="flag" src="/flags/id.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">인도네시아</span><span class="cc">ID</span></a></li>
+      <li data-cc="JP" data-key="일본 japan jp"><a href="/jp/"><img class="flag" src="/flags/jp.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">일본</span><span class="cc">JP</span></a></li>
+      <li data-cc="JM" data-key="자메이카 jamaica jm"><a href="/jm/"><img class="flag" src="/flags/jm.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">자메이카</span><span class="cc">JM</span></a></li>
+      <li data-cc="ZM" data-key="잠비아 zambia zm"><a href="/zm/"><img class="flag" src="/flags/zm.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">잠비아</span><span class="cc">ZM</span></a></li>
+      <li data-cc="JE" data-key="저지 jersey je"><a href="/je/"><img class="flag" src="/flags/je.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">저지</span><span class="cc">JE</span></a></li>
+      <li data-cc="GQ" data-key="적도 기니 equatorial guinea gq"><a href="/gq/"><img class="flag" src="/flags/gq.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">적도 기니</span><span class="cc">GQ</span></a></li>
+      <li data-cc="GE" data-key="조지아 georgia ge"><a href="/ge/"><img class="flag" src="/flags/ge.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">조지아</span><span class="cc">GE</span></a></li>
+      <li data-cc="CN" data-key="중국 china cn"><a href="/cn/"><img class="flag" src="/flags/cn.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">중국</span><span class="cc">CN</span></a></li>
+      <li data-cc="CF" data-key="중앙 아프리카 공화국 central african republic cf"><a href="/cf/"><img class="flag" src="/flags/cf.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">중앙 아프리카 공화국</span><span class="cc">CF</span></a></li>
+      <li data-cc="DJ" data-key="지부티 djibouti dj"><a href="/dj/"><img class="flag" src="/flags/dj.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">지부티</span><span class="cc">DJ</span></a></li>
+      <li data-cc="GI" data-key="지브롤터 gibraltar gi"><a href="/gi/"><img class="flag" src="/flags/gi.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">지브롤터</span><span class="cc">GI</span></a></li>
+      <li data-cc="ZW" data-key="짐바브웨 zimbabwe zw"><a href="/zw/"><img class="flag" src="/flags/zw.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">짐바브웨</span><span class="cc">ZW</span></a></li>
+      <li data-cc="TD" data-key="차드 chad td"><a href="/td/"><img class="flag" src="/flags/td.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">차드</span><span class="cc">TD</span></a></li>
+      <li data-cc="CZ" data-key="체코 czechia cz"><a href="/cz/"><img class="flag" src="/flags/cz.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">체코</span><span class="cc">CZ</span></a></li>
+      <li data-cc="CL" data-key="칠레 chile cl"><a href="/cl/"><img class="flag" src="/flags/cl.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">칠레</span><span class="cc">CL</span></a></li>
+      <li data-cc="CM" data-key="카메룬 cameroon cm"><a href="/cm/"><img class="flag" src="/flags/cm.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">카메룬</span><span class="cc">CM</span></a></li>
+      <li data-cc="CV" data-key="카보베르데 cape verde cv"><a href="/cv/"><img class="flag" src="/flags/cv.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">카보베르데</span><span class="cc">CV</span></a></li>
+      <li data-cc="KZ" data-key="카자흐스탄 kazakhstan kz"><a href="/kz/"><img class="flag" src="/flags/kz.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">카자흐스탄</span><span class="cc">KZ</span></a></li>
+      <li data-cc="KH" data-key="캄보디아 cambodia kh"><a href="/kh/"><img class="flag" src="/flags/kh.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">캄보디아</span><span class="cc">KH</span></a></li>
+      <li data-cc="CA" data-key="캐나다 canada ca"><a href="/ca/"><img class="flag" src="/flags/ca.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">캐나다</span><span class="cc">CA</span></a></li>
+      <li data-cc="KE" data-key="케냐 kenya ke"><a href="/ke/"><img class="flag" src="/flags/ke.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">케냐</span><span class="cc">KE</span></a></li>
+      <li data-cc="KY" data-key="케이맨 제도 cayman islands ky"><a href="/ky/"><img class="flag" src="/flags/ky.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">케이맨 제도</span><span class="cc">KY</span></a></li>
+      <li data-cc="KM" data-key="코모로 comoros km"><a href="/km/"><img class="flag" src="/flags/km.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">코모로</span><span class="cc">KM</span></a></li>
+      <li data-cc="CR" data-key="코스타리카 costa rica cr"><a href="/cr/"><img class="flag" src="/flags/cr.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">코스타리카</span><span class="cc">CR</span></a></li>
+      <li data-cc="CC" data-key="코코스 제도 cocos (keeling) islands cc"><a href="/cc/"><img class="flag" src="/flags/cc.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">코코스 제도</span><span class="cc">CC</span></a></li>
+      <li data-cc="CI" data-key="코트디부아르 ivory coast ci"><a href="/ci/"><img class="flag" src="/flags/ci.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">코트디부아르</span><span class="cc">CI</span></a></li>
+      <li data-cc="CO" data-key="콜롬비아 colombia co"><a href="/co/"><img class="flag" src="/flags/co.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">콜롬비아</span><span class="cc">CO</span></a></li>
+      <li data-cc="CG" data-key="콩고-브라자빌 congo cg"><a href="/cg/"><img class="flag" src="/flags/cg.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">콩고-브라자빌</span><span class="cc">CG</span></a></li>
+      <li data-cc="CD" data-key="콩고-킨샤사 dr congo cd"><a href="/cd/"><img class="flag" src="/flags/cd.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">콩고-킨샤사</span><span class="cc">CD</span></a></li>
+      <li data-cc="CU" data-key="쿠바 cuba cu"><a href="/cu/"><img class="flag" src="/flags/cu.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">쿠바</span><span class="cc">CU</span></a></li>
+      <li data-cc="CK" data-key="쿡 제도 cook islands ck"><a href="/ck/"><img class="flag" src="/flags/ck.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">쿡 제도</span><span class="cc">CK</span></a></li>
+      <li data-cc="CW" data-key="퀴라소 curaçao cw"><a href="/cw/"><img class="flag" src="/flags/cw.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">퀴라소</span><span class="cc">CW</span></a></li>
+      <li data-cc="HR" data-key="크로아티아 croatia hr"><a href="/hr/"><img class="flag" src="/flags/hr.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">크로아티아</span><span class="cc">HR</span></a></li>
+      <li data-cc="CX" data-key="크리스마스섬 christmas island cx"><a href="/cx/"><img class="flag" src="/flags/cx.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">크리스마스섬</span><span class="cc">CX</span></a></li>
+      <li data-cc="KI" data-key="키리바시 kiribati ki"><a href="/ki/"><img class="flag" src="/flags/ki.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">키리바시</span><span class="cc">KI</span></a></li>
+      <li data-cc="CY" data-key="키프로스 cyprus cy"><a href="/cy/"><img class="flag" src="/flags/cy.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">키프로스</span><span class="cc">CY</span></a></li>
+      <li data-cc="TZ" data-key="탄자니아 tanzania tz"><a href="/tz/"><img class="flag" src="/flags/tz.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">탄자니아</span><span class="cc">TZ</span></a></li>
+      <li data-cc="TC" data-key="터크스 케이커스 제도 turks and caicos islands tc"><a href="/tc/"><img class="flag" src="/flags/tc.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">터크스 케이커스 제도</span><span class="cc">TC</span></a></li>
+      <li data-cc="TG" data-key="토고 togo tg"><a href="/tg/"><img class="flag" src="/flags/tg.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">토고</span><span class="cc">TG</span></a></li>
+      <li data-cc="TK" data-key="토켈라우 tokelau tk"><a href="/tk/"><img class="flag" src="/flags/tk.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">토켈라우</span><span class="cc">TK</span></a></li>
+      <li data-cc="TO" data-key="통가 tonga to"><a href="/to/"><img class="flag" src="/flags/to.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">통가</span><span class="cc">TO</span></a></li>
+      <li data-cc="TV" data-key="투발루 tuvalu tv"><a href="/tv/"><img class="flag" src="/flags/tv.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">투발루</span><span class="cc">TV</span></a></li>
+      <li data-cc="TN" data-key="튀니지 tunisia tn"><a href="/tn/"><img class="flag" src="/flags/tn.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">튀니지</span><span class="cc">TN</span></a></li>
+      <li data-cc="TR" data-key="튀르키예 türkiye tr"><a href="/tr/"><img class="flag" src="/flags/tr.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">튀르키예</span><span class="cc">TR</span></a></li>
+      <li data-cc="TT" data-key="트리니다드 토바고 trinidad and tobago tt"><a href="/tt/"><img class="flag" src="/flags/tt.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">트리니다드 토바고</span><span class="cc">TT</span></a></li>
+      <li data-cc="PA" data-key="파나마 panama pa"><a href="/pa/"><img class="flag" src="/flags/pa.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">파나마</span><span class="cc">PA</span></a></li>
+      <li data-cc="PY" data-key="파라과이 paraguay py"><a href="/py/"><img class="flag" src="/flags/py.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">파라과이</span><span class="cc">PY</span></a></li>
+      <li data-cc="PG" data-key="파푸아뉴기니 papua new guinea pg"><a href="/pg/"><img class="flag" src="/flags/pg.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">파푸아뉴기니</span><span class="cc">PG</span></a></li>
+      <li data-cc="PW" data-key="팔라우 palau pw"><a href="/pw/"><img class="flag" src="/flags/pw.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">팔라우</span><span class="cc">PW</span></a></li>
+      <li data-cc="FO" data-key="페로 제도 faroe islands fo"><a href="/fo/"><img class="flag" src="/flags/fo.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">페로 제도</span><span class="cc">FO</span></a></li>
+      <li data-cc="PE" data-key="페루 peru pe"><a href="/pe/"><img class="flag" src="/flags/pe.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">페루</span><span class="cc">PE</span></a></li>
+      <li data-cc="PT" data-key="포르투갈 portugal pt"><a href="/pt/"><img class="flag" src="/flags/pt.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">포르투갈</span><span class="cc">PT</span></a></li>
+      <li data-cc="FK" data-key="포클랜드 제도 falkland islands fk"><a href="/fk/"><img class="flag" src="/flags/fk.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">포클랜드 제도</span><span class="cc">FK</span></a></li>
+      <li data-cc="PL" data-key="폴란드 poland pl"><a href="/pl/"><img class="flag" src="/flags/pl.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">폴란드</span><span class="cc">PL</span></a></li>
+      <li data-cc="PR" data-key="푸에르토리코 puerto rico pr"><a href="/pr/"><img class="flag" src="/flags/pr.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">푸에르토리코</span><span class="cc">PR</span></a></li>
+      <li data-cc="FR" data-key="프랑스 france fr"><a href="/fr/"><img class="flag" src="/flags/fr.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">프랑스</span><span class="cc">FR</span></a></li>
+      <li data-cc="GF" data-key="프랑스령 기아나 french guiana gf"><a href="/gf/"><img class="flag" src="/flags/gf.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">프랑스령 기아나</span><span class="cc">GF</span></a></li>
+      <li data-cc="PF" data-key="프랑스령 폴리네시아 french polynesia pf"><a href="/pf/"><img class="flag" src="/flags/pf.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">프랑스령 폴리네시아</span><span class="cc">PF</span></a></li>
+      <li data-cc="FI" data-key="핀란드 finland fi"><a href="/fi/"><img class="flag" src="/flags/fi.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">핀란드</span><span class="cc">FI</span></a></li>
+      <li data-cc="PH" data-key="필리핀 philippines ph"><a href="/ph/"><img class="flag" src="/flags/ph.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">필리핀</span><span class="cc">PH</span></a></li>
+      <li data-cc="PN" data-key="핏케언 제도 pitcairn islands pn"><a href="/pn/"><img class="flag" src="/flags/pn.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">핏케언 제도</span><span class="cc">PN</span></a></li>
+      <li data-cc="HU" data-key="헝가리 hungary hu"><a href="/hu/"><img class="flag" src="/flags/hu.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">헝가리</span><span class="cc">HU</span></a></li>
+      <li data-cc="HK" data-key="홍콩(중국 특별행정구) hong kong hk"><a href="/hk/"><img class="flag" src="/flags/hk.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><span class="cn">홍콩(중국 특별행정구)</span><span class="cc">HK</span></a></li>
     </ul>
     <div class="none" id="cnone" hidden>찾는 국가가 없습니다.</div>
   </section>

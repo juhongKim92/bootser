@@ -161,7 +161,7 @@ table.who td.name{
   font-family:var(--sans);font-size:13px;font-weight:400;line-height:1.9;
   color:var(--ink-2);
 }
-.ccs .one{white-space:nowrap}
+.ccs .one{white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
 .ccs .one::after{content:'·';color:var(--ink-3);margin:0 5px 0 7px}
 .ccs .one:last-child::after{content:''}
 .ccs a{color:var(--ink-2);text-decoration:none}
@@ -175,7 +175,7 @@ td.no{
   color:var(--ink-3);width:1%;white-space:nowrap;text-align:right;
 }
 td.who{white-space:nowrap;font-weight:500}
-td.who .flag{margin-right:7px}
+td.who img.flag{margin-right:7px}
 td.who a{color:var(--ink);text-decoration:none}
 td.who a:hover{color:var(--soon);text-decoration:underline}
 
@@ -201,7 +201,6 @@ details.year[open] > summary::before{content:'▾ '}
 .picker > summary::-webkit-details-marker{display:none}
 .picker > summary:hover{border-color:var(--ink-3)}
 .picker > summary::after{content:'▾';color:var(--ink-3);font-size:11px}
-.picker .flag{font-size:15px;line-height:1}
 
 .panel{
   position:absolute;right:0;top:calc(100% + 6px);z-index:40;
@@ -223,9 +222,11 @@ details.year[open] > summary::before{content:'▾ '}
   overscroll-behavior:contain;
 }
 .panel li a{
-  display:flex;align-items:baseline;gap:9px;
+  display:flex;align-items:center;gap:8px;
   padding:7px 13px;text-decoration:none;color:var(--ink);font-size:14px;
 }
+/* 이름이 길어도(네덜란드령 카리브) 코드를 밀어내지 않게 이름만 줄인다 */
+.panel li a .cn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .panel li a:hover,.panel li a:focus{background:var(--paper-2);outline:none}
 .panel li a[aria-current="true"]{background:var(--paper-3);font-weight:500}
 .panel li a .cc{
@@ -241,7 +242,7 @@ details.year[open] > summary::before{content:'▾ '}
   padding:8px 0;border-bottom:1px solid var(--rule);
 }
 .worldwide li:last-child{border-bottom:none}
-.worldwide .who{white-space:nowrap}
+.worldwide .who{white-space:nowrap;display:inline-flex;align-items:center;gap:7px}
 .worldwide .who a{color:var(--ink);text-decoration:none}
 .worldwide .who a:hover{color:var(--soon);text-decoration:underline}
 .worldwide .what{color:var(--ink-2)}
@@ -277,8 +278,12 @@ details.year[open] > summary::before{content:'▾ '}
   font-size:14px;
 }
 .countries li{break-inside:avoid;padding:3px 0}
-.countries a{text-decoration:none;color:var(--ink)}
-.countries a:hover{color:var(--soon);text-decoration:underline}
+.countries a{
+  text-decoration:none;color:var(--ink);
+  display:inline-flex;align-items:center;gap:7px;
+}
+/* 밑줄은 이름에만 긋는다 — 링크 전체에 그으면 국기 밑에도 선이 지나간다 */
+.countries a:hover .cn{color:var(--soon);text-decoration:underline}
 .countries .cc{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-left:5px}
 
 @media (max-width:640px){

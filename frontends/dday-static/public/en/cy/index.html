@@ -32,9 +32,15 @@
 
 <div class="top"><div class="wrap">
   <a class="brand" href="/en/">← this is the day</a>
-  <nav>
+    <nav class="tabs">
+      <a class="tab here" href="/en/" aria-current="page">Countries</a>
+      <a class="tab" href="/en/rank/">Rankings</a>
+      <a class="tab" href="/en/holiday/">By name</a>
+      <a class="tab" href="/en/sky/">The sky</a>
+    </nav>
+  <nav class="side">
     <details class="picker" id="picker">
-      <summary><span class="flag">🇨🇾</span>Cyprus</summary>
+      <summary><img class="flag" src="/flags/cy.svg" width="20" height="15" alt="" loading="eager" decoding="async">Cyprus</summary>
       <div class="panel">
         <input type="search" placeholder="Search — name or code" aria-label="Search countries" autocomplete="off">
         <ul></ul>

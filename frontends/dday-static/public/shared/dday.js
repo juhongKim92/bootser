@@ -154,13 +154,18 @@
         return T.short(parts(iso)) + ' (' + T.dow[dow(iso)] + ')';
     }
 
-    /* 국가 코드 → 국기 이모지. 두 글자를 지역 표시 기호로 옮긴다. */
+    /* 국가 코드 → 국기 <img>. 예전에는 지역 표시 기호 두 개(이모지)였는데
+       **윈도우에서 국기로 그려지지 않는다** — 글리프를 합치지 않아서
+       'GH' 두 글자로 보였다. 지금은 우리 오리진의 SVG 다.
+
+       크기(20×15)와 경로를 여기 적어 두는 것은 gen-pages 와 두 벌이 되는
+       일이지만, 이 파일은 브라우저가 받는 것이라 tools/ 를 import 할 수
+       없다. 두 벌이 갈라지면 check-pages 가 문다 — 선택기와 오늘 목록에
+       그려진 국기가 HTML 에 박힌 것과 같은 모양인지 본다. */
     function flag(cc) {
         if (!/^[A-Z]{2}$/.test(cc)) return '';
-        return String.fromCodePoint(
-            0x1F1E6 + cc.charCodeAt(0) - 65,
-            0x1F1E6 + cc.charCodeAt(1) - 65
-        );
+        return '<img class="flag" src="/flags/' + cc.toLowerCase() + '.svg"' +
+            ' width="20" height="15" alt="" loading="lazy" decoding="async">';
     }
 
     function esc(s) {
@@ -575,7 +580,7 @@
                 return '<li data-cc="' + c.code + '" data-key="' + esc(searchKey(c)) + '">' +
                     '<a href="' + T.dir + '/' + c.code.toLowerCase() + '/" data-cc="' + c.code + '"' +
                     (cur ? ' aria-current="true"' : '') + '>' +
-                    '<span class="flag">' + flag(c.code) + '</span>' + esc(T.name(c)) +
+                    flag(c.code) + '<span class="cn">' + esc(T.name(c)) + '</span>' +
                     '<span class="cc">' + c.code + '</span></a></li>';
             }).join('');
 
@@ -685,7 +690,7 @@
         home.innerHTML =
             '<div class="asof">' + T.asof(human(today)) + '</div>' +
             '<div class="verdict' + (v.rest ? ' rest' : '') + '">' +
-                flag(data.code) + ' ' + esc(label) + ' — ' + esc(v.text) + '</div>' +
+                flag(data.code) + esc(label) + ' — ' + esc(v.text) + '</div>' +
             '<dl class="pair">' +
                 line(T.dtNext, got.next, '-') +
                 line(T.dtPrev, got.prev, '+') +
@@ -743,7 +748,7 @@
             list.innerHTML = items.map(function (it) {
                 var sub = T.holidaySub(it.h);
                 return '<li>' +
-                    '<span class="who">' + flag(it.c.code) + ' <a href="' + T.dir + '/' +
+                    '<span class="who">' + flag(it.c.code) + '<a href="' + T.dir + '/' +
                         it.c.code.toLowerCase() + '/">' + esc(it.label) + '</a></span>' +
                     '<span class="what">' + esc(T.holiday(it.h)) +
                         (sub ? '<span class="en">' + esc(sub) + '</span>' : '') +
