@@ -24,6 +24,7 @@ import { MAP, GRID, COLOR } from './favicon-art.mjs';
 import { GLYPHS, FW, FH, TILE, MARK, ACCENT, CARD_W, CARD_H, CARD_DIR, normalize, validate } from './card-art.mjs';
 import { encodePng, rgb } from './png.mjs';
 import { PUB, DATA, EXTRA } from './config.mjs';
+import { NAMES, NAME_ROOT } from './holiday-names.mjs';
 
 const CHECK = process.argv.includes('--check');
 
@@ -202,20 +203,35 @@ function homeCard() {
 
 const countries = JSON.parse(readFileSync(join(DATA, 'countries.json'), 'utf8'));
 
-/* 하늘은 허브 하나와 갈래 셋이다. 이름은 gen-pages 의 SKY_TOPICS 와 짝이지만
+/* 하늘은 허브 하나와 갈래 넷이다. 이름은 gen-pages 의 SKY_TOPICS 와 짝이지만
    여기서 따로 적는다 — 거기서 가져오면 그 파일이 카드를 다시 그리게 만든다
    (gen-pages 는 생성기라 import 하는 순간 412개 HTML 이 다시 쓰인다).
    짝이 어긋나면 check-pages 가 "페이지가 가리키는데 파일이 없다" 로 문다. */
 const SKY_CARDS = [
-    ['sky',        'SKY',    'SOLAR TERMS, MOON PHASES AND METEOR SHOWERS'],
+    ['sky',        'SKY',    'SOLAR TERMS, MOONS, METEORS AND LUNAR MONTHS'],
     ['sky-term',   'TERM',   'THE 24 SOLAR TERMS'],
     ['sky-moon',   'MOON',   'NEW AND FULL MOONS'],
     ['sky-meteor', 'METEOR', 'METEOR SHOWER PEAKS'],
+    ['sky-lunar',  'LUNAR',  'THE LUNISOLAR CALENDAR'],
 ];
+
+/* 국가 축도 하늘도 아닌 축 둘. /holiday/ 아래의 낱장은 아래에서 원화(NAMES)로 만든다. */
+const AXIS_CARDS = [
+    [NAME_ROOT,    'HOLIDAY', 'HOLIDAYS BY NAME'],
+    ['rank',       'RANK',    'COUNTRIES COMPARED'],
+];
+
+/* 이름 축의 낱장. **원화(tools/holiday-names.mjs)만 본다** — 어느 이름이 문턱을
+   넘는지는 자료가 정하는데, 그 판단을 여기서 되풀이하면 gen-pages 와 갈라진다.
+   원화에는 있는데 페이지가 없어지면 카드가 유령으로 남고, 그건 check-pages 의
+   "어느 페이지도 가리키지 않는다" 가 문다 — 그때 원화에서 빼면 된다. */
+const NAME_CARDS = Object.values(NAMES)
+    .map((e) => [`${NAME_ROOT}-${e.slug}`, 'HOLIDAY', normalize(e.en)]);
 
 const out = [
     ['home.png', homeCard()],
-    ...SKY_CARDS.map(([file, code, name]) => [`${file}.png`, card({ code, name })]),
+    ...[...SKY_CARDS, ...AXIS_CARDS, ...NAME_CARDS]
+        .map(([file, code, name]) => [`${file}.png`, card({ code, name })]),
     ...countries.map((c) => [
         `${c.code.toLowerCase()}.png`,
         card({ code: c.code, name: normalize(c.name) }),

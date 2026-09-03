@@ -21,9 +21,10 @@
    ============================================================ */
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { BASE, PUB, DATA, YEARS, EXTRA, today } from './config.mjs';
+import { BASE, PUB, DATA, YEARS, EXTRA, NAME_PAGE, today } from './config.mjs';
 import { CARDINAL } from './astro.mjs';
 import { CARD_W, CARD_H, CARD_DIR } from './card-art.mjs';
+import { NORM, NAMES, MIN, NAME_ROOT } from './holiday-names.mjs';
 
 const SITE = 'this is the day';
 const MID = YEARS()[1];                                   /* 표지로 삼을 해 = 올해 */
@@ -46,6 +47,7 @@ const epochDay = (iso) => {
     const [y, m, d] = iso.split('-').map(Number);
     return Math.round(Date.UTC(y, m - 1, d) / 86400000);
 };
+const isoPlus = (iso, n) => new Date((epochDay(iso) + n) * 86400000).toISOString().slice(0, 10);
 
 /* 한글 · 영어 · 코드 아무거나로 찾히게 한다. 영어 페이지에서도 "대한" 으로 찾힌다 —
    목록에 걸어 두는 열쇠는 언어와 무관하게 같은 것이 편하다. */
@@ -140,13 +142,86 @@ const L = {
         footTz: 'D-day 는 이 기기의 날짜로 계산합니다 — 다른 시간대의 국가를 볼 때는 하루 어긋날 수 있습니다.',
         crumbCountry: (c) => `${c.ko} 공휴일`,
 
+        /* --- 이름 축 ---
+           국가 축으로는 답할 수 없는 물음을 받는 자리다. "크리스마스에 어느 나라가
+           쉬나" 와 "세계의 독립기념일은 언제인가" 는 204개 국가 페이지를 다 열어야
+           답이 나오는데, 그건 답이 없는 것과 같다. */
+        nameHubTitle: (n) => `공휴일 이름 ${n}가지 — 어느 나라가 함께 쉬나`,
+        nameHubDesc: (n, y, m) => `같은 이름의 공휴일을 쓰는 나라를 이름별로 모았습니다.`
+            + ` 이름 ${n}가지와, ${y}년에 ${m}개국 이상이 함께 쉬는 날을 날짜순으로 봅니다.`,
+        nameHubH1: '공휴일 이름으로 보기',
+        nameHubNote: '크리스마스 · 독립기념일 · 노동절',
+        axesCap: '다른 축',
+        axesH2: '나라 말고 다른 축으로 보기',
+        nameHubLede: '크리스마스처럼 온 세계가 같은 날 쉬는 이름도 있고, 독립기념일처럼 나라마다 다른 날 쉬는 이름도 있습니다. 이름을 골라 들어가면 어느 나라가 언제 쉬는지 봅니다.',
+        nameHubCrumb: '공휴일 이름',
+        nameListCap: (n) => `이름 ${n}가지`,
+        nameListH2: '이름별로 보기',
+        nameCount: (n) => `${n}개국`,
+        nameLink: '공휴일 이름으로 보기 →',
+        togetherCap: (y, n) => `${y}년 · ${n}일`,
+        togetherH2: (y) => `${y}년, 가장 많은 나라가 함께 쉬는 날`,
+        togetherNote: (m, y) => `${y}년에 ${m}개국 이상이 같은 날 쉬는 날짜입니다. 국가별 공휴일을 날짜로 뒤집어 셌습니다 — 이름이 나라마다 달라도 같은 날이면 함께 셉니다.`,
+        thTogether: '함께 쉬는 나라',
+        togetherWho: (n) => `${n}개국`,
+
+        nameTitle: (e, y) => `${y}년 ${e.ko} — 어느 나라가 쉬나`,
+        /* f.first · f.peak 는 이미 날짜 한 개 꼴로 다듬어 넘어온다 (DATE_ONE).
+           여기서 DATE_SPAN 을 같은 날짜로 두 번 부르면 "12월 25~25일" 이 된다. */
+        nameDesc: (e, y, f) => fit(
+            `${y}년 ${e.ko}(${e.en})에 쉬는 나라는 ${f.cover}개국입니다.`,
+            f.spread > 1
+                ? ` 날짜는 나라마다 갈려 ${f.spread}가지입니다.`
+                : ` 모두 ${f.first}에 쉽니다.`),
+        nameH1: (e) => e.ko,
+        nameLede: (e) => `${e.ko}(${e.en})을 공휴일로 두는 나라입니다. 나라를 눌러 그 나라 공휴일 전체로 갈 수 있습니다.`,
+        nameSum: (e, y, f) => `${y}년 ${e.ko}에 쉬는 나라는 ${f.cover}개국입니다.`
+            + (f.spread > 1
+                ? ` 날짜가 나라마다 갈려 ${f.spread}가지이고, 가장 많은 나라가 쉬는 날은 ${f.peak}(${f.peakN}개국)입니다.`
+                : ` 모두 같은 날(${f.first}) 쉽니다.`),
+        nameYearCap: (y, n) => `${y}년 · ${n}개국`,
+        nameYearH2: (e, y) => `${y}년 ${e.ko}`,
+        thWho: '쉬는 나라',
+        nameNote: '같은 이름을 쓰는 날짜를 모두 담았습니다. 표기만 다른 이름(All Saints’ Day · All Saints Day)은 한 이름으로 묶었고, 낱말이 다른 이름은 묶지 않았습니다.',
+        nameBackHub: '공휴일 이름 전체 보기 →',
+        dtNextName: '다음',
+        dtPrevName: '지난',
+        nameVerdict: (e) => `${e.ko}`,
+
+        /* --- 나라끼리 견주기 --- */
+        rankTitle: (y) => `${y}년 공휴일 순위 — 많은 나라, 긴 연휴`,
+        rankDesc: (y, f) => `${y}년 공휴일이 가장 많은 나라는 ${f.most.label} ${f.most.n}일,`
+            + ` 가장 적은 나라는 ${f.least.label} ${f.least.n}일입니다.`
+            + ` 가장 긴 황금연휴는 ${f.long.label} ${f.long.n}일입니다.`,
+        rankH1: '나라끼리 견주기',
+        rankLede: '국가 페이지는 한 나라만 보여 줍니다. 여기서는 담긴 나라 전부를 한 줄에 세워 봅니다.',
+        rankNoteShort: '공휴일이 많은 나라 · 가장 긴 연휴',
+        rankCrumb: '나라끼리 견주기',
+        rankLink: '나라끼리 견주기 →',
+        rankNote: (y, n) => `${y}년 자료를 담긴 ${n}개국에 대해 세었습니다. 세는 단위는 "공휴일이 있는 날짜" 입니다 — 한 날짜에 공휴일이 둘 겹치는 나라가 있어 건수와는 다릅니다.`,
+        rankMostCap: (n) => `상위 ${n}개국`,
+        rankMostH2: (y) => `${y}년 공휴일이 많은 나라`,
+        rankLeastCap: (n) => `하위 ${n}개국`,
+        rankLeastH2: (y) => `${y}년 공휴일이 적은 나라`,
+        rankBreakCap: (n) => `상위 ${n}건`,
+        rankBreakH2: (y) => `${y}년 가장 긴 황금연휴`,
+        rankBreakNote: '주말과 공휴일이 이어져 사흘 이상 쉬는 구간 가운데 가장 긴 것입니다.',
+        rankBreaksCap: (n) => `상위 ${n}개국`,
+        rankBreaksH2: (y) => `${y}년 황금연휴가 많은 나라`,
+        thRank: '순위',
+        thCountry: '국가',
+        thDayCount: '쉬는 날짜',
+        thBreakCount: '연휴 횟수',
+        rankDays: (n) => `${n}일`,
+        rankTimes: (n) => `${n}회`,
+
         /* --- 하늘 --- */
         /* 허브(/sky/) — 갈래로 보내는 자리다. 표를 이고 있지 않으므로 제목도 갈래
            하나를 가리키지 않는다. 갈래 페이지와 제목이 겹치면 서로 잡아먹는다. */
-        skyTitle: (y) => `${y}년 하늘 — 절기·삭망·유성우 D-day`,
-        skyDesc: (y) => `${y}년 24절기와 삭·보름, 유성우 극대기. 갈래별로 나누어 보고 다음까지 며칠 남았는지 함께 봅니다. 한국 표준시 기준.`,
+        skyTitle: (y) => `${y}년 하늘 — 절기·삭망·유성우·음력 D-day`,
+        skyDesc: (y) => `${y}년 24절기와 삭·보름, 유성우 극대기, 그리고 음력 달력. 갈래별로 나누어 보고 다음까지 며칠 남았는지 함께 봅니다. 한국 표준시 기준.`,
         skyH1: '하늘',
-        skyLede: '절기와 삭망, 유성우입니다. 갈래를 골라 들어가면 3년치를 날짜순으로 봅니다.',
+        skyLede: '절기와 삭망, 유성우, 그리고 음력 달력입니다. 갈래를 골라 들어가면 3년치를 날짜순으로 봅니다.',
         skyCrumb: '하늘',
         skyLink: '하늘 전체 보기 →',
         skyTopicsCap: '갈래',
@@ -184,6 +259,20 @@ const L = {
                 hub: '유성우',
                 hubNote: '페르세우스자리 · 쌍둥이자리',
             },
+            /* 음력만 note · foot 를 따로 갖는다. 다른 갈래는 "이 페이지는 KST 기준"
+               한 줄로 끝나지만, 음력은 시간대가 자료의 일부라 en 페이지도 KST 표를
+               본다 — skyNote 를 그대로 쓰면 en 페이지가 "모두 UTC" 라고 거짓말한다. */
+            lunar: {
+                title: (y) => `${y}년 음력 달력 — 초하루와 윤달`,
+                desc: (y) => `${y}년 음력 달의 초하루가 양력 며칟날인지, 그 달이 29일인지 30일인지. 윤달도 함께 봅니다. 한국 표준시 기준.`,
+                h1: '음력 달력',
+                lede: '음력 달의 첫날(초하루)과 길이입니다. 삭이 든 날이 초하루이고, 중기가 들지 않는 달이 윤달입니다.',
+                crumb: '음력',
+                hub: '음력 달력',
+                hubNote: '초하루 · 윤달',
+                note: '음력은 삭이 든 날로 달이 갈리므로 기준 시간대가 규칙의 일부입니다. 이 표는 한국 표준시(KST) 기준이고, 그래서 중국 농력(UTC+8)과는 삭이 두 자정 사이에 떨어지는 해에 하루 어긋납니다 — 2027년 설날이 그렇습니다.',
+                foot: '초하루는 삭이 든 날, 동지가 든 달은 11월, 윤달은 중기가 들지 않는 첫 달(무중치윤법)입니다. 삭은 Meeus 제49장, 중기는 VSOP87D 로 직접 계산합니다.',
+            },
         },
         skyHomeCap: '하늘',
         skyHomeH2: '다가오는 절기와 삭망',
@@ -193,6 +282,12 @@ const L = {
         moonsH2: (y) => `${y}년 삭과 보름`,
         showersCap: (y, n) => `${y}년 · 유성우 ${n}개`,
         showersH2: (y) => `${y}년 유성우 극대기`,
+        lunarCap: (y, n) => `${y}년 · ${n}개월`,
+        lunarH2: (y) => `${y}년에 초하루가 드는 음력 달`,
+        lunarName: (e) => `${e.y}년 ${e.leap ? '윤' : ''}${e.m}월`,
+        lunarLen: (n) => `${n}일`,
+        leapBadge: '윤달',
+        dtLunar: '다음 초하루',
         thTime: '날짜와 시각', thEvent: '천문 현상',
         newMoon: '삭', fullMoon: '보름', han: { new: '朔', full: '望' },
         showerName: (n) => `${n} 유성우`,
@@ -260,11 +355,79 @@ const L = {
         footTz: 'The countdown uses this device’s date — it can be a day out when you view a country in another time zone.',
         crumbCountry: (c) => `${c.name} public holidays`,
 
+        /* --- 이름 축 --- */
+        nameHubTitle: (n) => `${n} Holiday Names — Who Shares a Day Off`,
+        nameHubDesc: (n, y, m) => `Public holidays grouped by name across countries.`
+            + ` ${n} names, plus the ${y} dates on which ${m} or more countries take the day off.`,
+        nameHubH1: 'Holidays by name',
+        nameHubNote: 'Christmas · Independence Day · Labour Day',
+        axesCap: 'Other axes',
+        axesH2: 'Ways in other than by country',
+        nameHubLede: 'Some names fall on the same day the world over, like Christmas. Others fall on a different day in every country, like Independence Day. Pick a name to see who takes it off and when.',
+        nameHubCrumb: 'holidays by name',
+        nameListCap: (n) => `${n} names`,
+        nameListH2: 'Browse by name',
+        nameCount: (n) => `${n}`,
+        nameLink: 'Holidays by name →',
+        togetherCap: (y, n) => `${y} · ${n} dates`,
+        togetherH2: (y) => `Days the most countries share in ${y}`,
+        togetherNote: (m, y) => `Dates on which ${m} or more countries take a public holiday in ${y}, counted by turning the per-country data on its date axis — countries count together whenever the date matches, whatever the holiday is called.`,
+        thTogether: 'Countries off',
+        togetherWho: (n) => `${n} countries`,
+
+        nameTitle: (e, y) => `${e.en} ${y} — Which Countries Take It Off`,
+        nameDesc: (e, y, f) => fit(
+            `${f.cover} countries observe ${e.en} in ${y}.`,
+            f.spread > 1
+                ? ` The date differs by country — ${f.spread} of them.`
+                : ` All of them on ${f.first}.`),
+        nameH1: (e) => e.en,
+        nameLede: (e) => `Countries that keep ${e.en} as a public holiday. Follow a country to see all of its holidays.`,
+        nameSum: (e, y, f) => `${f.cover} countries observe ${e.en} in ${y}.`
+            + (f.spread > 1
+                ? ` The date differs by country — ${f.spread} distinct dates — and the one shared by the most countries is ${f.peak} (${f.peakN} countries).`
+                : ` Every one of them on the same day, ${f.first}.`),
+        nameYearCap: (y, n) => `${y} · ${n} countries`,
+        nameYearH2: (e, y) => `${e.en} in ${y}`,
+        thWho: 'Countries',
+        nameNote: 'Every date that carries this name is here. Names that differ only in spelling (All Saints’ Day · All Saints Day) are one name; names that differ in wording are kept apart.',
+        nameBackHub: 'All holiday names →',
+        dtNextName: 'Next',
+        dtPrevName: 'Last',
+        nameVerdict: (e) => `${e.en}`,
+
+        /* --- 나라끼리 견주기 --- */
+        rankTitle: (y) => `Public Holidays ${y} — Most Days, Longest Breaks`,
+        rankDesc: (y, f) => `In ${y} the most public holidays are in ${f.most.label} with ${f.most.n},`
+            + ` the fewest in ${f.least.label} with ${f.least.n}.`
+            + ` The longest break runs ${f.long.n} days in ${f.long.label}.`,
+        rankH1: 'Countries compared',
+        rankLede: 'A country page shows one country. This one lines up every country in the data.',
+        rankNoteShort: 'Most holidays · longest breaks',
+        rankCrumb: 'countries compared',
+        rankLink: 'Countries compared →',
+        rankNote: (y, n) => `Counted over ${y} for all ${n} countries in the data. The unit is “dates carrying a public holiday” — a few countries stack two holidays on one date, so this differs from a count of entries.`,
+        rankMostCap: (n) => `Top ${n}`,
+        rankMostH2: (y) => `Most public holidays in ${y}`,
+        rankLeastCap: (n) => `Bottom ${n}`,
+        rankLeastH2: (y) => `Fewest public holidays in ${y}`,
+        rankBreakCap: (n) => `Top ${n}`,
+        rankBreakH2: (y) => `Longest long weekends of ${y}`,
+        rankBreakNote: 'The longest stretches where weekends and public holidays run together for three days or more.',
+        rankBreaksCap: (n) => `Top ${n}`,
+        rankBreaksH2: (y) => `Most long weekends in ${y}`,
+        thRank: '#',
+        thCountry: 'Country',
+        thDayCount: 'Days off',
+        thBreakCount: 'Long weekends',
+        rankDays: (n) => (n === 1 ? '1 day' : `${n} days`),
+        rankTimes: (n) => `${n}`,
+
         /* --- 하늘 --- */
-        skyTitle: (y) => `The Sky in ${y} — Solar Terms, Moons, Meteors`,
-        skyDesc: (y) => `The 24 solar terms, new and full moons and meteor shower peaks of ${y}. Pick a kind to see three years in date order, with the days until the next one.`,
+        skyTitle: (y) => `The Sky in ${y} — Terms, Moons, Meteors, Lunar Months`,
+        skyDesc: (y) => `The 24 solar terms, new and full moons, meteor shower peaks and lunar months of ${y}. Pick a kind to see three years in date order, with a countdown.`,
         skyH1: 'The Sky',
-        skyLede: 'Solar terms, moon phases and meteor showers. Pick a kind to see three years in date order.',
+        skyLede: 'Solar terms, moon phases, meteor showers and the lunisolar calendar. Pick a kind to see three years in date order.',
         skyCrumb: 'the sky',
         skyLink: 'The whole sky →',
         skyTopicsCap: 'Kinds',
@@ -300,6 +463,17 @@ const L = {
                 hub: 'Meteor showers',
                 hubNote: 'Perseids and Geminids',
             },
+            lunar: {
+                title: (y) => `The Lunisolar Calendar ${y} — New Moons and Leap Months`,
+                desc: (y) => `Every lunar month of ${y}: the Gregorian date its first day falls on, whether it runs 29 or 30 days, and which month is the leap month. Korean Standard Time.`,
+                h1: 'The lunisolar calendar',
+                lede: 'The first day of each lunar month, and how long the month runs. A month begins on the day the new moon falls, and the month with no major solar term in it is the leap month.',
+                crumb: 'lunisolar calendar',
+                hub: 'Lunisolar calendar',
+                hubNote: 'New moons and leap months',
+                note: 'A lunar month begins on the day the new moon falls, so the time zone is part of the rule rather than a way of showing it. This table is Korean Standard Time (UTC+9); the Chinese calendar (UTC+8) differs by a day whenever a new moon lands between the two midnights — as it does for the 2027 new year.',
+                foot: 'A month starts on the day of the new moon, the month containing the winter solstice is the 11th, and the leap month is the first month with no major solar term in it. New moons come from Meeus chapter 49 and solar terms from VSOP87D, computed here.',
+            },
         },
         skyHomeCap: 'The sky',
         skyHomeH2: 'Coming up in the sky',
@@ -309,6 +483,12 @@ const L = {
         moonsH2: (y) => `New and full moons in ${y}`,
         showersCap: (y, n) => `${y} · ${n} showers`,
         showersH2: (y) => `Meteor shower peaks in ${y}`,
+        lunarCap: (y, n) => `${y} · ${n} months`,
+        lunarH2: (y) => `Lunar months beginning in ${y}`,
+        lunarName: (e) => `${e.leap ? 'Leap month' : 'Month'} ${e.m}, ${e.y}`,
+        lunarLen: (n) => `${n} days`,
+        leapBadge: 'leap month',
+        dtLunar: 'Next new month',
         thTime: 'Date and time', thEvent: 'Event',
         newMoon: 'New Moon', fullMoon: 'Full Moon', han: { new: '朔', full: '望' },
         showerName: (n) => `${n}`,
@@ -664,16 +844,20 @@ ${foot(t, data.generated)}
    이름 칸을 class="ev" 로 두는 이유는 황금연휴의 class="len" 과 같다 —
    한국어 누출 검사는 <td class="name"> 을 면제하는데, 이 칸의 말은 우리 것이라
    그 면제를 받으면 안 된다. */
-const skyDate = (e, t) => (t.zone === 'kst' ? e.kst : e.utc);
-const skyTime = (e, t) => (t.zone === 'kst' ? e.kh : e.uh);
+/* 음력만 모양이 다르다 — 순간이 아니라 날짜이고, 시간대가 자료의 일부라
+   ko/en 으로 갈릴 날짜가 없다. 그래서 두 칸(kst·utc) 이 아니라 s 한 칸이고
+   시각이 없다. 표 코드는 그대로 나눠 쓰고 여기 두 줄에서만 갈린다. */
+const skyDate = (e, t) => (e.s !== undefined ? e.s : t.zone === 'kst' ? e.kst : e.utc);
+const skyTime = (e, t) => (e.s !== undefined ? '' : t.zone === 'kst' ? e.kh : e.uh);
 
 function skyRow(t, e, kind, name, alt, badge) {
     const iso = skyDate(e, t);
     const [y, m, d] = iso.split('-');
     const w = dow(iso);
     const wcls = w === 0 ? ' sun' : w === 6 ? ' sat' : '';
+    const at = skyTime(e, t);
     return `        <tr data-d="${iso}" data-sky="${kind}">
-          <td class="date">${y}.${m}.${d}<span class="dow${wcls}">${t.dow[w]}</span><span class="at">${skyTime(e, t)}</span></td>
+          <td class="date">${y}.${m}.${d}<span class="dow${wcls}">${t.dow[w]}</span>${at ? `<span class="at">${at}</span>` : ''}</td>
           <td class="ev">${esc(name)}${badge || ''}${alt ? `<span class="alt">${esc(alt)}</span>` : ''}</td>
           <td class="mark"></td>
         </tr>`;
@@ -729,6 +913,8 @@ export const SKY_TOPICS = [
       card: [['dtNew', 'next-new'], ['dtFull', 'next-full']] },
     { slug: 'meteor', key: 'showers', kind: 'shower', cap: 'showersCap', h2: 'showersH2',
       card: [['dtShower', 'next-shower']] },
+    { slug: 'lunar',  key: 'lunar',   kind: 'lunar',  cap: 'lunarCap',   h2: 'lunarH2',
+      card: [['dtLunar', 'next-lunar']] },
 ];
 
 /* 갈래마다 행 모양이 다르다 — 절기는 분점·지점 배지가 붙고, 삭망은 이름이 자료가
@@ -743,6 +929,14 @@ function skyBuild(t, topic) {
     }
     if (topic.slug === 'moon') {
         return (e) => skyRow(t, e, 'moon', e.f ? t.fullMoon : t.newMoon, e.f ? t.han.full : t.han.new);
+    }
+    /* 음력 — 이름이 자료의 숫자에서 나오고(2026년 윤6월), 곁줄에 양력 구간과
+       길이가 붙는다. 길이는 s 와 다음 달 초하루에서 나오지만 표의 끝에서는
+       다음 달이 표 밖이라 자료에 담아 두었다(astro.mjs 의 lunarMonths 주석). */
+    if (topic.slug === 'lunar') {
+        return (e) => skyRow(t, e, 'lunar', t.lunarName(e),
+            `${DATE_SPAN[t.lang](e.s, isoPlus(e.s, e.n - 1))} · ${t.lunarLen(e.n)}`,
+            e.leap ? `<span class="leap">${esc(t.leapBadge)}</span>` : '');
     }
     return (e) => skyRow(t, e, 'shower', t.showerName(t.lang === 'en' ? e.e : e.n), t.zhr(e.z));
 }
@@ -846,7 +1040,7 @@ ${pairs}
     </dl>
   </div>
 
-  <p class="note">${esc(t.skyNote)}</p>
+  <p class="note">${esc(s.note || t.skyNote)}</p>
 
 ${body}
 
@@ -856,12 +1050,479 @@ ${body}
   </section>
 
   <div class="foot">
-    <p>${esc(t.skyFoot)}</p>
+    <p>${esc(s.foot || t.skyFoot)}</p>
     <p>${t.contact} ${CONTACT}</p>
   </div>
 </main>
 
 <script type="application/ld+json">${JSON.stringify(skyCrumbs(t, slug, s.crumb))}</script>
+<script src="/shared/dday.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>
+`;
+}
+
+/* ================================================================ 이름 축
+   국가별 자료를 공휴일 **이름**으로 다시 묶는다. 밖에서 받아오는 것이 없고
+   `data/` 에 파일을 하나도 더 만들지 않는다 — 여기서 묶어 HTML 에 박고,
+   `check-pages` 가 **자기 손으로 다시 묶어** 그 HTML 과 견준다.
+   원화(어느 이름을 세우고 한국어로 무엇이라 적나)는 tools/holiday-names.mjs 다. */
+
+/** 표지 연도에 몇 나라 이상 함께 쉬는 날짜를 허브에 실을지. */
+const TOGETHER_MIN = 10;
+/** 순위 표에 몇 줄을 실을지. */
+const RANK_TOP = 20;
+
+/* 산문 안의 날짜 하나. DATE_SPAN 을 같은 날짜로 두 번 부르면 "12월 25~25일" 이 된다. */
+const DATE_ONE = {
+    ko: (iso) => { const a = NUM(iso); return `${+a.m}월 ${+a.d}일`; },
+    en: (iso) => { const a = NUM(iso); return `${+a.d} ${EN_MONTH[+a.m - 1]}`; },
+};
+
+function nameIndex(datas, main) {
+    const byKey = new Map();
+    for (const data of datas) {
+        for (const day of data.days) {
+            /* 영어 이름이 없으면(현지어와 같으면) 현지어가 곧 영어 이름이다 —
+               이 갈림길을 놓치면 3,375건이 'undefined' 라는 한 이름으로 뭉친다. */
+            const key = NORM(day.e ?? day.n);
+            if (!byKey.has(key)) byKey.set(key, new Map());
+            const byDate = byKey.get(key);
+            if (!byDate.has(day.d)) byDate.set(day.d, new Set());
+            byDate.get(day.d).add(data.code);
+        }
+    }
+
+    const out = [], missing = [];
+    for (const [key, byDate] of byKey) {
+        const cover = new Set();
+        for (const [d, ccs] of byDate) {
+            if (d.startsWith(String(main))) for (const cc of ccs) cover.add(cc);
+        }
+        if (cover.size < MIN) continue;
+
+        const label = NAMES[key];
+        if (!label) { missing.push(`'${key}' — ${cover.size}개국`); continue; }
+        out.push({
+            key, slug: label.slug, ko: label.ko, en: label.en, cover: cover.size,
+            dates: [...byDate.keys()].sort()
+                .map((d) => ({ d, cc: [...byDate.get(d)].sort() })),
+        });
+    }
+
+    /* 라벨이 없는 채로 지나가면 한국어 페이지에 영어 이름이 박힌다 — 화면으로만
+       보이고 어디서도 에러가 나지 않는 종류의 고장이라 여기서 멈춘다. */
+    if (missing.length) {
+        console.error(`이름 축에 라벨이 없는 이름 ${missing.length}개 — tools/holiday-names.mjs 에 적을 것:`);
+        for (const m of missing) console.error('  · ' + m);
+        process.exit(1);
+    }
+
+    /* 반대쪽 — 원화에는 있는데 이제 문턱을 못 넘는 이름. 페이지는 사라지는데
+       공유 카드는 남아 유령이 되므로(gen-card 는 원화만 본다) 알려 준다. */
+    const alive = new Set(out.map((e) => e.key));
+    for (const key of Object.keys(NAMES)) {
+        if (!alive.has(key)) {
+            console.warn(`  주의: '${key}' 가 ${main}년에 ${MIN}개국을 못 넘는다 —`
+                + ' 페이지가 나오지 않으니 holiday-names.mjs 에서 뺄 것');
+        }
+    }
+
+    /* 슬러그가 부딪히거나 두 글자면 국가 페이지를 조용히 덮어쓴다 */
+    const seen = new Map();
+    for (const e of out) {
+        if (!NAME_PAGE.test(`${NAME_ROOT}/${e.slug}`)) {
+            console.error(`슬러그 '${e.slug}' 가 이름 축 모양이 아니다 (config.mjs 의 NAME_PAGE)`);
+            process.exit(1);
+        }
+        if (seen.has(e.slug)) {
+            console.error(`슬러그 '${e.slug}' 를 '${seen.get(e.slug)}' 와 '${e.key}' 가 함께 쓴다`);
+            process.exit(1);
+        }
+        seen.set(e.slug, e.key);
+    }
+
+    /* 표지 연도의 국가 수 내림차순. 같으면 슬러그순 — 두 언어가 같은 순서를 본다. */
+    return out.sort((a, b) => b.cover - a.cover || a.slug.localeCompare(b.slug));
+}
+
+/** 표지 연도에 가장 많은 나라가 함께 쉬는 날. 이름이 아니라 **날짜**로 묶는다. */
+function togetherIndex(datas, main, names) {
+    const byDate = new Map();
+    for (const data of datas) {
+        for (const day of data.days) {
+            if (!day.d.startsWith(String(main))) continue;
+            if (!byDate.has(day.d)) byDate.set(day.d, new Set());
+            byDate.get(day.d).add(data.code);
+        }
+    }
+    /* 그 날짜에 가장 많은 나라가 쓰는 이름을 대표로 붙인다 — 없으면 링크 없이 둔다 */
+    const lead = (d) => {
+        let best = null;
+        for (const e of names) {
+            const row = e.dates.find((x) => x.d === d);
+            if (row && (!best || row.cc.length > best.n)) best = { e, n: row.cc.length };
+        }
+        return best && best.e;
+    };
+    return [...byDate.keys()]
+        .map((d) => ({ d, n: byDate.get(d).size }))
+        .filter((x) => x.n >= TOGETHER_MIN)
+        .sort((a, b) => b.n - a.n || a.d.localeCompare(b.d))
+        .map((x) => ({ ...x, lead: lead(x.d) }));
+}
+
+/** 표지 연도의 국가끼리 견주기. 전부 파생값이라 저장하지 않는다. */
+function rankIndex(datas, main) {
+    const y = String(main);
+    const rows = datas.map((d) => ({
+        code: d.code, ko: d.ko, name: d.name,
+        /* **날짜 수**를 센다. 한 날짜에 공휴일이 둘 겹치는 나라가 있어서
+           건수로 세면 "쉬는 날" 이 부풀려진다 (대한민국 2025-05-05 가 그렇다).
+           국가 페이지의 요약은 건수를 쓰므로 페이지마다 세는 단위가 다르다 —
+           그래서 여기서는 열 이름을 "쉬는 날짜" 로 두고 각주로 밝힌다. */
+        n: new Set(d.days.filter((x) => x.d.startsWith(y)).map((x) => x.d)).size,
+        breaks: (d.long || []).filter((w) => w.s.startsWith(y)),
+    })).filter((c) => c.n > 0);
+
+    const spans = [];
+    for (const c of rows) {
+        for (const w of c.breaks) {
+            spans.push({ code: c.code, ko: c.ko, name: c.name, s: w.s, e: w.e,
+                n: epochDay(w.e) - epochDay(w.s) + 1 });
+        }
+    }
+    const by = (f) => (a, b) => f(b) - f(a) || a.code.localeCompare(b.code);
+
+    return {
+        total: rows.length,
+        most: [...rows].sort(by((c) => c.n)).slice(0, RANK_TOP),
+        least: [...rows].sort((a, b) => a.n - b.n || a.code.localeCompare(b.code)).slice(0, RANK_TOP),
+        busiest: [...rows].sort(by((c) => c.breaks.length)).slice(0, RANK_TOP),
+        longest: spans.sort((a, b) => b.n - a.n || a.s.localeCompare(b.s)
+            || a.code.localeCompare(b.code)).slice(0, RANK_TOP),
+    };
+}
+
+/* ------------------------------------------------------------- 이름 축 한 장 */
+
+/** 표지 연도의 사실. 스니펫에 담길 문장의 재료다 — 자료를 받은 순간 고정된다. */
+function nameFacts(entry, year) {
+    const rows = entry.dates.filter((x) => x.d.startsWith(String(year)));
+    const cc = new Set();
+    for (const r of rows) for (const c of r.cc) cc.add(c);
+    let peak = null;
+    for (const r of rows) if (!peak || r.cc.length > peak.cc.length) peak = r;
+    return {
+        cover: cc.size, spread: rows.length,
+        first: rows.length ? rows[0].d : null,
+        peak: peak ? peak.d : null, peakN: peak ? peak.cc.length : 0,
+    };
+}
+
+/* 나라 칩. 이름 칸 안에 들어가는데 dday.js 의 nameOf() 와 하니스가 `.ccs` 를
+   떼어 내므로 카드에는 "178개국" 만 옮겨진다 — 178개 나라 이름이 카드에
+   쏟아지지 않는다. 그 두 곳과 여기가 짝이다. */
+function chips(t, ccs, byCode) {
+    return ccs
+        .map((cc) => byCode.get(cc) || { code: cc, ko: cc, name: cc })
+        .sort((a, b) => t.name(a).localeCompare(t.name(b), t.lang))
+        .map((c) => `<span class="one">${flag(c.code)} <a href="${t.dir}/${c.code.toLowerCase()}/">`
+            + `${esc(t.name(c))}</a></span>`)
+        .join('');
+}
+
+function nameTable(t, rows, byCode) {
+    const body = rows.map((r) => {
+        const [y, m, d] = r.d.split('-');
+        const w = dow(r.d);
+        const wcls = w === 0 ? ' sun' : w === 6 ? ' sat' : '';
+        return `        <tr data-d="${r.d}">
+          <td class="date">${y}.${m}.${d}<span class="dow${wcls}">${t.dow[w]}</span></td>
+          <td class="name">${esc(t.togetherWho(r.cc.length))}<span class="ccs">${chips(t, r.cc, byCode)}</span></td>
+          <td class="mark"></td>
+        </tr>`;
+    }).join('\n');
+
+    return `      <table class="who">
+        <thead><tr><th>${esc(t.thDate)}</th><th>${esc(t.thWho)}</th><th></th></tr></thead>
+        <tbody>
+${body}
+        </tbody>
+      </table>`;
+}
+
+const nameCrumbs = (t, slug, name) => ({
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+        { '@type': 'ListItem', position: 1, name: SITE, item: `${BASE}${t.dir}/` },
+        { '@type': 'ListItem', position: 2, name: t.nameHubCrumb, item: url(t.lang, `${NAME_ROOT}/`) },
+        ...(name ? [{ '@type': 'ListItem', position: 3, name, item: url(t.lang, slug) }] : []),
+    ],
+});
+
+function namePage(t, entry, byCode, main, generated) {
+    const slug = `${NAME_ROOT}/${entry.slug}/`;
+    const byYear = groupBy(entry.dates, (r) => r.d);
+    const f = nameFacts(entry, main);
+
+    const ccOf = (rows) => {
+        const s = new Set();
+        for (const r of rows) for (const c of r.cc) s.add(c);
+        return s.size;
+    };
+    const body = [...byYear.keys()].sort((a, b) => a - b).map((y) => {
+        const rows = byYear.get(y);
+        const table = nameTable(t, rows, byCode);
+        if (y === main) {
+            return `  <section>
+    <span class="cap">${esc(t.nameYearCap(y, ccOf(rows)))}</span>
+    <h2>${esc(t.nameYearH2(entry, y))}</h2>
+${table}
+  </section>`;
+        }
+        return `  <details class="year">
+    <summary>${esc(t.nameYearCap(y, ccOf(rows)))}</summary>
+${table}
+  </details>`;
+    }).join('\n\n');
+
+    return `${head(t, {
+        title: t.nameTitle(entry, main),
+        desc: t.nameDesc(entry, main, { ...f, first: f.first && DATE_ONE[t.lang](f.first) }),
+        slug,
+        card: `${NAME_ROOT}-${entry.slug}`,
+        alt: `${t.nameH1(entry)} — ${SITE}`,
+    })}
+<body data-list="name">
+
+${top(t, { slug, label: esc(t.pickerLabel) })}
+
+<main class="wrap">
+
+  <h1>${esc(t.nameH1(entry))}</h1>
+  <p class="lede">${esc(t.nameLede(entry))}</p>
+  <p class="sum">${esc(t.nameSum(entry, main, {
+        ...f,
+        first: f.first && DATE_ONE[t.lang](f.first),
+        peak: f.peak && DATE_ONE[t.lang](f.peak),
+    }))}</p>
+
+  <div class="now" id="now">
+    <div class="asof">${esc(t.checking)}</div>
+    <div class="verdict">${esc(t.nameVerdict(entry))}</div>
+    <dl class="pair">
+      <dt>${esc(t.dtNextName)}</dt><dd id="next"><em>${esc(t.computing)}</em></dd>
+      <dt>${esc(t.dtPrevName)}</dt><dd id="prev"><em>${esc(t.computing)}</em></dd>
+    </dl>
+  </div>
+
+  <p class="note">${esc(t.nameNote)}</p>
+
+${body}
+
+  <section>
+    <p><a href="${t.dir}/${NAME_ROOT}/">${esc(t.nameBackHub)}</a></p>
+    <p><a href="${t.dir}/#countries">${esc(t.otherCountries)}</a></p>
+  </section>
+
+${foot(t, generated)}
+</main>
+
+<script type="application/ld+json">${JSON.stringify(nameCrumbs(t, slug, t.nameH1(entry)))}</script>
+<script src="/shared/dday.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>
+`;
+}
+
+/* -------------------------------------------------------------- 이름 축 허브
+   이름으로 보내는 자리이면서, **날짜 축**으로 뒤집은 표를 하나 이고 있다.
+   첫 화면의 "오늘 어느 나라가 쉬나" 는 있는데 "어떤 날에 가장 많은 나라가
+   쉬나" 는 여태 아무 데도 없었다 — 같은 자료를 한 번 더 뒤집으면 나온다. */
+function nameHubPage(t, names, together, main, generated) {
+    const slug = `${NAME_ROOT}/`;
+    /* 곁줄은 한국어 화면에만 둔다 — 영어 이름을 곁들이면 읽는 데 도움이 되지만,
+       영어 화면에 한국어 라벨을 곁들이면 그건 그냥 한국어 누출이다. */
+    const links = names.map((e) => {
+        const sub = t.lang === 'en' ? '' : `<span class="en">${esc(e.en)}</span>`;
+        return `      <li><a href="${t.dir}/${NAME_ROOT}/${e.slug}/">${esc(t.lang === 'en' ? e.en : e.ko)}`
+            + `${sub}<span class="cc">${esc(t.nameCount(e.cover))}</span></a></li>`;
+    }).join('\n');
+
+    const rows = together.map((x) => {
+        const [y, m, d] = x.d.split('-');
+        const w = dow(x.d);
+        const wcls = w === 0 ? ' sun' : w === 6 ? ' sat' : '';
+        const who = x.lead
+            ? `<a href="${t.dir}/${NAME_ROOT}/${x.lead.slug}/">${esc(t.lang === 'en' ? x.lead.en : x.lead.ko)}</a>`
+            : '';
+        return `        <tr data-d="${x.d}">
+          <td class="date">${y}.${m}.${d}<span class="dow${wcls}">${t.dow[w]}</span></td>
+          <td class="name">${esc(t.togetherWho(x.n))}${who ? `<span class="ccs">${who}</span>` : ''}</td>
+          <td class="mark"></td>
+        </tr>`;
+    }).join('\n');
+
+    return `${head(t, {
+        title: t.nameHubTitle(names.length),
+        desc: t.nameHubDesc(names.length, main, TOGETHER_MIN),
+        slug, card: NAME_ROOT, alt: `${t.nameHubCrumb} — ${SITE}`,
+    })}
+<body data-list="hub">
+
+${top(t, { slug, label: esc(t.pickerLabel) })}
+
+<main class="wrap">
+
+  <h1>${esc(t.nameHubH1)}</h1>
+  <p class="lede">${esc(t.nameHubLede)}</p>
+
+  <section>
+    <span class="cap">${esc(t.togetherCap(main, together.length))}</span>
+    <h2>${esc(t.togetherH2(main))}</h2>
+    <p class="note">${esc(t.togetherNote(TOGETHER_MIN, main))}</p>
+      <table class="who">
+        <thead><tr><th>${esc(t.thDate)}</th><th>${esc(t.thTogether)}</th><th></th></tr></thead>
+        <tbody>
+${rows}
+        </tbody>
+      </table>
+  </section>
+
+  <section>
+    <span class="cap">${esc(t.nameListCap(names.length))}</span>
+    <h2>${esc(t.nameListH2)}</h2>
+    <ul class="countries">
+${links}
+    </ul>
+  </section>
+
+  <section>
+    <p><a href="${t.dir}/#countries">${esc(t.otherCountries)}</a></p>
+  </section>
+
+${foot(t, generated)}
+</main>
+
+<script type="application/ld+json">${JSON.stringify(nameCrumbs(t, slug))}</script>
+<script src="/shared/dday.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>
+`;
+}
+
+/* ==================================================== 나라끼리 견주기 (/rank/)
+   국가 페이지 204장은 한 나라씩만 보여 준다. "어디가 가장 많이 쉬나" 는
+   204장을 다 열어야 답이 나오는데, 그건 답이 없는 것과 같다.
+   전부 파생값이라 자료를 하나도 더 만들지 않는다. */
+
+function rankRows(t, rows, cell) {
+    return rows.map((c, i) => `        <tr>
+          <td class="no">${i + 1}</td>
+          <td class="who"><span class="flag">${flag(c.code)}</span><a href="${t.dir}/${c.code.toLowerCase()}/">${esc(t.name(c))}</a></td>
+          <td class="len">${esc(cell(c))}</td>
+        </tr>`).join('\n');
+}
+
+function rankTable(t, rows, th, cell) {
+    return `      <table class="rank">
+        <thead><tr><th>${esc(t.thRank)}</th><th>${esc(t.thCountry)}</th><th>${esc(th)}</th></tr></thead>
+        <tbody>
+${rankRows(t, rows, cell)}
+        </tbody>
+      </table>`;
+}
+
+/* 최장 연휴 표만 행이 구간이라 열이 다르다. tr data-s/data-e 를 달아 두면
+   dday.js 가 국가 페이지의 연휴 표와 **같은 규칙으로** D-day 를 붙인다 —
+   여기서 규칙을 새로 만들면 사이트 안에서 D-day 가 두 뜻을 갖는다. */
+function rankBreakTable(t, spans) {
+    const rows = spans.map((w, i) => `        <tr data-s="${w.s}" data-e="${w.e}">
+          <td class="no">${i + 1}</td>
+          <td class="who"><span class="flag">${flag(w.code)}</span><a href="${t.dir}/${w.code.toLowerCase()}/">${esc(t.name(w))}</a></td>
+          <td class="range">${breakSpan(t, w.s, w.e)}</td>
+          <td class="len">${esc(t.breakLen(w.n))}</td>
+          <td class="mark"></td>
+        </tr>`).join('\n');
+
+    return `      <table class="rank breaks">
+        <thead><tr><th>${esc(t.thRank)}</th><th>${esc(t.thCountry)}</th><th>${esc(t.thSpan)}</th><th>${esc(t.thBreak)}</th><th></th></tr></thead>
+        <tbody>
+${rows}
+        </tbody>
+      </table>`;
+}
+
+function rankPage(t, rank, main, generated) {
+    const slug = 'rank/';
+    const f = {
+        most: { label: t.name(rank.most[0]), n: rank.most[0].n },
+        least: { label: t.name(rank.least[0]), n: rank.least[0].n },
+        long: { label: t.name(rank.longest[0]), n: rank.longest[0].n },
+    };
+
+    const crumbs = {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+            { '@type': 'ListItem', position: 1, name: SITE, item: `${BASE}${t.dir}/` },
+            { '@type': 'ListItem', position: 2, name: t.rankCrumb, item: url(t.lang, slug) },
+        ],
+    };
+
+    return `${head(t, {
+        title: t.rankTitle(main), desc: t.rankDesc(main, f), slug,
+        card: 'rank', alt: `${t.rankCrumb} — ${SITE}`,
+    })}
+<body data-list="rank">
+
+${top(t, { slug, label: esc(t.pickerLabel) })}
+
+<main class="wrap">
+
+  <h1>${esc(t.rankH1)}</h1>
+  <p class="lede">${esc(t.rankLede)}</p>
+  <p class="sum">${esc(t.rankDesc(main, f))}</p>
+  <p class="note">${esc(t.rankNote(main, rank.total))}</p>
+
+  <section>
+    <span class="cap">${esc(t.rankBreakCap(rank.longest.length))}</span>
+    <h2>${esc(t.rankBreakH2(main))}</h2>
+    <p class="note">${esc(t.rankBreakNote)}</p>
+${rankBreakTable(t, rank.longest)}
+  </section>
+
+  <section>
+    <span class="cap">${esc(t.rankMostCap(rank.most.length))}</span>
+    <h2>${esc(t.rankMostH2(main))}</h2>
+${rankTable(t, rank.most, t.thDayCount, (c) => t.rankDays(c.n))}
+  </section>
+
+  <section>
+    <span class="cap">${esc(t.rankLeastCap(rank.least.length))}</span>
+    <h2>${esc(t.rankLeastH2(main))}</h2>
+${rankTable(t, rank.least, t.thDayCount, (c) => t.rankDays(c.n))}
+  </section>
+
+  <section>
+    <span class="cap">${esc(t.rankBreaksCap(rank.busiest.length))}</span>
+    <h2>${esc(t.rankBreaksH2(main))}</h2>
+${rankTable(t, rank.busiest, t.thBreakCount, (c) => t.rankTimes(c.breaks.length))}
+  </section>
+
+  <section>
+    <p><a href="${t.dir}/#countries">${esc(t.otherCountries)}</a></p>
+  </section>
+
+${foot(t, generated)}
+</main>
+
+<script type="application/ld+json">${JSON.stringify(crumbs)}</script>
 <script src="/shared/dday.js"></script>
 <script src="/shared/contact.js"></script>
 </body>
@@ -899,6 +1560,15 @@ ${top(t, { slug: '', home: true, label: esc(t.pickerLabel) })}
     <h2>${esc(t.skyHomeH2)}</h2>
     <ul class="worldwide" id="skylist"></ul>
     <p><a href="${t.dir}/sky/">${esc(t.skyLink)}</a></p>
+  </section>
+
+  <section id="axes">
+    <span class="cap">${esc(t.axesCap)}</span>
+    <h2>${esc(t.axesH2)}</h2>
+    <ul class="countries">
+      <li><a href="${t.dir}/${NAME_ROOT}/">${esc(t.nameHubH1)}<span class="en">${esc(t.nameHubNote)}</span></a></li>
+      <li><a href="${t.dir}/rank/">${esc(t.rankH1)}<span class="en">${esc(t.rankNoteShort)}</span></a></li>
+    </ul>
   </section>
 
   <section id="countries">
@@ -1004,6 +1674,24 @@ for (const name of readdirSync(PUB, { withFileTypes: true })) {
 let generated = today();
 let count = 0;
 
+/* 자료를 한 번만 읽는다. 이름 축과 순위는 204개 파일을 통째로 봐야 나오는데,
+   언어마다 다시 읽으면 두 벌이 갈라질 수 있다(같은 자료로 만든 두 페이지가
+   서로 다른 수를 적는 일이 실제로 가능하다). */
+const all = files
+    .map((f) => JSON.parse(readFileSync(join(DATA, f), 'utf8')))
+    .filter((d) => d.days.length);
+for (const d of all) generated = d.generated || generated;
+
+/* 표지 연도. 국가 페이지의 규칙과 같다 — 올해가 있으면 올해. */
+const coverYear = all.some((d) => d.days.some((x) => x.d.startsWith(String(MID))))
+    ? MID
+    : Math.min(...all.flatMap((d) => d.days.map((x) => +x.d.slice(0, 4))));
+
+const byCode = new Map(index.map((c) => [c.code, c]));
+const names = nameIndex(all, coverYear);
+const together = togetherIndex(all, coverYear, names);
+const rank = rankIndex(all, coverYear);
+
 for (const lang of ['ko', 'en']) {
     const t = L[lang];
     const root = join(PUB, t.dir.replace(/^\//, ''));
@@ -1013,16 +1701,31 @@ for (const lang of ['ko', 'en']) {
     const sorted = [...index].sort((a, b) =>
         t.name(a).localeCompare(t.name(b), t.lang));
 
-    for (const file of files) {
-        const data = JSON.parse(readFileSync(join(DATA, file), 'utf8'));
-        if (!data.days.length) continue;
-        generated = data.generated || generated;
-
+    for (const data of all) {
         const dir = join(root, data.code.toLowerCase());
         mkdirSync(dir, { recursive: true });
         writeFileSync(join(dir, 'index.html'), countryPage(t, data));
         count++;
     }
+
+    /* 이름 축 — 허브 하나와 이름 하나씩. 국가 축도 전세계 공통 축도 아닌
+       세 번째 축이고, 자료를 하나도 더 만들지 않는다. */
+    const nameDir = join(root, NAME_ROOT);
+    mkdirSync(nameDir, { recursive: true });
+    writeFileSync(join(nameDir, 'index.html'), nameHubPage(t, names, together, coverYear, generated));
+    count++;
+    for (const entry of names) {
+        const dir = join(nameDir, entry.slug);
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, 'index.html'), namePage(t, entry, byCode, coverYear, generated));
+        count++;
+    }
+
+    /* 나라끼리 견주기 — 한 장이다. 표를 여럿 이고 있어도 물음이 하나라 나누지 않는다. */
+    const rankDir = join(root, 'rank');
+    mkdirSync(rankDir, { recursive: true });
+    writeFileSync(join(rankDir, 'index.html'), rankPage(t, rank, coverYear, generated));
+    count++;
 
     /* 하늘. 국가 축이 아니라 전 세계 공통 축이라 자료가 한 벌인데, 갈래가 셋이라
        페이지는 넷이다 — 허브 하나와 갈래 셋. 허브는 표를 이고 있지 않다. */
@@ -1043,4 +1746,6 @@ for (const lang of ['ko', 'en']) {
     count++;
 }
 
-console.log(`페이지 ${count}개 (한국어·영어 각 ${count / 2}개) — 표지 연도 ${MID}`);
+console.log(`페이지 ${count}개 (한국어·영어 각 ${count / 2}개) — 표지 연도 ${coverYear}`);
+console.log(`  국가 ${all.length} · 이름 축 ${names.length} (문턱 ${MIN}개국)`
+    + ` · 함께 쉬는 날 ${together.length}일 (${TOGETHER_MIN}개국 이상) · 하늘 ${SKY_TOPICS.length}갈래`);

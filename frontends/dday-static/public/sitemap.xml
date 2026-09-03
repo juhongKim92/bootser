@@ -9,7 +9,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/"/>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-09-03</lastmod>
   </url>
 
   <url>
@@ -17,7 +17,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/"/>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-09-03</lastmod>
   </url>
 
   <url>
@@ -1365,6 +1365,982 @@
   </url>
 
   <url>
+    <loc>https://this-is-the.day/holiday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/africa-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/africa-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/africa-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/africa-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/africa-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/africa-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/africa-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/africa-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/all-saints-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/all-saints-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/all-saints-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/all-saints-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/all-saints-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/all-saints-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/all-saints-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/all-saints-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/all-souls-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/all-souls-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/all-souls-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/all-souls-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/all-souls-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/all-souls-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/all-souls-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/all-souls-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/anzac-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/anzac-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/anzac-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/anzac-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/anzac-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/anzac-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/anzac-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/anzac-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/armed-forces-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/armed-forces-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/armed-forces-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/armed-forces-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/armed-forces-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/armed-forces-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/armed-forces-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/armed-forces-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/armistice-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/armistice-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/armistice-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/armistice-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/armistice-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/armistice-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/armistice-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/armistice-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/army-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/army-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/army-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/army-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/army-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/army-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/army-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/army-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/ascension-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/ascension-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/ascension-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/ascension-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/ascension-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/ascension-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/ascension-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/ascension-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/assumption-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/assumption-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/assumption-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/assumption-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/assumption-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/assumption-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/assumption-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/assumption-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/boxing-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/boxing-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/boxing-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/boxing-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/boxing-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/boxing-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/boxing-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/boxing-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/carnival-monday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/carnival-monday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/carnival-monday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/carnival-monday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/carnival-monday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/carnival-monday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/carnival-monday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/carnival-monday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/carnival/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/carnival/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/carnival/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/carnival/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/carnival/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/carnival/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/carnival/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/carnival/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/childrens-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/childrens-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/childrens-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/childrens-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/childrens-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/childrens-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/childrens-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/childrens-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/christmas-eve/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/christmas-eve/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/christmas-eve/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/christmas-eve/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/christmas-eve/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/christmas-eve/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/christmas-eve/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/christmas-eve/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/christmas-orthodox/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/christmas-orthodox/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/christmas-orthodox/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/christmas-orthodox/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/christmas-orthodox/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/christmas-orthodox/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/christmas-orthodox/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/christmas-orthodox/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/christmas/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/christmas/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/christmas/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/christmas/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/christmas/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/christmas/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/christmas/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/christmas/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/columbus-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/columbus-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/columbus-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/columbus-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/columbus-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/columbus-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/columbus-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/columbus-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/constitution-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/constitution-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/constitution-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/constitution-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/constitution-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/constitution-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/constitution-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/constitution-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/corpus-christi/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/corpus-christi/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/corpus-christi/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/corpus-christi/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/corpus-christi/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/corpus-christi/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/corpus-christi/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/corpus-christi/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/easter-monday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/easter-monday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/easter-monday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/easter-monday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/easter-monday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/easter-monday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/easter-monday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/easter-monday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/easter-sunday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/easter-sunday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/easter-sunday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/easter-sunday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/easter-sunday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/easter-sunday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/easter-sunday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/easter-sunday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/emancipation-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/emancipation-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/emancipation-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/emancipation-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/emancipation-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/emancipation-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/emancipation-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/emancipation-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/epiphany/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/epiphany/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/epiphany/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/epiphany/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/epiphany/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/epiphany/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/epiphany/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/epiphany/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/good-friday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/good-friday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/good-friday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/good-friday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/good-friday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/good-friday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/good-friday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/good-friday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/gospel-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/gospel-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/gospel-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/gospel-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/gospel-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/gospel-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/gospel-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/gospel-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/heroes-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/heroes-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/heroes-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/heroes-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/heroes-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/heroes-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/heroes-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/heroes-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/holy-saturday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/holy-saturday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/holy-saturday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/holy-saturday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/holy-saturday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/holy-saturday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/holy-saturday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/holy-saturday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/immaculate-conception/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/immaculate-conception/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/immaculate-conception/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/immaculate-conception/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/immaculate-conception/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/immaculate-conception/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/immaculate-conception/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/immaculate-conception/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/independence-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/independence-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/independence-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/independence-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/independence-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/independence-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/independence-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/independence-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/international-womens-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/international-womens-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/international-womens-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/international-womens-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/international-womens-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/international-womens-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/international-womens-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/international-womens-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/international-workers-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/international-workers-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/international-workers-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/international-workers-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/international-workers-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/international-workers-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/international-workers-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/international-workers-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/kings-birthday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/kings-birthday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/kings-birthday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/kings-birthday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/kings-birthday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/kings-birthday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/kings-birthday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/kings-birthday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/labour-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/labour-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/labour-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/labour-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/labour-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/labour-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/labour-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/labour-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/liberation-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/liberation-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/liberation-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/liberation-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/liberation-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/liberation-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/liberation-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/liberation-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/martyrs-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/martyrs-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/martyrs-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/martyrs-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/martyrs-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/martyrs-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/martyrs-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/martyrs-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/maundy-thursday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/maundy-thursday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/maundy-thursday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/maundy-thursday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/maundy-thursday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/maundy-thursday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/maundy-thursday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/maundy-thursday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/may-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/may-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/may-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/may-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/may-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/may-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/may-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/may-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/memorial-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/memorial-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/memorial-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/memorial-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/memorial-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/memorial-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/memorial-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/memorial-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/mothers-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/mothers-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/mothers-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/mothers-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/mothers-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/mothers-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/mothers-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/mothers-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/national-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/national-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/national-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/national-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/national-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/national-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/national-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/national-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/national-heroes-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/national-heroes-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/national-heroes-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/national-heroes-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/national-heroes-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/national-heroes-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/national-heroes-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/national-heroes-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/national-holiday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/national-holiday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/national-holiday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/national-holiday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/national-holiday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/national-holiday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/national-holiday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/national-holiday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/new-year/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/new-year/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/new-year/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/new-year/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/new-year/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/new-year/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/new-year/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/new-year/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/new-years-eve/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/new-years-eve/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/new-years-eve/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/new-years-eve/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/new-years-eve/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/new-years-eve/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/new-years-eve/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/new-years-eve/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/pentecost/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/pentecost/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/pentecost/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/pentecost/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/pentecost/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/pentecost/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/pentecost/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/pentecost/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/presidents-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/presidents-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/presidents-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/presidents-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/presidents-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/presidents-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/presidents-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/presidents-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/remembrance-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/remembrance-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/remembrance-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/remembrance-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/remembrance-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/remembrance-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/remembrance-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/remembrance-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/republic-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/republic-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/republic-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/republic-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/republic-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/republic-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/republic-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/republic-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/revolution-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/revolution-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/revolution-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/revolution-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/revolution-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/revolution-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/revolution-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/revolution-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/spring-bank-holiday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/spring-bank-holiday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/spring-bank-holiday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/spring-bank-holiday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/spring-bank-holiday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/spring-bank-holiday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/spring-bank-holiday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/spring-bank-holiday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/st-stephens-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/st-stephens-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/st-stephens-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/st-stephens-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/st-stephens-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/st-stephens-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/st-stephens-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/st-stephens-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/statehood-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/statehood-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/statehood-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/statehood-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/statehood-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/statehood-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/statehood-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/statehood-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/thanksgiving-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/thanksgiving-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/thanksgiving-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/thanksgiving-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/thanksgiving-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/thanksgiving-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/thanksgiving-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/thanksgiving-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/unity-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/unity-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/unity-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/unity-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/unity-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/unity-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/unity-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/unity-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/veterans-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/veterans-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/veterans-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/veterans-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/veterans-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/veterans-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/veterans-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/veterans-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/victory-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/victory-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/victory-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/victory-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/victory-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/victory-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/victory-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/victory-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/whit-monday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/whit-monday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/whit-monday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/whit-monday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/whit-monday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/whit-monday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/whit-monday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/whit-monday/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/womens-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/womens-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/womens-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/womens-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/womens-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/womens-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/womens-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/womens-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/workers-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/workers-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/workers-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/workers-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/workers-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/workers-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/workers-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/workers-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/holiday/youth-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/youth-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/youth-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/youth-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/holiday/youth-day/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/holiday/youth-day/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/holiday/youth-day/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/holiday/youth-day/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
     <loc>https://this-is-the.day/hr/</loc>
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/hr/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/hr/"/>
@@ -2469,6 +3445,22 @@
   </url>
 
   <url>
+    <loc>https://this-is-the.day/rank/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/rank/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/rank/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/rank/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/rank/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/rank/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/rank/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/rank/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
     <loc>https://this-is-the.day/ro/</loc>
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/ro/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/ro/"/>
@@ -2681,7 +3673,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/"/>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-09-03</lastmod>
   </url>
 
   <url>
@@ -2689,7 +3681,23 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/"/>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/sky/lunar/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/lunar/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/lunar/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/lunar/"/>
+    <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/sky/lunar/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/lunar/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/lunar/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/lunar/"/>
+    <lastmod>2026-09-03</lastmod>
   </url>
 
   <url>

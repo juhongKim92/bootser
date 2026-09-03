@@ -225,3 +225,119 @@ export function showers(year) {
     }
     return out.sort((a, b) => a.at - b.at);
 }
+
+/* ------------------------------------------------------- 태음태양력 (음력)
+
+   새 이론이 필요하지 않다 — 위의 **삭**(달)과 **중기**(태양) 둘이 규칙의 전부다.
+   한국천문연구원과 중국 농력이 함께 쓰는 규칙 셋:
+
+     · 음력 달의 첫날(초하루)은 **삭이 든 날**이다
+     · **동지는 언제나 11월에 든다**
+     · 두 동지월 사이에 달이 **13개** 들면 그 해에 윤달이 있고, 윤달은
+       **중기가 하나도 들지 않는 첫 달**이다 (무중치윤법)
+
+   중기는 태양 황경이 30°의 배수가 되는 순간이다 — 위 k 로 말하면 짝수 k 다
+   (k = 황경/15). 24절기의 절반이고, 나머지 홀수 k 는 절기(節氣)다.
+
+   ⚠ **시간대가 규칙의 일부다.** 절기도 삭망도 온 세계가 같은 순간을 공유하지만,
+   음력은 "삭이 든 날이 며칟날인가" 로 달이 갈리므로 기준 시간대를 정해야 한다.
+   한국 음력은 KST(UTC+9), 중국 농력은 UTC+8 이라 삭이 두 시간대의 자정 사이에
+   떨어지는 해에는 두 달력이 하루 어긋난다. 이 사이트는 KST 한 벌만 담고
+   각주로 밝힌다 — 그래서 en 페이지도 같은 표를 본다(하늘의 다른 갈래와 다르다).
+
+   검산점은 저장소 안에 있다. 우리가 담은 공휴일 자료에 음력으로 정의된 날이
+   여럿이다 — 설날(음력 1월 1일) · 추석(음력 8월 15일) · 春节 · 農曆年初一.
+   Nager 에서 완전히 다른 경로로 들어온 값이고 우리 계산을 전혀 모른다.
+   check-pages 가 그것으로 되짚는다. */
+
+/** 로컬 날짜(YYYY-MM-DD). 음력은 이 한 줄 때문에 시간대에 매인다. */
+const dayIn = (at, tz) => new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(at);
+
+const epochOf = (iso) => Math.round(Date.parse(iso + 'T00:00:00Z') / 86400000);
+const isoOf = (n) => new Date(n * 86400000).toISOString().slice(0, 10);
+
+/** k 번째 삭의 UT 순간. moonPhases 와 달리 해로 걸러 내지 않는다 —
+    음력은 해의 경계를 넘어 이어지므로 k 를 직접 세어야 한다. */
+export function newMoonAt(k) {
+    return jdToDate(phaseJde(k, false) - deltaT(2000 + k / 12.3685) / 86400);
+}
+
+/** 삭 번호 k 의 대략값. Meeus 49.2 의 역이다. */
+const guessK = (at) => Math.round((dateToJd(at) - 2451550.09766) / 29.530588861);
+
+/** 동지월(11월)의 초하루가 되는 삭의 k. 동지가 든 날 이전(또는 그날)의 마지막 삭. */
+function monthElevenK(year, tz) {
+    const ws = epochOf(dayIn(solarTermAt(year, 18), tz));
+    let k = guessK(solarTermAt(year, 18));
+    while (epochOf(dayIn(newMoonAt(k), tz)) > ws) k--;
+    while (epochOf(dayIn(newMoonAt(k + 1), tz)) <= ws) k++;
+    return k;
+}
+
+/**
+ * 동지월(year 의 11월)부터 다음 동지월 전까지의 한 바퀴.
+ * 12개월이면 윤달이 없고 13개월이면 하나 있다.
+ * 돌려주는 것: [{ k, m, leap, start(에폭일), days }]
+ */
+function lunarCycle(year, tz) {
+    const k0 = monthElevenK(year, tz);
+    const k2 = monthElevenK(year + 1, tz);
+    const n = k2 - k0;
+    if (n !== 12 && n !== 13) {
+        throw new Error(`${year} 동지월 사이가 ${n}개월이다 — 12 나 13 이어야 한다`);
+    }
+
+    /* 달의 경계. 마지막 달의 길이를 재려면 다음 동지월의 초하루까지 필요하다. */
+    const starts = [];
+    for (let i = 0; i <= n; i++) starts.push(epochOf(dayIn(newMoonAt(k0 + i), tz)));
+
+    /* 중기 = 짝수 k. 바퀴가 두 해에 걸치므로 앞뒤로 넉넉히 모은다. */
+    const majors = [];
+    for (const y of [year, year + 1]) {
+        for (let k = 0; k < 24; k += 2) majors.push(epochOf(dayIn(solarTermAt(y, k), tz)));
+    }
+    const hasMajor = (i) => majors.some((d) => d >= starts[i] && d < starts[i + 1]);
+
+    /* 무중치윤법 — 중기가 없는 첫 달이 윤달이다. 0번(동지월)은 동지가 들어 있으니
+       늘 중기를 갖는다. 13개월인데 후보가 없으면 계산이 어딘가 틀렸다는 뜻이다. */
+    let leapAt = -1;
+    if (n === 13) {
+        for (let i = 1; i < n; i++) if (!hasMajor(i)) { leapAt = i; break; }
+        if (leapAt < 0) throw new Error(`${year} 바퀴가 13개월인데 중기 없는 달이 없다`);
+    }
+
+    const out = [];
+    let m = 11;
+    for (let i = 0; i < n; i++) {
+        const leap = i === leapAt;
+        if (i > 0 && !leap) m = m === 12 ? 1 : m + 1;
+        /* 음력 해. 바퀴는 11월에 시작하므로 11·12월은 year, 1~10월은 year+1 이다. */
+        out.push({ k: k0 + i, y: m >= 11 ? year : year + 1, m, leap,
+            start: starts[i], days: starts[i + 1] - starts[i] });
+    }
+    return out;
+}
+
+/**
+ * 그 해(양력)에 **초하루가 드는** 음력 달 전부.
+ * 12월 말에 시작해 이듬해로 넘어가는 달은 시작한 해의 표에 든다.
+ *
+ * 돌려주는 것: [{ y, m, leap, s: 'YYYY-MM-DD', n: 29|30 }]
+ * y 는 **음력 해**다. 양력 해와 다르다 — 2027년 표에는 "음력 12월" 이 두 번 나오는데
+ * 하나는 음력 2026년의 마지막 달(1월 8일 시작)이고 하나는 음력 2027년의 마지막
+ * 달(12월 28일 시작)이다. y 가 없으면 같은 이름의 두 줄이 구별되지 않는다.
+ * 마지막 날짜(e)는 담지 않는다 — s 와 n 에서 나온다. 대신 n 은 담는다.
+ * 표의 끝에서는 다음 달의 초하루가 표 밖이라 길이를 되짚을 수 없기 때문이다.
+ */
+export function lunarMonths(year, tz) {
+    const seen = new Map();
+    for (const y of [year - 1, year]) {
+        for (const mo of lunarCycle(y, tz)) seen.set(mo.k, mo);
+    }
+    return [...seen.values()]
+        .filter((mo) => isoOf(mo.start).startsWith(String(year)))
+        .sort((a, b) => a.start - b.start)
+        .map((mo) => ({ y: mo.y, m: mo.m, leap: mo.leap ? 1 : 0, s: isoOf(mo.start), n: mo.days }));
+}

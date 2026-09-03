@@ -150,6 +150,10 @@ function parseRows(html) {
         const cell = (m[2].match(/<td class="name">([\s\S]*?)<\/td>/) || [])[1] || '';
         const clean = unesc(cell
             .replace(/<span class="(en|local|regions)"[^>]*>[\s\S]*?<\/span>/g, '')
+            /* 이름 축 페이지의 나라 칩. 안에 <span> 이 178개 겹쳐 있어서 위 무늬로는
+               못 걷힌다 — 여는 태그부터 그 칸의 끝까지 통째로 지운다. dday.js 의
+               nameOf() 가 `.ccs` 를 떼는 것과 짝이다. */
+            .replace(/<span class="ccs">[\s\S]*$/, '')
             .replace(/<[^>]+>/g, '')).trim();
 
         const name = makeEl('td');
@@ -167,6 +171,7 @@ function parseRows(html) {
                 '.name': name,
                 '.en': sub,
                 '.local': /class="local"/.test(m[2]) ? makeEl('span') : null,
+                '.ccs': /class="ccs"/.test(m[2]) ? makeEl('span') : null,
             },
         }));
     }
@@ -197,7 +202,7 @@ function parseSky(html) {
     for (const m of html.matchAll(re)) {
         const cell = (m[3].match(/<td class="ev">([\s\S]*?)<\/td>/) || [])[1] || '';
         const clean = unesc(cell
-            .replace(/<span class="(alt|cardinal)"[^>]*>[\s\S]*?<\/span>/g, '')
+            .replace(/<span class="(alt|cardinal|leap)"[^>]*>[\s\S]*?<\/span>/g, '')
             .replace(/<[^>]+>/g, '')).trim();
 
         const ev = makeEl('td');
@@ -214,6 +219,7 @@ function parseSky(html) {
                 '.ev': ev,
                 '.alt': alt,
                 '.cardinal': /class="cardinal"/.test(cell) ? makeEl('span') : null,
+                '.leap': /class="leap"/.test(cell) ? makeEl('span') : null,
             },
         }));
     }

@@ -16,7 +16,7 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DATA, YEARS, today } from './config.mjs';
-import { solarTerms, moonPhases, showers, TERM_NAMES } from './astro.mjs';
+import { solarTerms, moonPhases, showers, lunarMonths, TERM_NAMES } from './astro.mjs';
 
 const years = YEARS();
 
@@ -51,7 +51,12 @@ const marginOf = (hhmm) => {
     return Math.min(t, 1440 - t);
 };
 
-const terms = [], moons = [], rain = [];
+/* 음력의 기준 시간대. **절기·삭망과 달리 이것은 자료의 일부다** — 음력은
+   "삭이 든 날이 며칟날인가" 로 달이 갈리므로 시간대를 정해야 성립한다.
+   한국 음력이라 KST 고, en 페이지도 같은 표를 본다(각주로 밝힌다). */
+const LUNAR_TZ = ZONES.kst;
+
+const terms = [], moons = [], rain = [], lunar = [];
 for (const year of years) {
     for (const t of solarTerms(year)) {
         const nm = TERM_NAMES[t.k];
@@ -61,6 +66,9 @@ for (const year of years) {
     for (const s of showers(year)) {
         rain.push({ ...stamp(s.at), id: s.id, n: s.ko, e: s.en, z: s.zhr });
     }
+    /* 음력 달은 순간이 아니라 날짜라 stamp() 를 쓰지 않는다 — 굳힐 시간대가
+       하나뿐이고 시각이 없다. s(초하루) 와 n(길이)만 담는다. */
+    for (const mo of lunarMonths(year, LUNAR_TZ)) lunar.push(mo);
 }
 
 /* 자료 자체가 앞뒤가 맞는지 여기서 한 번 본다. check-pages 가 다시 보지만,
@@ -74,6 +82,38 @@ for (let i = 1; i < terms.length; i++) {
 for (let i = 1; i < moons.length; i++) {
     if (moons[i].f === moons[i - 1].f) fail.push(`삭망이 연달아 같다 — ${moons[i].t}`);
 }
+/* 음력. 초하루가 삭이 든 날인지가 규칙의 절반이므로 여기서 바로 견준다 —
+   같은 파일 안의 moons 로 되짚을 수 있는 검산이라 페이지까지 갈 이유가 없다.
+   해의 경계에서 시작한 달은 다음 해 표의 첫 달로 이어지므로 통째로 이어 본다. */
+{
+    const newMoonDays = new Set(moons.filter((m) => !m.f).map((m) => m.kst));
+    const day = (iso) => Math.round(Date.parse(iso + 'T00:00:00Z') / 86400000);
+    for (const mo of lunar) {
+        if (mo.n !== 29 && mo.n !== 30) fail.push(`음력 ${mo.y}/${mo.m} 이 ${mo.n}일이다`);
+        /* 자료가 담은 해의 삭만 갖고 있으므로 양 끝 달은 견줄 짝이 없다 */
+        const inRange = years.includes(+mo.s.slice(0, 4));
+        if (inRange && !newMoonDays.has(mo.s)) {
+            fail.push(`음력 ${mo.y}/${mo.m} 의 초하루 ${mo.s} 에 삭이 없다`);
+        }
+    }
+    for (let i = 1; i < lunar.length; i++) {
+        const gap = day(lunar[i].s) - day(lunar[i - 1].s);
+        if (gap !== lunar[i - 1].n) {
+            fail.push(`음력 달이 이어지지 않는다 — ${lunar[i - 1].s}(${lunar[i - 1].n}일) → ${lunar[i].s}`);
+        }
+    }
+    /* 한 음력 해는 12개월이거나 (윤달이 있으면) 13개월이다. 자료 창의 양 끝
+       음력 해는 잘려 있으니 가운데 것만 본다. */
+    const byLy = new Map();
+    for (const mo of lunar) byLy.set(mo.y, (byLy.get(mo.y) || 0) + 1);
+    const lys = [...byLy.keys()].sort((a, b) => a - b).slice(1, -1);
+    for (const ly of lys) {
+        const n = byLy.get(ly);
+        if (n !== 12 && n !== 13) fail.push(`음력 ${ly}년이 ${n}개월이다`);
+        const leaps = lunar.filter((mo) => mo.y === ly && mo.leap).length;
+        if (leaps !== (n === 13 ? 1 : 0)) fail.push(`음력 ${ly}년(${n}개월)에 윤달이 ${leaps}개다`);
+    }
+}
 if (fail.length) {
     console.error('천문 자료가 앞뒤가 맞지 않는다:');
     for (const f of fail.slice(0, 10)) console.error('  ✗', f);
@@ -84,12 +124,14 @@ const sky = {
     generated: today(),
     years,
     zones: ZONES,
-    terms, moons, showers: rain,
+    lunarZone: LUNAR_TZ,
+    terms, moons, showers: rain, lunar,
 };
 writeFileSync(join(DATA, 'sky.json'), JSON.stringify(sky) + '\n');
 
 const size = (JSON.stringify(sky).length / 1024).toFixed(1);
-console.log(`sky.json — 절기 ${terms.length} · 삭망 ${moons.length} · 유성우 ${rain.length} (${size}KB)`);
+console.log(`sky.json — 절기 ${terms.length} · 삭망 ${moons.length} · 유성우 ${rain.length}`
+    + ` · 음력 ${lunar.length}개월(윤달 ${lunar.filter((m) => m.leap).length}) (${size}KB)`);
 
 /* 얇은 자리를 알려 준다. 막지는 않는다 — 계산은 맞고, 그저 여유가 적을 뿐이다. */
 for (const [zone, key] of [['KST', 'kh'], ['UTC', 'uh']]) {

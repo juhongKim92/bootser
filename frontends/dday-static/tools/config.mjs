@@ -30,12 +30,36 @@ export const YEARS = (now = new Date()) => {
    두 글자가 아니어야 한다 — 국가 코드(ISO 3166-1 alpha-2)와 부딪히면 국가 페이지를
    조용히 덮어쓴다. gen-pages 가 그것도 확인한다.
 
-   하늘은 다시 갈래 셋으로 갈렸다. 176건을 한 URL 에 몰아 두면 어느 검색어에도
+   하늘은 다시 갈래 넷으로 갈렸다 — 절기·삭망·유성우·음력. 176건을 한 URL 에 몰아 두면 어느 검색어에도
    정확히 대응하지 못한다 — 유성우는 8월·12월에, 절기는 입춘·동지에 수요가 몰리는데
    그 어느 것도 "절기와 삭망" 한 장으로는 받지 못했다. /sky/ 는 허브로 남고 표는
    갈래로 내려갔다. 중첩 슬러그라 EXTRA 항목에 '/' 가 들어간다 — 아래 청소는
-   맨 앞 'sky' 로 걸려 하위까지 통째로 지우므로 그대로 맞는다. */
-export const EXTRA = ['sky', 'sky/term', 'sky/moon', 'sky/meteor'];
+   맨 앞 'sky' 로 걸려 하위까지 통째로 지우므로 그대로 맞는다.
+
+   'holiday' 와 'rank' 는 뒤에 붙은 축 둘이다.
+     · /holiday/           이름 축의 허브 (어떤 이름을 몇 나라가 쓰나)
+     · /holiday/{slug}/    이름 하나 (tools/holiday-names.mjs 가 정한다 — 아래 NAME_PAGE)
+     · /rank/              국가끼리 견주는 한 장 (공휴일 수 · 최장 연휴) */
+export const EXTRA = ['sky', 'sky/term', 'sky/moon', 'sky/meteor', 'sky/lunar',
+    'holiday', 'rank'];
+
+/* 이름 축의 낱장. **EXTRA 에 손으로 적지 않는다** — 몇 장이 될지는 자료가 정하고
+   (문턱을 넘는 이름의 수) 달마다 늘거나 줄 수 있다. 손으로 적어 두면 자료가
+   바뀔 때 조용히 어긋난다.
+
+   'holiday' 뿌리는 EXTRA 에 있으므로 gen-pages 의 청소가 하위까지 통째로 지운다.
+   슬러그 모양이 두 글자가 될 수 없게 최소 세 글자로 못박는다 — 국가 코드와
+   부딪히면 국가 페이지를 조용히 덮어쓴다. */
+export const NAME_PAGE = /^holiday\/[a-z0-9][a-z0-9-]{2,}$/;
+
+/* 슬러그 → 페이지 갈래. gen-pages · gen-card · check-pages 가 같이 본다.
+   경로 규칙은 의견이 아니라 규칙이라 한 군데 두는 것이 맞다 — 기대값(문안·숫자)을
+   나눠 쓰지 않는 것과는 다른 이야기다. */
+export const kindOf = (slug) =>
+    slug === '' ? 'home'
+        : NAME_PAGE.test(slug) ? 'name'
+            : EXTRA.includes(slug) ? slug
+                : 'country';
 
 /* 'Public' 만 남긴다. Nager 의 types 에는 Bank · Observance · Optional · School ·
    Authorities 가 섞여 있는데, 그건 공휴일이 아니라 관습일이거나 일부 직군만 쉬는 날이다.

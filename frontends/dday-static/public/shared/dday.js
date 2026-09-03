@@ -63,6 +63,9 @@
                갈라질 수 있으므로 여기서는 고르기만 한다. */
             zone: 'kst',
             skyNone: '오늘은 절기도 삭망도 아닙니다',
+            /* 음력 페이지의 "아무것도 아닌 날". 갈래가 음력뿐인 페이지에서
+               "절기도 삭망도 아닙니다" 라고 적으면 그건 거짓말이다. */
+            lunarNone: '오늘은 초하루가 아닙니다',
             skyOff: ' — 오늘입니다',
             newMoon: '삭', fullMoon: '보름',
             showerName: function (n) { return n + ' 유성우'; },
@@ -104,6 +107,7 @@
             holidaySub: function (h) { return h.e ? h.n : ''; },
             zone: 'utc',
             skyNone: 'No solar term or moon phase today',
+            lunarNone: 'Not the first day of a lunar month',
             skyOff: ' — today',
             newMoon: 'New Moon', fullMoon: 'Full Moon',
             showerName: function (n) { return n; },
@@ -304,12 +308,14 @@
             '<em>' + shortHuman(m.item.s) + ' ~ ' + shortHuman(m.item.e) + '</em>';
     }
 
-    /* 이름 칸에는 영어 이름과 지역 배지가 같이 들어 있다. 카드에는 이름만 옮긴다. */
+    /* 이름 칸에는 영어 이름과 지역 배지가 같이 들어 있다. 카드에는 이름만 옮긴다.
+       `.ccs` 는 이름 축 페이지의 나라 칩이다 — 떼지 않으면 카드 한 줄에 178개
+       나라 이름이 쏟아진다. gen-pages 의 chips() · harness 의 parseRows 와 짝이다. */
     function nameOf(tr) {
         var el = $('.name', tr);
         if (!el) return '';
         var clone = el.cloneNode(true);
-        $$('.en, .regions, .local', clone).forEach(function (x) { x.remove(); });
+        $$('.en, .regions, .local, .ccs', clone).forEach(function (x) { x.remove(); });
         return clone.textContent.trim();
     }
 
@@ -404,7 +410,7 @@
         var el = $('.ev', tr);
         if (!el) return '';
         var clone = el.cloneNode(true);
-        $$('.alt, .cardinal', clone).forEach(function (x) { x.remove(); });
+        $$('.alt, .cardinal, .leap', clone).forEach(function (x) { x.remove(); });
         return clone.textContent.trim();
     }
     function altOf(tr) {
@@ -425,9 +431,12 @@
 
             var verdict = $('.verdict', card);
             if (verdict) {
+                /* 갈래가 음력 하나뿐인 페이지에는 음력 문안을 쓴다. 페이지에
+                   실제로 그려진 행에서 갈리므로 표시용 표를 따로 두지 않는다. */
+                var onlyLunar = !!got.lunar && !got.term && !got.moon && !got.shower;
                 verdict.textContent = got.todays.length
                     ? got.todays.map(function (m) { return nameText(m.item); }).join(' · ') + T.skyOff
-                    : T.skyNone;
+                    : (onlyLunar ? T.lunarNone : T.skyNone);
                 verdict.className = 'verdict' + (got.todays.length ? ' rest' : '');
             }
         }
@@ -436,6 +445,8 @@
            이름은 HTML 에서 왔고 HTML 은 sky.json 에서 왔으니 갈라질 자리가 없다. */
         fill($('#next-term'), got.term && got.term.next, '-');
         fill($('#next-shower'), got.shower && got.shower.next, '-');
+
+        fill($('#next-lunar'), got.lunar && got.lunar.next, '-');
 
         var moons = (got.moon && got.moon.marked) || [];
         fill($('#next-new'), nextNamed(moons, T.newMoon), '-');
@@ -449,6 +460,40 @@
             if (!best || m.diff < best.diff) best = m;
         });
         return best;
+    }
+
+    /* ------------------------------------------------- 이름 축 · 순위 페이지
+       국가 축도 하늘도 아닌 세 축이 더 붙었다 (/holiday/ · /holiday/{이름}/ · /rank/).
+       표 모양은 그대로다 — 날짜 행은 tr[data-d], 연휴 행은 tr[data-s] —
+       그래서 칠하는 규칙을 새로 만들지 않고 그대로 쓴다. 여기서 다른 규칙을
+       쓰면 같은 사이트 안에서 D-day 가 두 가지 뜻을 갖는다.
+
+       카드는 이름 축 한 장에만 있다. 허브와 순위 페이지에는 "다음" 이 하나로
+       정해지지 않는다 — 허브의 표는 여러 이름이 섞여 있고, 순위 표의 행은
+       나라지 날짜가 아니다. 그런 자리에 카드를 두면 무엇의 D-day 인지 모른다. */
+    function initList() {
+        var kind = document.body.getAttribute('data-list');
+        if (!kind) return;
+
+        var today = todayIso();
+        var got = paintTables(today);
+        paintBreaks(today);
+        if (kind !== 'name') return;
+
+        var card = $('#now');
+        if (!card) return;
+        var asof = $('.asof', card);
+        if (asof) asof.textContent = T.asof(human(today));
+        if (got.todays.length) {
+            var verdict = $('.verdict', card);
+            if (verdict) {
+                verdict.textContent = got.todays.map(function (m) { return m.item.n; })
+                    .join(' · ') + T.skyOff;
+                verdict.className = 'verdict rest';
+            }
+        }
+        fill($('#next'), got.next, '-');
+        fill($('#prev'), got.prev, '+');
     }
 
     /* 첫 화면의 하늘 칸. /sky/ 로 가는 입구이기도 하다 — 여기서 링크가 빠지면
@@ -759,6 +804,7 @@
             paintNow(today, paintTables(today), paintBreaks(today));
         }
         initSky();
+        initList();
         initSkyHome();
         initHome();
     }
@@ -774,6 +820,8 @@
 
     /* 하늘 페이지가 첫 화면·국가 페이지와 다른 갈래라는 사실을 검사기가 알아야 한다 */
     window.DDAY.isSky = !!document.body.getAttribute('data-sky');
+    /* 이름 축·순위도 마찬가지다 — 국가 페이지가 아니면서 표를 이고 있다 */
+    window.DDAY.list = document.body.getAttribute('data-list') || null;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', start);

@@ -39,7 +39,8 @@
 import { boot, pages, PUB, DATA } from './harness.mjs';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, sep } from 'node:path';
-import { BASE, EXTRA, YEARS, today, HERE } from './config.mjs';
+import { BASE, EXTRA, YEARS, today, HERE, kindOf, NAME_PAGE } from './config.mjs';
+import { NAMES, MIN, NAME_ROOT } from './holiday-names.mjs';
 import { pngSize } from './png.mjs';
 import { FONT_DIR, FONT_CSS, LICENSE_FILE, codepoints, parseFaces, parseRanges, used, parseName, hash8 } from './fonts.mjs';
 import { SHOWERS } from './astro.mjs';
@@ -70,21 +71,29 @@ const NEED_IDS = {
     'sky/term': ['picker', 'now', 'next-term'],
     'sky/moon': ['picker', 'now', 'next-new', 'next-full'],
     'sky/meteor': ['picker', 'now', 'next-shower'],
+    'sky/lunar': ['picker', 'now', 'next-lunar'],
+    /* 이름 축 허브와 순위 페이지에는 카드가 없다 — 표에 여러 이름·여러 나라가
+       섞여 있어 "다음" 이 하나로 정해지지 않는다. 이름 한 장에만 카드가 있다. */
+    holiday: ['picker'],
+    name: ['picker', 'now', 'next', 'prev'],
+    rank: ['picker'],
 };
 
 /* 하늘 갈래. gen-pages 의 SKY_TOPICS 와 짝이지만 여기서 따로 적는다 —
    거기서 가져오면 둘이 같이 틀려도 통과한다. */
-const SKY_KIND = { 'sky/term': 'term', 'sky/moon': 'moon', 'sky/meteor': 'shower' };
-const SKY_DATA = { 'sky/term': 'terms', 'sky/moon': 'moons', 'sky/meteor': 'showers' };
+const SKY_KIND = { 'sky/term': 'term', 'sky/moon': 'moon', 'sky/meteor': 'shower', 'sky/lunar': 'lunar' };
+const SKY_DATA = { 'sky/term': 'terms', 'sky/moon': 'moons', 'sky/meteor': 'showers', 'sky/lunar': 'lunar' };
 
-/* 슬러그를 언어와 갈래로 가른다.  '' | 'en' | 'kr' | 'en/kr' | 'sky' | 'en/sky'
-   갈래가 셋이다 — 첫 화면 · 국가 페이지 · 국가가 아닌 페이지(EXTRA).
-   예전에는 "첫 화면 아니면 전부 국가 페이지" 였는데 하늘 페이지가 그 가정을 깬다. */
+/* 슬러그를 언어와 갈래로 가른다.
+     '' | 'en' | 'kr' | 'en/kr' | 'sky' | 'sky/moon' | 'holiday' | 'holiday/christmas' | 'rank'
+   갈래를 가르는 규칙은 config.mjs 의 kindOf 하나다 — 경로 규칙은 의견이 아니라
+   규칙이고, gen-pages 가 페이지를 놓는 자리와 여기가 읽는 자리가 갈리면
+   검사가 통째로 헛돈다. (기대값·문안을 나눠 쓰지 않는 것과는 다른 이야기다.) */
 const ALL = pages().map((p) => {
     const en = p === 'en' || p.startsWith('en/');
     const slug = en ? p.slice(3) : p;                    /* '' | 'kr' | 'sky' */
-    const kind = slug === '' ? 'home' : EXTRA.includes(slug) ? slug : 'country';
-    return { page: p, lang: en ? 'en' : 'ko', slug, kind, label: '/' + (p ? p + '/' : '') };
+    return { page: p, lang: en ? 'en' : 'ko', slug, kind: kindOf(slug),
+        label: '/' + (p ? p + '/' : '') };
 });
 const COUNTRY = ALL.filter((p) => p.kind === 'country');
 console.log(`페이지 ${ALL.length}개 (한국어 ${ALL.filter((p) => p.lang === 'ko').length}` +
@@ -157,6 +166,12 @@ check('favicon.svg', (file) => {
         [/td\.date \.at\{/, '하늘 표의 시각 스타일이 없다'],
         [/td\.ev\{/, '하늘 표의 이름 칸 스타일이 없다'],
         [/\.cardinal\{/, '분점·지점 배지 스타일이 없다'],
+        [/\.leap\{/, '윤달 배지 스타일이 없다 — 표에서 안 보인다'],
+        [/table\.who td\.name\{/, '이름 축 표의 이름 칸 스타일이 없다'],
+        [/\.ccs\{/, '이름 축의 나라 칩 스타일이 없다 — 176개국이 한 줄로 붙는다'],
+        [/\.ccs \.one::after\{/, '나라 칩 사이 구분점이 없다 — 이름들이 붙어 읽힌다'],
+        [/td\.no\{/, '순위 칸 스타일이 없다'],
+        [/td\.who\{/, '순위 표의 국가 칸 스타일이 없다 — 줄바꿈이 나 버린다'],
         [/\.sum\{/, '요약 문장 스타일이 없다 — lede 와 붙어 한 문단으로 보인다'],
         /* .now .pair dd .dd 는 카드 안에만 걸린다. 첫 화면 목록에도 같은 모양이
            필요한데 그걸 빠뜨려서 "D-10다음 절기" 처럼 붙어 나온 적이 있다. */
@@ -321,6 +336,7 @@ const WORDS = {
           noBreak: '담긴 자료에 연휴가 없습니다',
           newMoon: '삭', fullMoon: '보름',
           skyNone: '오늘은 절기도 삭망도 아닙니다', skyOff: '오늘입니다',
+          lunarNone: '오늘은 초하루가 아닙니다',
           dtTerm: '다음 절기', dtNew: '다음 삭', dtFull: '다음 보름', dtShower: '다음 유성우',
           asofYear: (y) => String(y) },
     en: { noHoliday: 'An ordinary day', off: ' — a day off today',
@@ -329,6 +345,7 @@ const WORDS = {
           noBreak: 'No long weekend in the data',
           newMoon: 'New Moon', fullMoon: 'Full Moon',
           skyNone: 'No solar term or moon phase today', skyOff: 'today',
+          lunarNone: 'Not the first day of a lunar month',
           dtTerm: 'Next term', dtNew: 'Next new moon', dtFull: 'Next full moon', dtShower: 'Next shower',
           asofYear: (y) => String(y) },
 };
@@ -354,6 +371,7 @@ function epochDayRef(iso) {
     const [y, m, d] = iso.split('-').map(Number);
     return Math.round(Date.UTC(y, m - 1, d) / 86400000);
 }
+const isoAt = (n) => new Date(n * 86400000).toISOString().slice(0, 10);
 function expectRef(dates, today) {
     const t = epochDayRef(today);
     let next = null, prev = null;
@@ -392,9 +410,142 @@ function spanRef(s, e) {
     return out;
 }
 
+/* ------------------------------------- 이름 축을 손으로 다시 묶어 둔다
+
+   이름 축(/holiday/…)은 `data/` 에 파일을 하나도 더 만들지 않는다. gen-pages 가
+   204개 국가 파일을 그때그때 묶어 HTML 에 박을 뿐이다. 그래서 검산점이
+   `data/month/*.json` 보다 세다 — **묶는 코드를 나눠 쓰지 않으므로 둘이 같이
+   틀릴 수 없다.** 저장된 파생물을 견주는 쪽은 생성기가 두 벌을 같은 코드로 만들면
+   조용히 통과하는데, 여기는 그럴 수가 없다.
+
+   묶는 규칙(정규화)만은 원화와 같은 규칙이어야 하므로 여기 **다시 적는다** —
+   holiday-names.mjs 의 NORM 을 가져오지 않는다. 라벨과 슬러그(NAMES)와 문턱(MIN)은
+   자료가 아니라 입력이라 그대로 들여온다. */
+const NAME_INDEX = (() => {
+    const norm = (s) => String(s).toLowerCase()
+        .replace(/['‘’]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+
+    const byKey = new Map();
+    for (const f of countryFiles()) {
+        const d = JSON.parse(readFileSync(join(DATA, f), 'utf8'));
+        for (const day of d.days) {
+            /* e 가 없으면 현지어가 곧 영어 이름이다 — 이 갈림길을 놓치면
+               3,375건이 한 이름으로 뭉친다 */
+            const k = norm(day.e ?? day.n);
+            if (!byKey.has(k)) byKey.set(k, new Map());
+            const m = byKey.get(k);
+            if (!m.has(day.d)) m.set(day.d, new Set());
+            m.get(day.d).add(d.code);
+        }
+    }
+
+    const out = new Map();                    /* 슬러그 → { key, cover, dates } */
+    for (const [key, m] of byKey) {
+        const cover = new Set();
+        for (const [date, ccs] of m) {
+            if (date.startsWith(String(MID))) for (const cc of ccs) cover.add(cc);
+        }
+        if (cover.size < MIN) continue;
+        const label = NAMES[key];
+        if (!label) { bad('/holiday/', `문턱을 넘는데 라벨이 없는 이름: '${key}' (${cover.size}개국)`); continue; }
+        out.set(label.slug, {
+            key, ko: label.ko, en: label.en, cover: cover.size,
+            dates: [...m.keys()].sort().map((d) => ({ d, cc: [...m.get(d)].sort() })),
+        });
+    }
+    return out;
+})();
+
+/* 날짜 축 — "어떤 날에 가장 많은 나라가 쉬나". 이름과 무관하게 날짜로만 센다.
+   허브의 표와 견줄 기대값이고, 문턱(10)은 gen-pages 의 TOGETHER_MIN 과 같은 수를
+   여기 다시 적은 것이다 — 저쪽 값을 들여오면 문턱이 바뀌어도 조용히 통과한다. */
+const TOGETHER_MIN_REF = 10;
+const TOGETHER_REF = (() => {
+    const byDate = new Map();
+    for (const f of countryFiles()) {
+        const d = JSON.parse(readFileSync(join(DATA, f), 'utf8'));
+        for (const day of d.days) {
+            if (!day.d.startsWith(String(MID))) continue;
+            if (!byDate.has(day.d)) byDate.set(day.d, new Set());
+            byDate.get(day.d).add(d.code);
+        }
+    }
+    return [...byDate.keys()]
+        .map((d) => ({ d, n: byDate.get(d).size }))
+        .filter((x) => x.n >= TOGETHER_MIN_REF)
+        .sort((a, b) => b.n - a.n || a.d.localeCompare(b.d));
+})();
+
+/* 순위 — 표지 연도의 "쉬는 날짜" 수와 연휴. 세는 단위를 gen-pages 와 같은 말로
+   다시 적는다: 건수가 아니라 **날짜 수**다 (한 날짜에 공휴일이 둘 겹치는 나라가 있다). */
+const RANK_TOP_REF = 20;
+const RANK_REF = (() => {
+    const rows = [];
+    const spans = [];
+    for (const f of countryFiles()) {
+        const d = JSON.parse(readFileSync(join(DATA, f), 'utf8'));
+        const n = new Set(d.days.filter((x) => x.d.startsWith(String(MID))).map((x) => x.d)).size;
+        const breaks = (d.long || []).filter((w) => w.s.startsWith(String(MID)));
+        if (!n) continue;
+        rows.push({ code: d.code, ko: d.ko, name: d.name, n, breaks: breaks.length });
+        for (const w of breaks) {
+            spans.push({ code: d.code, s: w.s, e: w.e,
+                n: epochDayRef(w.e) - epochDayRef(w.s) + 1 });
+        }
+    }
+    const desc = (f) => (a, b) => f(b) - f(a) || a.code.localeCompare(b.code);
+    return {
+        total: rows.length,
+        most: [...rows].sort(desc((c) => c.n)).slice(0, RANK_TOP_REF),
+        least: [...rows].sort((a, b) => a.n - b.n || a.code.localeCompare(b.code)).slice(0, RANK_TOP_REF),
+        busiest: [...rows].sort(desc((c) => c.breaks)).slice(0, RANK_TOP_REF),
+        longest: spans.sort((a, b) => b.n - a.n || a.s.localeCompare(b.s)
+            || a.code.localeCompare(b.code)).slice(0, RANK_TOP_REF),
+    };
+})();
+
+/* 이름 축 페이지의 이름 칸에서 나라 코드를 뽑는다. 칩은 `<span class="one">` 하나에
+   국기와 <a> 하나씩이라 좁은 무늬로 충분하다. */
+const ccsIn = (cell) => [...cell.matchAll(/<span class="one">[^<]*<a href="(?:\/en)?\/([a-z]{2})\/">/g)]
+    .map((m) => m[1].toUpperCase());
+
+/* 이름 칸의 앞머리(칩 앞)에 적힌 나라 수. "178개국" · "178 countries" */
+const countIn = (cell) => {
+    const m = /^(\d+)/.exec(cell.replace(/<[^>]*>/g, '').trim());
+    return m ? +m[1] : null;
+};
+
+/* 날짜 행 하나 = [날짜, 이름 칸]. 이름 축 페이지와 허브가 같은 모양을 쓴다. */
+const dateRows = (html) => [...html.matchAll(
+    /<tr data-d="(\d{4}-\d{2}-\d{2})">\s*<td class="date">[\s\S]*?<\/td>\s*<td class="name">([\s\S]*?)<\/td>/g
+)].map((m) => ({ d: m[1], cell: m[2] }));
+
+/* 국가 이름. 이름 축의 나라 칩과 순위 표가 "보이는 이름순" 인지 보는 데 쓴다 —
+   countries.json 은 한글 이름순으로 저장돼 있어서 영어 화면에서 그대로 쓰면
+   Ghana(가나)가 맨 앞에 오는 무작위 순서가 된다. 첫 화면에서 한 번 겪은 고장이다. */
+const BY_CODE = new Map(JSON.parse(readFileSync(join(DATA, 'countries.json'), 'utf8'))
+    .map((c) => [c.code, c]));
+const shownName = (cc, lang) => {
+    const c = BY_CODE.get(cc) || { ko: cc, name: cc };
+    return lang === 'en' ? c.name : c.ko;
+};
+const inShownOrder = (ccs, lang) => {
+    const names = ccs.map((cc) => shownName(cc, lang));
+    const sorted = [...names].sort((a, b) => a.localeCompare(b, lang));
+    return names.join('|') === sorted.join('|') ? -1 : names.findIndex((n, i) => n !== sorted[i]);
+};
+
+/* 순위 표의 행. 열이 셋(순위 · 국가 · 값)인 표와 다섯(연휴)인 표를 따로 뽑는다. */
+const rankRowsOf = (body) => [...body.matchAll(
+    /<td class="no">(\d+)<\/td>\s*<td class="who"><span class="flag">[^<]*<\/span><a href="[^"]*\/([a-z]{2})\/">([^<]*)<\/a><\/td>\s*<td class="len">([^<]*)<\/td>/g
+)].map((m) => ({ no: +m[1], cc: m[2].toUpperCase(), shown: m[3], cell: m[4] }));
+
 /* ------------------------------------------------------------ 페이지 순회 */
 const linkedFromHome = { ko: new Set(), en: new Set() };
 const cardsUsed = new Set();
+const namePagesSeen = { ko: new Set(), en: new Set() };
 
 for (const { page, lang, slug, kind, label } of ALL) {
     let r;
@@ -571,7 +722,12 @@ for (const { page, lang, slug, kind, label } of ALL) {
         const only = SKY_KIND[kind];
         const mine = SKY[SKY_DATA[kind]];
 
-        const want = mine.map((e) => `${e[zone]}|${only}`);
+        /* 음력만 다르다 — 시간대가 자료의 일부라(초하루는 "삭이 든 날" 이다)
+           ko/en 이 같은 날짜를 본다. 그래서 두 칸이 아니라 s 한 칸이고, 여기서도
+           zone 을 묻지 않는다. gen-pages 의 skyDate 와 짝이다. */
+        const dateOf = (e) => (e.s !== undefined ? e.s : e[zone]);
+
+        const want = mine.map((e) => `${dateOf(e)}|${only}`);
         const got = [...html.matchAll(/<tr data-d="([\d-]+)" data-sky="([a-z]+)">/g)]
             .map((m) => `${m[1]}|${m[2]}`);
         const sortKey = (a) => [...a].sort().join(',');
@@ -599,7 +755,7 @@ for (const { page, lang, slug, kind, label } of ALL) {
             const t = epochDayRef(TODAY);
             let best = null;
             for (const e of items) {
-                const d = epochDayRef(e[zone]) - t;
+                const d = epochDayRef(dateOf(e)) - t;
                 if (d > 0 && (best === null || d < best.d)) best = { e, d };
             }
             return best;
@@ -610,10 +766,16 @@ for (const { page, lang, slug, kind, label } of ALL) {
             'sky/moon': [['#next-new', SKY.moons.filter((m) => !m.f), () => w.newMoon],
                          ['#next-full', SKY.moons.filter((m) => m.f), () => w.fullMoon]],
             'sky/meteor': [['#next-shower', SKY.showers, (e) => (lang === 'en' ? e.e : e.n)]],
+            /* 음력 달 이름은 자료의 숫자에서 조립된다. gen-pages 의 lunarName 을
+               가져다 쓰지 않고 여기 다시 적는다 — 윤달 표시가 빠져도 통과하면
+               검사가 아니다. */
+            'sky/lunar': [['#next-lunar', SKY.lunar, (e) => (lang === 'en'
+                ? `${e.leap ? 'Leap month' : 'Month'} ${e.m}, ${e.y}`
+                : `${e.y}년 ${e.leap ? '윤' : ''}${e.m}월`)]],
         }[kind];
 
         /* 다른 갈래의 카드 줄이 남아 있으면 안 된다 — 그 줄은 영영 '-' 로 남는다 */
-        for (const id of ['next-term', 'next-new', 'next-full', 'next-shower']) {
+        for (const id of ['next-term', 'next-new', 'next-full', 'next-shower', 'next-lunar']) {
             const mineIds = lines.map(([sel]) => sel.slice(1));
             if (!mineIds.includes(id) && html.includes(`id="${id}"`)) {
                 bad(label, `이 갈래에 없는 카드 줄이 있다: #${id}`);
@@ -637,15 +799,219 @@ for (const { page, lang, slug, kind, label } of ALL) {
             }
         }
 
-        /* 오늘 칸 — 이 갈래의 자료만 본다 */
+        /* 오늘 칸 — 이 갈래의 자료만 본다.
+           음력만 "아무것도 아닌 날" 의 문안이 다르다 — 초하루가 아닌 날에
+           "절기도 삭망도 아닙니다" 라고 적으면 그 페이지에서는 거짓말이다. */
         const now = r.doc.cache.get('#now');
         const verdict = now.querySelector('.verdict').textContent;
-        const todays = mine.filter((e) => e[zone] === TODAY);
-        if (!todays.length && verdict !== w.skyNone) {
+        const none = kind === 'sky/lunar' ? w.lunarNone : w.skyNone;
+        const todays = mine.filter((e) => dateOf(e) === TODAY);
+        if (!todays.length && verdict !== none) {
             bad(label, `오늘 아무것도 없는데 오늘 칸이 "${verdict}" 다`);
         }
         if (todays.length && !verdict.includes(w.skyOff.trim().replace(/^—\s*/, ''))) {
             bad(label, `오늘 ${todays.length}건인데 오늘 칸이 "${verdict}" 다`);
+        }
+        continue;
+    }
+
+    /* --------------------------------------------------------- 이름 축 한 장
+       자료를 하나도 더 만들지 않는 축이라, 검사기가 국가별 파일에서 **자기 손으로
+       다시 묶어**(NAME_INDEX) HTML 과 견준다. 묶는 코드를 나눠 쓰지 않으므로
+       둘이 같이 틀릴 수 없다 — 이 축의 게이트 4번이 바로 이것이다. */
+    if (kind === 'name') {
+        const only = slug.slice(NAME_ROOT.length + 1);
+        namePagesSeen[lang].add(only);
+        if (r.dday.list !== 'name') bad(label, `dday.js 가 이름 축으로 못 알아봤다 (${r.dday.list})`);
+
+        const want = NAME_INDEX.get(only);
+        if (!want) { bad(label, `문턱(${MIN}개국)을 넘지 않는 이름인데 페이지가 있다`); continue; }
+
+        const rows = dateRows(html);
+        const wantKeys = want.dates.map((x) => `${x.d}|${x.cc.join(',')}`);
+        const gotKeys = rows.map((x) => `${x.d}|${ccsIn(x.cell).sort().join(',')}`);
+        if (gotKeys.join(' / ') !== wantKeys.join(' / ')) {
+            /* 어긋난 나라만 적는다. 한 줄에 176개국이 들어가는 표라서 양쪽을
+               통째로 찍으면 실패 메시지가 화면을 덮고 무엇이 틀렸는지 안 보인다. */
+            const at = gotKeys.findIndex((k, i) => k !== wantKeys[i]);
+            if (at < 0 || rows.length !== want.dates.length) {
+                bad(label, `표 ${rows.length}행 / 자료 ${want.dates.length}건 — 날짜 집합이 다르다`);
+            } else {
+                const g = new Set(ccsIn(rows[at].cell));
+                const w2 = new Set(want.dates[at].cc);
+                const only = (a, b) => [...a].filter((x) => !b.has(x));
+                bad(label, `${want.dates[at].d}: 표에만 있는 나라 [${only(g, w2).join(',') || '없음'}]`
+                    + ` · 자료에만 있는 나라 [${only(w2, g).join(',') || '없음'}]`);
+            }
+        }
+
+        for (const x of rows) {
+            const ccs = ccsIn(x.cell);
+            /* 칩 앞에 적힌 수와 실제 칩 개수. 갈리면 화면이 조용히 거짓말한다. */
+            if (countIn(x.cell) !== ccs.length) {
+                bad(label, `${x.d}: "${countIn(x.cell)}" 이라고 적혀 있는데 나라 칩은 ${ccs.length}개다`);
+                break;
+            }
+            const at = inShownOrder(ccs, lang);
+            if (at >= 0) {
+                bad(label, `${x.d}: 나라가 보이는 이름순이 아니다 — ${at + 1}번째가 "${shownName(ccs[at], lang)}"`);
+                break;
+            }
+        }
+
+        /* 요약 문장 ↔ 자료. 스니펫에 담길 문장이라 갈리면 검색결과에서 거짓말한다.
+           기대값은 여기서 다시 센다 — 저쪽 nameFacts() 를 가져오면 같이 틀린다. */
+        {
+            const mineY = want.dates.filter((x) => x.d.startsWith(String(MID)));
+            const cover = new Set();
+            for (const x of mineY) for (const c of x.cc) cover.add(c);
+            let peak = null;
+            for (const x of mineY) if (!peak || x.cc.length > peak.cc.length) peak = x;
+
+            const sum = (html.match(/<p class="sum">([^<]*)<\/p>/) || [])[1] || '';
+            if (!sum) bad(label, '요약 문장(<p class="sum">)이 없다');
+            const pats = lang === 'ko'
+                ? [[`쉬는 나라는 ${cover.size}개국`, '국가 수'],
+                   ...(mineY.length > 1 ? [[`${mineY.length}가지`, '날짜 가짓수'],
+                                           [`(${peak.cc.length}개국)`, '가장 많은 날']] : [])]
+                : [[`${cover.size} countries observe`, '국가 수'],
+                   ...(mineY.length > 1 ? [[`${mineY.length} distinct dates`, '날짜 가짓수'],
+                                           [`(${peak.cc.length} countries)`, '가장 많은 날']] : [])];
+            for (const [needle, what] of pats) {
+                if (sum && !sum.includes(needle)) {
+                    bad(label, `요약의 ${what} 가 자료와 다르다 — "${needle}" 이 없다: "${sum}"`);
+                }
+            }
+            /* 허브에 적히는 수와 같아야 한다 — 두 페이지가 같은 자료를 다르게 세면
+               어느 쪽이 맞는지 방문자는 알 수 없다 */
+            if (cover.size !== want.cover) {
+                bad(label, `표지 연도 국가 수가 ${cover.size} 인데 허브 기대값은 ${want.cover} 다`);
+            }
+        }
+
+        /* 실제로 그려진 카드. 위가 자료를 봤다면 여기는 화면을 본다 —
+           dday.js 가 표를 읽어 카드로 옮겨 적는 데까지 다녀온 결과다. */
+        {
+            const dates = want.dates.map((x) => x.d);
+            const e = expectRef(dates, TODAY);
+            const label2 = (d) => {
+                const row = want.dates.find((x) => x.d === d);
+                return lang === 'en' ? `${row.cc.length} countries` : `${row.cc.length}개국`;
+            };
+            for (const [key, got2, sign] of [['next', e.next, '-'], ['prev', e.prev, '+']]) {
+                const el = r.doc.querySelector('#' + key);
+                const drawn = el ? (el.innerHTML || '') : '';
+                if (!drawn) { bad(label, `#${key} 이 비어 있다`); continue; }
+                if (!got2) {
+                    if (!drawn.includes(WORDS[lang].outOfRange)) bad(label, `#${key}: 자료가 없는데 무언가를 그렸다`);
+                    continue;
+                }
+                if (!drawn.includes(`D${sign}${Math.abs(got2.diff)}<`)) {
+                    bad(label, `#${key}: D${sign}${Math.abs(got2.diff)} 이 없다 — "${drawn}"`);
+                }
+                if (!drawn.includes(label2(got2.d))) {
+                    bad(label, `#${key}: "${label2(got2.d)}" 이 없다 — 나라 칩이 카드로 쏟아졌나: "${drawn.slice(0, 120)}"`);
+                }
+            }
+        }
+        continue;
+    }
+
+    /* --------------------------------------------------------- 이름 축 허브
+       이름으로 보내는 자리이면서 **날짜 축**으로 뒤집은 표를 하나 이고 있다.
+       둘을 따로 견준다 — 링크 쪽이 맞아도 표가 틀릴 수 있다. */
+    if (kind === 'holiday') {
+        if (r.dday.list !== 'hub') bad(label, `dday.js 가 허브로 못 알아봤다 (${r.dday.list})`);
+
+        /* 링크 — 문턱을 넘는 이름 전부로, 국가 수까지 적혀 있어야 한다 */
+        const linked = [...html.matchAll(
+            new RegExp(`<li><a href="[^"]*/${NAME_ROOT}/([a-z0-9-]+)/">([^<]*)`
+                + '(?:<span class="en">[^<]*</span>)?<span class="cc">([^<]*)</span>', 'g')
+        )].map((m) => ({ slug: m[1], shown: m[2], count: m[3] }));
+
+        const missing = [...NAME_INDEX.keys()].filter((s) => !linked.some((l) => l.slug === s));
+        const extra = linked.filter((l) => !NAME_INDEX.has(l.slug)).map((l) => l.slug);
+        if (missing.length) bad(label, `허브에서 링크되지 않는 이름 ${missing.length}개: ${missing.slice(0, 5).join(', ')}`);
+        if (extra.length) bad(label, `이름 축에 없는 링크 ${extra.length}개: ${extra.slice(0, 5).join(', ')}`);
+
+        for (const l of linked) {
+            const e = NAME_INDEX.get(l.slug);
+            if (!e) continue;
+            const wantCount = lang === 'en' ? String(e.cover) : `${e.cover}개국`;
+            if (l.count !== wantCount) bad(label, `${l.slug} 의 국가 수가 "${l.count}" 다 (기대 "${wantCount}")`);
+            const wantShown = lang === 'en' ? e.en : e.ko;
+            if (l.shown !== esc(wantShown)) bad(label, `${l.slug} 에 적힌 이름이 "${l.shown}" 다 (기대 "${esc(wantShown)}")`);
+        }
+        /* 국가 수 내림차순 — 흔한 이름이 위로 와야 목록이 읽힌다 */
+        const counts = linked.map((l) => NAME_INDEX.get(l.slug)?.cover ?? -1);
+        for (let i = 1; i < counts.length; i++) {
+            if (counts[i] > counts[i - 1]) { bad(label, `이름 목록이 국가 수 내림차순이 아니다 — ${i + 1}번째(${linked[i].slug})`); break; }
+        }
+
+        /* 함께 쉬는 날 — 날짜 축으로 다시 센 값과 견준다 */
+        const rows = dateRows(html);
+        const gotT = rows.map((x) => `${x.d}|${countIn(x.cell)}`);
+        const wantT = TOGETHER_REF.map((x) => `${x.d}|${x.n}`);
+        if (gotT.join(' / ') !== wantT.join(' / ')) {
+            const at = gotT.findIndex((k, i) => k !== wantT[i]);
+            bad(label, `함께 쉬는 날 표 ${rows.length}행 / 기대 ${TOGETHER_REF.length}건 — `
+                + (at < 0 ? '집합이 다르다' : `${at + 1}번째가 "${gotT[at]}" (기대 "${wantT[at]}")`));
+        }
+        /* 허브 표에는 나라 칩이 없어야 한다 — 44일 × 최대 197개국이면 페이지가 죽는다 */
+        for (const x of rows) {
+            if (ccsIn(x.cell).length) { bad(label, `허브 표에 나라 칩이 있다 (${x.d})`); break; }
+        }
+        continue;
+    }
+
+    /* ---------------------------------------------------- 나라끼리 견주기 한 장
+       표가 넷인데 셋은 열이 같고(순위·국가·값) 하나는 구간이다. 넷 다 국가별
+       파일에서 다시 센 값(RANK_REF)과 견준다. */
+    if (kind === 'rank') {
+        if (r.dday.list !== 'rank') bad(label, `dday.js 가 순위 페이지로 못 알아봤다 (${r.dday.list})`);
+
+        const plain = [...html.matchAll(/<table class="rank">([\s\S]*?)<\/table>/g)].map((m) => m[1]);
+        const want = [
+            ['공휴일 많은 나라', RANK_REF.most, (c) => c.n],
+            ['공휴일 적은 나라', RANK_REF.least, (c) => c.n],
+            ['연휴 많은 나라', RANK_REF.busiest, (c) => c.breaks],
+        ];
+        if (plain.length !== want.length) {
+            bad(label, `순위 표가 ${plain.length}개다 — ${want.length}개여야 한다`);
+        }
+        plain.forEach((body, i) => {
+            const [what, rows, valueOf] = want[i] || [];
+            if (!rows) return;
+            const got2 = rankRowsOf(body);
+            if (got2.length !== rows.length) { bad(label, `${what} 표가 ${got2.length}행이다 (기대 ${rows.length})`); return; }
+            got2.forEach((g, j) => {
+                const w2 = rows[j];
+                if (g.no !== j + 1) bad(label, `${what} ${j + 1}번째 순위가 ${g.no} 다`);
+                if (g.cc !== w2.code) bad(label, `${what} ${j + 1}번째가 ${g.cc} 다 (기대 ${w2.code})`);
+                const num = (/(\d+)/.exec(g.cell) || [])[1];
+                if (+num !== valueOf(w2)) bad(label, `${what} ${g.cc} 의 값이 ${num} 이다 (기대 ${valueOf(w2)})`);
+                if (g.shown !== esc(shownName(w2.code, lang))) {
+                    bad(label, `${what} ${g.cc} 에 적힌 이름이 "${g.shown}" 다 (기대 "${esc(shownName(w2.code, lang))}")`);
+                }
+            });
+        });
+
+        const spans = [...html.matchAll(
+            /<tr data-s="([\d-]+)" data-e="([\d-]+)">\s*<td class="no">(\d+)<\/td>\s*<td class="who"><span class="flag">[^<]*<\/span><a href="[^"]*\/([a-z]{2})\/">/g
+        )].map((m) => ({ s: m[1], e: m[2], no: +m[3], cc: m[4].toUpperCase() }));
+        const wantSpans = RANK_REF.longest;
+        const key = (x) => `${x.cc}|${x.s}|${x.e}`;
+        if (spans.map(key).join(' / ') !== wantSpans.map((x) => `${x.code}|${x.s}|${x.e}`).join(' / ')) {
+            bad(label, `최장 연휴 표 ${spans.length}행 / 기대 ${wantSpans.length}건 — 집합이나 순서가 다르다`);
+        }
+        /* 표가 길이 내림차순인가. 순위를 적어 두고 정렬이 틀리면 그게 가장 나쁘다. */
+        for (let i = 1; i < wantSpans.length; i++) {
+            if (wantSpans[i].n > wantSpans[i - 1].n) { bad(label, '최장 연휴 기대값 자체가 내림차순이 아니다'); break; }
+        }
+        /* 담긴 나라 수를 각주에 적어 두었다 — 자료와 갈리면 사이트가 거짓말한다 */
+        const shownTotal = (html.match(/(\d+)개국에 대해|all (\d+) countries/) || []).filter(Boolean)[1];
+        if (shownTotal && +shownTotal !== RANK_REF.total) {
+            bad(label, `각주에 "${shownTotal}개국" 이라 적혀 있는데 자료는 ${RANK_REF.total}개국이다`);
         }
         continue;
     }
@@ -947,6 +1313,33 @@ for (const [what, missing] of [
     ['영어 첫 화면에서 링크되지 않는다', diff(dirCodes, linkedFromHome.en)],
 ]) {
     if (missing.length) bad('/', `${what}: ${missing.slice(0, 8).join(', ')}${missing.length > 8 ? ` 외 ${missing.length - 8}개` : ''}`);
+}
+
+/* --------------------------------------------- 7.2. 이름 축 ↔ 페이지 1:1
+   이름 축은 자료가 개수를 정한다. 문턱을 넘는 이름과 페이지가 1:1 이 아니면
+   한쪽은 유령이다 — 링크만 있고 페이지가 없거나, sitemap 에만 있는 쪽이 된다. */
+{
+    const want = new Set(NAME_INDEX.keys());
+    for (const lang of ['ko', 'en']) {
+        const got = namePagesSeen[lang];
+        const missing = [...want].filter((s) => !got.has(s));
+        const extra = [...got].filter((s) => !want.has(s));
+        if (missing.length) bad('/', `문턱을 넘는데 ${lang} 페이지가 없다: ${missing.slice(0, 5).join(', ')}`);
+        if (extra.length) bad('/', `${lang} 페이지는 있는데 문턱을 못 넘는다: ${extra.slice(0, 5).join(', ')}`);
+    }
+    /* 슬러그가 국가 코드와 부딪히면 국가 페이지를 조용히 덮어쓴다 */
+    for (const s of want) {
+        if (!NAME_PAGE.test(`${NAME_ROOT}/${s}`)) bad('/', `이름 축 슬러그 모양이 아니다: '${s}'`);
+        if (indexCodes.has(s.toUpperCase())) bad('/', `이름 축 슬러그 '${s}' 가 국가 코드와 부딪힌다`);
+    }
+    /* 원화에 적힌 라벨이 남아 있는지. 이름이 하나 빠져도 60개 중 하나라
+       눈으로는 안 보인다 — 최소 개수를 박아 둔다. */
+    const FLOOR = 40;
+    if (want.size < FLOOR) {
+        bad('/', `이름 축이 ${want.size}개뿐이다 — ${FLOOR}개 이상이어야 한다. 자료나 문턱(MIN)을 확인할 것.`);
+    } else {
+        console.log(`이름 축 ${want.size}개 · 함께 쉬는 날 ${TOGETHER_REF.length}일 대조\n`);
+    }
 }
 
 /* ----------------------------------------------------- 7.5. 공유 카드 파일
@@ -1423,6 +1816,164 @@ for (const [page, lang, langs, wantCc] of [
             const at = new Date(e.t);
             const off = Math.abs((at - Date.UTC(+y, mo - 1, day)) / 86400000);
             if (off > 3) bad(P, `${e.n} 극대기가 ${e.utc} — 알려진 ${y}-${mo}-${day} 에서 ${off.toFixed(1)}일 벗어났다`);
+        }
+    }
+
+    /* ------------------------------------------------------------- 음력 달력
+       규칙이 셋이고 셋 다 저장소 안에서 되짚을 수 있다.
+         · 초하루는 삭이 든 날 (KST)          ← sky.json 의 moons
+         · 동지가 든 달은 11월                ← sky.json 의 terms (k=18)
+         · 윤달은 중기가 들지 않는 달, 나머지 달은 중기가 하나씩 (무중치윤법)
+       셋을 다 걸면 달력이 온전히 정해진다 — 삭과 중기가 이미 분 단위로 검사돼
+       있으므로(위 공표값 12건), 남는 것은 "번호를 어떻게 붙였나" 뿐이고 그게
+       이 세 규칙이다. */
+    {
+        const lunar = SKY.lunar;
+        if (!Array.isArray(lunar) || !lunar.length) {
+            bad(P, '음력 자료가 없다 — node tools/gen-sky.mjs 를 다시 돌릴 것');
+        } else {
+            const dayOf = (iso) => epochDayRef(iso);
+            const kst = (iso) => new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
+            }).format(new Date(iso));
+
+            const newMoons = new Set(SKY.moons.filter((m) => !m.f).map((m) => kst(m.t)));
+            /* 중기 = 황경이 30°의 배수인 절기 = 짝수 k. 24절기의 절반이다. */
+            const majors = SKY.terms.filter((e) => e.k % 2 === 0).map((e) => kst(e.t));
+            const solstices = SKY.terms.filter((e) => e.k === 18).map((e) => kst(e.t));
+
+            for (let i = 0; i < lunar.length; i++) {
+                const mo = lunar[i];
+                const at = `음력 ${mo.y}/${mo.leap ? '윤' : ''}${mo.m}(${mo.s})`;
+                if (mo.m < 1 || mo.m > 12) bad(P, `${at}: 달 번호가 범위 밖이다`);
+                if (mo.n !== 29 && mo.n !== 30) bad(P, `${at}: ${mo.n}일이다 — 29 나 30 이어야 한다`);
+                /* 자료 창의 양 끝 달은 짝이 될 삭이 sky.json 밖에 있다 */
+                if (SKY.years.includes(+mo.s.slice(0, 4)) && !newMoons.has(mo.s)) {
+                    bad(P, `${at}: 초하루에 삭이 없다`);
+                }
+                if (i) {
+                    const gap = dayOf(mo.s) - dayOf(lunar[i - 1].s);
+                    if (gap !== lunar[i - 1].n) {
+                        bad(P, `${at}: 앞 달이 ${lunar[i - 1].n}일인데 초하루 간격은 ${gap}일이다`);
+                    }
+                }
+                /* 중기가 든 달의 수. 마지막 달은 끝을 재는 데 다음 달이 필요 없다
+                   (n 이 있다) 므로 전부 볼 수 있다. */
+                const s = dayOf(mo.s), e = s + mo.n;
+                const inside = (list) => list.filter((d) => dayOf(d) >= s && dayOf(d) < e);
+                /* 절기 자료가 담긴 해 안에서만 센다 — 창 밖으로 걸친 달은 중기가
+                   비어 보인다. **연도를 뽑을 때 slice 를 잊지 말 것** — `+'2025-08-22'`
+                   는 NaN 이고, 그러면 covered 가 늘 false 가 되어 이 검사가 통째로
+                   잠든다. 일부러 윤달 표시를 지워 보고서야 알았다. */
+                const covered = SKY.years.includes(+mo.s.slice(0, 4))
+                    && SKY.years.includes(+isoAt(e - 1).slice(0, 4));
+                if (covered) {
+                    const got = inside(majors).length;
+                    if (mo.leap && got !== 0) bad(P, `${at}: 윤달인데 중기가 ${got}개 들었다`);
+                    if (!mo.leap && got !== 1) bad(P, `${at}: 중기가 ${got}개 들었다 — 윤달이 아니면 하나여야 한다`);
+                    if (inside(solstices).length && mo.m !== 11) {
+                        bad(P, `${at}: 동지가 들었는데 11월이 아니다`);
+                    }
+                }
+            }
+            /* 한 음력 해의 **평달 번호는 1..12 가 한 번씩**이고, 윤달은 있어도 하나다.
+               번호가 통째로 밀리는 고장(정월이 2월이 되는 것)은 중기 검사로 안 잡힌다 —
+               밀린 달에도 중기는 하나씩 들어 있기 때문이다. 실제로 그렇게 뚫렸다. */
+            const byLy = new Map();
+            for (const mo of lunar) {
+                if (!byLy.has(mo.y)) byLy.set(mo.y, []);
+                byLy.get(mo.y).push(mo);
+            }
+            for (const [y, list] of byLy) {
+                /* 자료 창의 양 끝 음력 해는 잘려 있다 — 12개월이 안 되면 건너뛴다 */
+                if (list.length < 12) continue;
+                const plain = list.filter((mo) => !mo.leap).map((mo) => mo.m).sort((a, b) => a - b);
+                const want = [...Array(12).keys()].map((i) => i + 1);
+                if (plain.join(',') !== want.join(',')) {
+                    bad(P, `음력 ${y}년의 평달 번호가 [${plain.join(',')}] 이다 — 1..12 가 한 번씩이어야 한다`);
+                }
+                const leaps = list.filter((mo) => mo.leap).length;
+                if (leaps > 1) bad(P, `음력 ${y}년에 윤달이 ${leaps}개다`);
+                if (list.length !== 12 + leaps) {
+                    bad(P, `음력 ${y}년이 ${list.length}개월인데 윤달은 ${leaps}개다`);
+                }
+            }
+        }
+    }
+
+    /* --------------------------------------------- 음력의 밖에서 온 검산점
+       위 셋은 우리 규칙을 우리가 다시 읽은 것이다. 규칙 자체를 잘못 잡았는지
+       (정월이 한 달 밀렸는지) 는 밖에서 온 자료로만 잡힌다 — Nager 의 공휴일 중
+       음력으로 정의된 날이 여럿이다.
+
+       엄격도가 셋이다. 느슨한 쪽을 쓰는 데는 저마다 이유가 있다.
+         exact  계산일이 그 공휴일 날짜 중 하나여야 한다
+         span   연휴 구간(가장 이른 날 ~ 가장 늦은 날) 안에 들면 된다.
+                Nager 가 일요일에 걸린 날을 빼고 주는 나라가 있어(2027 KR 설날)
+                정확 일치로는 멀쩡한 계산이 걸린다
+         zone   하루까지 어긋나도 된다. **이건 오차가 아니라 사실이다** —
+                중국 농력은 UTC+8 기준이라 삭이 두 자정 사이에 떨어지는 해에
+                한국 음력과 하루 갈린다 (2027 춘절: 중국 2월 6일 · 한국 2월 7일).
+                그래도 이틀 어긋나면 잡힌다. */
+    {
+        const anchors = [
+            { cc: 'KR', re: /^추석$/,                   m: 8, d: 15, how: 'exact', what: '추석 = 음력 8월 15일' },
+            { cc: 'HK', re: /中秋節翌日/,                m: 8, d: 16, how: 'exact', what: '中秋節翌日 = 음력 8월 16일' },
+            { cc: 'KR', re: /^설날$/,                    m: 1, d: 1,  how: 'span',  what: '설날 = 음력 1월 1일' },
+            { cc: 'SG', re: /Chinese New Year/i,        m: 1, d: 1,  how: 'span',  what: '春节 = 음력 1월 1일' },
+            { cc: 'CN', re: /Spring Festival|春节/i,     m: 1, d: 1,  how: 'zone',  what: '春节 = 음력 1월 1일 (UTC+8)' },
+            { cc: 'HK', re: /農曆年初一/,                m: 1, d: 1,  how: 'zone',  what: '農曆年初一 = 음력 1월 1일 (UTC+8)' },
+        ];
+        const lunar = SKY.lunar || [];
+        /* 자료가 온전히 담고 있는 음력 해. 여기 드는 해에서 달을 못 찾으면 그건
+           건너뛸 일이 아니라 실패다 — 조용히 건너뛰면 번호가 밀려도 통과한다. */
+        const whole = new Set();
+        {
+            const n = new Map();
+            for (const mo of lunar) n.set(mo.y, (n.get(mo.y) || 0) + 1);
+            for (const [y, c] of n) if (c >= 12) whole.add(y);
+        }
+        /* 음력 (해, 달, 날) → 양력. 윤달은 건너뛴다 — 명절은 평달로 센다. */
+        const solarOf = (ly, m, d) => {
+            const mo = lunar.find((x) => x.y === ly && x.m === m && !x.leap);
+            return mo ? isoAt(epochDayRef(mo.s) + d - 1) : null;
+        };
+
+        let points = 0;
+        for (const a of anchors) {
+            const file = join(DATA, `${a.cc}.json`);
+            if (!existsSync(file)) { soft(P, `음력 검산점 ${a.cc} 자료가 없다`); continue; }
+            const days = JSON.parse(readFileSync(file, 'utf8')).days
+                .filter((h) => a.re.test(h.n) || a.re.test(h.e || ''));
+            if (!days.length) {
+                soft(P, `음력 검산점을 못 찾았다 — ${a.cc} ${a.what} (Nager 가 이름을 바꿨나)`);
+                continue;
+            }
+            for (const year of SKY.years) {
+                const hs = days.map((h) => h.d).filter((d) => d.startsWith(String(year))).sort();
+                if (!hs.length) continue;
+                const mine = solarOf(year, a.m, a.d);
+                if (!mine) {
+                    if (whole.has(year)) bad(P, `음력 ${year}년에 ${a.m}월(평달)이 없다 — 달 번호가 밀렸나`);
+                    continue;                            /* 자료 창 밖의 음력 해 */
+                }
+                points++;
+
+                const ok = a.how === 'exact' ? hs.includes(mine)
+                    : a.how === 'span' ? (mine >= hs[0] && mine <= hs[hs.length - 1])
+                        : hs.some((d) => Math.abs(epochDayRef(d) - epochDayRef(mine)) <= 1);
+                if (!ok) {
+                    bad(P, `음력 검산점 어긋남(${a.how}) — ${a.cc} ${year} ${a.what}:`
+                        + ` 계산 ${mine} / 공휴일 ${hs.join(',')}`);
+                }
+            }
+        }
+        /* 이름이 바뀌어 검산점이 통째로 사라지는 것이 가장 나쁘다 */
+        const FLOOR = 12;
+        if (points < FLOOR) {
+            bad(P, `음력 검산점이 ${points}개뿐이다 — ${FLOOR}개 이상이어야 한다. 앵커 공휴일 이름을 확인할 것.`);
+        } else {
+            console.log(`음력 검산점 ${points}개 (설날 · 추석 · 中秋節) 대조\n`);
         }
     }
 

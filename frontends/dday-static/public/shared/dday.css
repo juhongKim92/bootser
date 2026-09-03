@@ -138,6 +138,47 @@ td.ev .alt{display:block;font-size:12px;color:var(--ink-3);font-weight:400}
   padding:0 5px;border-radius:2px;vertical-align:1px;font-weight:400;
 }
 
+/* 윤달 — 열아홉 해에 일곱 번뿐이라 표에서 눈에 걸려야 한다. 분점 배지와 같은
+   결이되 색이 달라야 한 사이트 안에서 헷갈리지 않는다. 지역 배지의 색을 빌려
+   쓰는데, 음력 표에는 지역 배지가 나올 자리가 없어서 부딪히지 않는다. */
+.leap{
+  display:inline-block;margin-left:8px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  color:var(--local);border:1px solid var(--local);
+  padding:0 5px;border-radius:2px;vertical-align:1px;font-weight:400;
+}
+
+/* ------------------------------------------------ 이름 축 표 (/holiday/…)
+   행 하나가 **날짜**이고 이름 칸에 그날 쉬는 나라가 다 들어간다. 크리스마스는
+   한 줄에 176개국이라 칩을 격자에 맞추지 않고 문단처럼 흐르게 둔다 — 격자로 두면
+   나라가 하나 늘 때마다 줄이 통째로 밀리고, 좁은 화면에서 칸이 비좁아진다. */
+table.who td.name{
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+  font-size:13px;font-weight:500;color:var(--ink-2);
+}
+.ccs{
+  display:block;margin-top:5px;
+  font-family:var(--sans);font-size:13px;font-weight:400;line-height:1.9;
+  color:var(--ink-2);
+}
+.ccs .one{white-space:nowrap}
+.ccs .one::after{content:'·';color:var(--ink-3);margin:0 5px 0 7px}
+.ccs .one:last-child::after{content:''}
+.ccs a{color:var(--ink-2);text-decoration:none}
+.ccs a:hover{color:var(--soon);text-decoration:underline}
+
+/* ------------------------------------------------ 순위 표 (/rank/)
+   행이 나라다. 첫 칸의 숫자는 장식이 아니라 순위이므로 표 밖으로 빼지 않는다. */
+table.rank{margin-top:2px}
+td.no{
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+  color:var(--ink-3);width:1%;white-space:nowrap;text-align:right;
+}
+td.who{white-space:nowrap;font-weight:500}
+td.who .flag{margin-right:7px}
+td.who a{color:var(--ink);text-decoration:none}
+td.who a:hover{color:var(--soon);text-decoration:underline}
+
 details.year{margin-top:10px}
 details.year > summary{
   cursor:pointer;list-style:none;
@@ -247,6 +288,11 @@ details.year[open] > summary::before{content:'▾ '}
   td.name .en{display:none}
   /* 하늘 표의 한자·ZHR 은 남긴다 — 저건 이름의 일부지 부연이 아니다 */
   td.date .at{display:block;margin-left:0}
+  /* 최장 연휴 표는 열이 다섯까지 간다. 좁은 화면에서는 순위 칸을 접는다 —
+     행 순서가 곧 순위라 숫자가 없어도 읽힌다. */
+  table.rank td.no,table.rank thead th:first-child{display:none}
+  /* 나라 칩은 이 페이지의 내용이다 — 부연이 아니므로 접지 않고 줄만 벌린다 */
+  .ccs{line-height:2.1}
 }
 @media (max-width:400px){
   .countries{columns:1}
