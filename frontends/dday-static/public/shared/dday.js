@@ -168,6 +168,20 @@
             ' width="20" height="15" alt="" loading="lazy" decoding="async">';
     }
 
+    /* 하늘 아이콘 → <img>. 표에 박힌 것은 gen-pages 가 tools/sky-art.mjs 로
+       찍지만 첫 화면의 "다가오는" 목록은 여기가 그린다 — 국기와 똑같이 두 벌을
+       들고 있는 자리이고, 그래서 check-pages 가 두 벌을 글자 단위로 견준다.
+       이름을 짓는 규칙(황경 k · 삭/보름 · ZHR 층)도 저쪽과 같아야 한다. */
+    function skyIcon(kind, e) {
+        var name = kind === 'term' ? 'term-' + (e.k < 10 ? '0' + e.k : e.k)
+            : kind === 'moon' ? (e.f ? 'moon-full' : 'moon-new')
+                : kind === 'shower' ? 'meteor-' + (e.z >= 100 ? 3 : e.z >= 25 ? 2 : 1)
+                    : '';
+        if (!name) return '';
+        return '<img class="sky-icon" src="/sky-icons/' + name + '.svg"' +
+            ' width="16" height="16" alt="" loading="lazy" decoding="async">';
+    }
+
     function esc(s) {
         return String(s).replace(/[&<>"]/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
@@ -516,7 +530,7 @@
             /* 하늘 페이지 카드와 같은 규칙을 쓴다 — "다음" 은 앞으로 올 것이고,
                오늘 것은 그 페이지의 오늘 칸이 맡는다. 두 화면이 다른 규칙을 쓰면
                같은 날 첫 화면과 /sky/ 가 서로 다른 답을 낸다. */
-            var pick = function (items, label, name, sub) {
+            var pick = function (items, kind, label, name, sub) {
                 var got = classify(items.map(function (e) {
                     return { d: e[zone], e: e };
                 }), today);
@@ -524,8 +538,9 @@
                 if (!m) return '';
                 var it = m.item.e;
                 /* 갈래 이름이 앞, D-day 와 내용이 뒤 — /sky/ 카드의 dt·dd 와 같은 차례다.
-                   .dd 를 .what 안에 두는 것도 그래서다. 카드에서는 dd 안에 있다. */
-                return '<li><span class="who">' + esc(label) + '</span>' +
+                   .dd 를 .what 안에 두는 것도 그래서다. 카드에서는 dd 안에 있다.
+                   그림은 이름 앞이다 — "오늘 쉬는 나라" 목록에서 국기가 서는 자리와 같다. */
+                return '<li><span class="who">' + skyIcon(kind, it) + esc(label) + '</span>' +
                     '<span class="what"><span class="dd">D-' + m.diff + '</span>' +
                     esc(name(it)) +
                     (sub(it) ? '<span class="en">' + esc(sub(it)) + '</span>' : '') +
@@ -533,12 +548,12 @@
             };
 
             list.innerHTML = [
-                pick(sky.terms, T.dtTerm, T.skyName, T.skySub),
-                pick(sky.moons.filter(function (m) { return !m.f; }), T.dtNew,
+                pick(sky.terms, 'term', T.dtTerm, T.skyName, T.skySub),
+                pick(sky.moons.filter(function (m) { return !m.f; }), 'moon', T.dtNew,
                     function () { return T.newMoon; }, function () { return ''; }),
-                pick(sky.moons.filter(function (m) { return m.f; }), T.dtFull,
+                pick(sky.moons.filter(function (m) { return m.f; }), 'moon', T.dtFull,
                     function () { return T.fullMoon; }, function () { return ''; }),
-                pick(sky.showers, T.dtShower,
+                pick(sky.showers, 'shower', T.dtShower,
                     function (e) { return T.showerName(T.skyName(e)); }, function () { return ''; }),
             ].join('');
         }).catch(function () {
@@ -819,7 +834,7 @@
     window.DDAY = {
         lang: LANG, t: T,
         epochDay: epochDay, todayIso: todayIso, human: human, shortHuman: shortHuman,
-        flag: flag, classify: classify, classifyBreaks: classifyBreaks,
+        flag: flag, skyIcon: skyIcon, classify: classify, classifyBreaks: classifyBreaks,
         verdictOf: verdictOf, detect: detect, searchKey: searchKey
     };
 

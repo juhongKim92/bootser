@@ -26,6 +26,7 @@ import { CARDINAL } from './astro.mjs';
 import { CARD_W, CARD_H, CARD_DIR } from './card-art.mjs';
 import { NORM, NAMES, MIN, NAME_ROOT } from './holiday-names.mjs';
 import { flagImg } from './flags.mjs';
+import { skyIconOf, skyIconImg } from './sky-art.mjs';
 
 const SITE = 'this is the day';
 const MID = YEARS()[1];                                   /* 표지로 삼을 해 = 올해 */
@@ -873,22 +874,28 @@ ${foot(t, data.generated)}
 const skyDate = (e, t) => (e.s !== undefined ? e.s : t.zone === 'kst' ? e.kst : e.utc);
 const skyTime = (e, t) => (e.s !== undefined ? '' : t.zone === 'kst' ? e.kh : e.uh);
 
+/* 그림 칸. **이름 칸 안이 아니라 제 칸이다** — td.ev 는 곁줄(.alt)이 아래로
+   붙는 자리라, 그림을 그 안에 넣으면 한자나 ZHR 이 그림 밑으로 들어가 이름과
+   어긋난다. 칸을 따로 두면 그림은 그림대로 세로줄을 이룬다.
+   음력만 그림이 없다(sky-art 의 머리말) — 그 표는 이 칸을 통째로 뺀다. */
 function skyRow(t, e, kind, name, alt, badge) {
     const iso = skyDate(e, t);
     const [y, m, d] = iso.split('-');
     const w = dow(iso);
     const wcls = w === 0 ? ' sun' : w === 6 ? ' sat' : '';
     const at = skyTime(e, t);
+    const ico = skyIconOf(kind, e);
     return `        <tr data-d="${iso}" data-sky="${kind}">
-          <td class="date">${y}.${m}.${d}<span class="dow${wcls}">${t.dow[w]}</span>${at ? `<span class="at">${at}</span>` : ''}</td>
+          <td class="date">${y}.${m}.${d}<span class="dow${wcls}">${t.dow[w]}</span>${at ? `<span class="at">${at}</span>` : ''}</td>${ico ? `
+          <td class="ico">${skyIconImg(ico)}</td>` : ''}
           <td class="ev">${esc(name)}${badge || ''}${alt ? `<span class="alt">${esc(alt)}</span>` : ''}</td>
           <td class="mark"></td>
         </tr>`;
 }
 
-function skyTable(t, rows) {
+function skyTable(t, rows, ico) {
     return `      <table class="sky">
-        <thead><tr><th>${esc(t.thTime)}</th><th>${esc(t.thEvent)}</th><th></th></tr></thead>
+        <thead><tr><th>${esc(t.thTime)}</th>${ico ? '<th></th>' : ''}<th>${esc(t.thEvent)}</th><th></th></tr></thead>
         <tbody>
 ${rows.join('\n')}
         </tbody>
@@ -896,11 +903,11 @@ ${rows.join('\n')}
 }
 
 /* 표지 연도는 펼치고 나머지 해는 접는다 — 공휴일·황금연휴와 같은 규칙이다. */
-function skyGroup(t, byYear, cap, h2, build) {
+function skyGroup(t, byYear, cap, h2, build, ico) {
     const years = [...byYear.keys()].sort((a, b) => a - b);
     const head = byYear.has(MID) ? MID : years[0];
     return years.map((y) => {
-        const body = skyTable(t, byYear.get(y).map(build));
+        const body = skyTable(t, byYear.get(y).map(build), ico);
         if (y === head) {
             return `  <section>
     <span class="cap">${esc(cap(y, byYear.get(y).length))}</span>
@@ -1040,7 +1047,10 @@ function skyTopicPage(t, sky, topic) {
     const slug = `sky/${topic.slug}/`;
     const s = t.sky[topic.slug];
     const by = groupBy(sky[topic.key], (e) => skyDate(e, t));
-    const body = skyGroup(t, by, t[topic.cap], t[topic.h2], skyBuild(t, topic));
+    /* 그림이 있는 갈래인지 자료에 물어본다. 여기 손으로 적어 두면 sky-art 가
+       음력에 그림을 주는 날 표의 머리와 몸이 갈린다. */
+    const ico = skyIconOf(topic.kind, sky[topic.key][0]) !== null;
+    const body = skyGroup(t, by, t[topic.cap], t[topic.h2], skyBuild(t, topic), ico);
 
     const pairs = topic.card.map(([label, id]) =>
         `      <dt>${esc(t[label])}</dt><dd id="${id}"><em>${esc(t.computing)}</em></dd>`).join('\n');

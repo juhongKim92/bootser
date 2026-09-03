@@ -45,6 +45,7 @@ import { pngSize } from './png.mjs';
 import { FONT_DIR, FONT_CSS, LICENSE_FILE, codepoints, parseFaces, parseRanges, used, parseName, hash8 } from './fonts.mjs';
 import { SHOWERS } from './astro.mjs';
 import { EQUINOXES, TOLERANCE_MINUTES } from './sky-fixture.mjs';
+import { ICONS, ICON_DIR, ICON_PATH, skyIconOf, skyIconImg, validate as skyArtWrong } from './sky-art.mjs';
 
 const fail = [], warn = [];
 const bad = (p, m) => fail.push(`${p}: ${m}`);
@@ -170,6 +171,11 @@ check('favicon.svg', (file) => {
         [/\.tab\{/, '축 탭 스타일이 없다'],
         [/img\.flag\{/, '국기 스타일이 없다'],
         [/img\.flag\{[^}]*border/, '국기에 테두리가 없다 — 흰 국기(일본)가 바탕에 묻힌다'],
+        /* 요약 카드의 국기는 22px 명조 옆에 선다. base.css 의 -2px(본문 15px 기준)이
+           그대로 오면 글자보다 아래로 처지고 이름에 딱 붙는다. */
+        [/\.now \.verdict img\.flag\{/, '요약 카드의 국기 자리 보정이 없다 — 글자보다 처지고 이름에 붙는다'],
+        [/td\.ico\{/, '하늘 표의 그림 칸 스타일이 없다'],
+        [/img\.sky-icon\{/, '하늘 아이콘 스타일이 없다'],
         [/\.tab\.here\{[^}]*font-weight/, '잡힌 축 탭이 굵기로도 갈리지 않는다 — 색만으로는 부족하다'],
         [/\.top \.tabs\{[^}]*overflow-x/, '좁은 화면에서 축 탭이 굴러가지 않는다 — 머리말이 넘친다'],
         [/table\.who td\.name\{/, '이름 축 표의 이름 칸 스타일이 없다'],
@@ -807,6 +813,40 @@ for (const { page, lang, slug, kind, label } of ALL) {
         /* 날짜순이어야 한다. 연도 구획이 셋이라 눈으로는 안 보인다. */
         const seq = got.map((x) => x.split('|')[0]);
         if (seq.join(',') !== [...seq].sort().join(',')) bad(label, '하늘 표가 날짜순이 아니다');
+
+        /* 그림 칸. **이름 짓는 규칙을 여기 다시 적는다** — sky-art 의 skyIconOf 를
+           가져다 쓰면 그 함수가 틀렸을 때 검사도 같이 틀린다(음력 이름 검사와 같은
+           자리다). 절기는 황경 k, 삭·보름은 f, 유성우는 ZHR 층이다. */
+        const iconWant = (e) => (only === 'term' ? `term-${String(e.k).padStart(2, '0')}`
+            : only === 'moon' ? (e.f ? 'moon-full' : 'moon-new')
+                : only === 'shower' ? `meteor-${e.z >= 100 ? 3 : e.z >= 25 ? 2 : 1}`
+                    : null);
+        {
+            const drawn = [...html.matchAll(
+                /<tr data-d="([\d-]+)" data-sky="[a-z]+">[\s\S]*?<td class="ico"><img class="sky-icon" src="\/sky-icons\/([a-z0-9-]+)\.svg" width="16" height="16" alt="" loading="lazy" decoding="async"><\/td>/g
+            )].map((m) => `${m[1]}|${m[2]}`);
+            const wantIcons = mine.map((e) => `${dateOf(e)}|${iconWant(e)}`);
+
+            if (only === 'lunar') {
+                /* 음력에는 그림이 없다(sky-art 의 머리말). 어느 날 하나 붙으면
+                   같은 그림이 두 갈래에서 다른 뜻으로 읽히기 시작한다. */
+                if (drawn.length) bad(label, `음력 표에 하늘 아이콘이 ${drawn.length}개 있다`);
+                if (html.includes('class="ico"')) bad(label, '음력 표에 그림 칸이 있다 — 빈 칸만 남는다');
+            } else if (drawn.length !== got.length) {
+                bad(label, `그림이 ${drawn.length}개다 (행은 ${got.length}개) — 검사 무늬가 마크업과 어긋났거나 칸이 빠졌다`);
+            } else {
+                const a = [...drawn].sort(), b = [...wantIcons].sort();
+                const at = a.findIndex((x, i) => x !== b[i]);
+                if (at >= 0) bad(label, `그림이 자료와 어긋난다 — "${a[at]}" (기대 "${b[at]}")`);
+            }
+            /* 표의 머리와 몸이 갈리면 열이 한 칸씩 밀린다 */
+            const heads = (html.match(/<thead><tr>([\s\S]*?)<\/tr><\/thead>/g) || []);
+            for (const h of heads) {
+                const cols = (h.match(/<th>/g) || []).length;
+                const wantCols = only === 'lunar' ? 3 : 4;
+                if (cols !== wantCols) { bad(label, `표 머리가 ${cols}칸이다 — ${wantCols}칸이어야 한다`); break; }
+            }
+        }
 
         /* 분점 둘 · 지점 둘, 해마다 넷 — 절기 페이지에만 있어야 한다 */
         const cardinals = (html.match(/class="cardinal"/g) || []).length;
@@ -1491,6 +1531,35 @@ for (const [what, missing] of [
     }
 }
 
+/* ------------------------------------------------------- 7.8. 하늘 아이콘
+   국기와 같은 자리지만 받아 온 것이 아니라 `tools/sky-art.mjs` 가 그린 것이다.
+   그래서 볼 것이 하나 더 있다 — 원화 자체가 성립하나(상자를 넘지 않나, 스물넷이
+   한 자리에 몰리지 않았나). 파일 쪽은 국기와 같다: 원화와 1:1 이고 내용이 같나. */
+{
+    const wrong = skyArtWrong();
+    for (const w of wrong.slice(0, 8)) bad('sky-art.mjs', w);
+
+    const want = new Map(Object.entries(ICONS).map(([n, b]) => [`${n}.svg`, b]));
+    if (!existsSync(ICON_PATH)) {
+        bad(`/${ICON_DIR}/`, '없다 — node tools/gen-sky-icons.mjs');
+    } else {
+        const have = new Set(readdirSync(ICON_PATH));
+        const missing = [...want.keys()].filter((f) => !have.has(f));
+        const orphan = [...have].filter((f) => !want.has(f));
+        if (missing.length) bad(`/${ICON_DIR}/`, `원화에는 있는데 파일이 없다 ${missing.length}개: ${missing.slice(0, 8).join(', ')}`);
+        if (orphan.length) bad(`/${ICON_DIR}/`, `원화에 없는 그림 ${orphan.length}개: ${orphan.slice(0, 8).join(', ')}`);
+        /* 내용까지 본다. 원화를 고치고 gen-sky-icons 를 안 돌리면 파일 이름은
+           그대로라 위 두 검사가 조용히 통과한다 — 그 자리를 여기서 막는다. */
+        for (const [f, body] of want) {
+            if (!have.has(f)) continue;
+            if (readFileSync(join(ICON_PATH, f), 'utf8') !== body) {
+                bad(`/${ICON_DIR}/${f}`, '원화와 다르다 — node tools/gen-sky-icons.mjs');
+                break;
+            }
+        }
+    }
+}
+
 /* ---------------------------------------------------------- 8. sitemap */
 const smFile = join(PUB, 'sitemap.xml');
 if (!existsSync(smFile)) {
@@ -1666,24 +1735,51 @@ for (const [page, lang, langs, wantCc] of [
         const rows = (drawnSky.match(/<li>/g) || []).length;
         if (rows !== 4) bad(label, `하늘 칸이 ${rows}줄 — 절기·삭·보름·유성우 넷이어야 한다`);
 
-        /* 갈래 이름이 앞, D-day 가 뒤. 순서가 뒤집히면 "D-10다음 절기" 가 된다. */
-        for (const dt of [w.dtTerm, w.dtNew, w.dtFull, w.dtShower]) {
-            if (!drawnSky.includes(`<span class="who">${esc(dt)}</span>`)) {
-                bad(label, `하늘 칸에 "${dt}" 줄이 없다 — 갈래 이름이 앞에 와야 한다`);
-            }
-        }
-
-        for (const [items, name] of [
-            [SKY.terms, (e) => (lang === 'en' ? e.e : e.n)],
-            [SKY.moons.filter((m) => !m.f), () => w.newMoon],
-            [SKY.moons.filter((m) => m.f), () => w.fullMoon],
-            [SKY.showers, (e) => (lang === 'en' ? e.e : e.n)],
+        /* 그림이 앞, 갈래 이름이 그 뒤, D-day 는 다음 칸. 순서가 뒤집히면
+           "D-10다음 절기" 가 된다. 그림 이름은 여기서 다시 짓는다 — 갈래 페이지의
+           표와 같은 규칙이어야 첫 화면과 /sky/ 가 같은 그림을 보인다. */
+        for (const [items, kind, dt, name] of [
+            [SKY.terms, 'term', w.dtTerm, (e) => (lang === 'en' ? e.e : e.n)],
+            [SKY.moons.filter((m) => !m.f), 'moon', w.dtNew, () => w.newMoon],
+            [SKY.moons.filter((m) => m.f), 'moon', w.dtFull, () => w.fullMoon],
+            [SKY.showers, 'shower', w.dtShower, (e) => (lang === 'en' ? e.e : e.n)],
         ]) {
             const e = nextOf(items);
-            if (!e) continue;
+            if (!e) {
+                if (!drawnSky.includes(`<span class="who">`)) bad(label, `하늘 칸에 "${dt}" 줄이 없다`);
+                continue;
+            }
+            const ico = kind === 'term' ? `term-${String(e.e.k).padStart(2, '0')}`
+                : kind === 'moon' ? (e.e.f ? 'moon-full' : 'moon-new')
+                    : `meteor-${e.e.z >= 100 ? 3 : e.e.z >= 25 ? 2 : 1}`;
+            const who = `<span class="who"><img class="sky-icon" src="/sky-icons/${ico}.svg"`
+                + ` width="16" height="16" alt="" loading="lazy" decoding="async">${esc(dt)}</span>`;
+            if (!drawnSky.includes(who)) {
+                bad(label, `하늘 칸의 "${dt}" 줄이 ${ico} 그림을 앞에 달고 있지 않다`);
+            }
             if (!drawnSky.includes(`D-${e.d}<`)) bad(label, `하늘 칸에 D-${e.d} 이 없다`);
             if (!drawnSky.includes(esc(name(e.e)))) bad(label, `하늘 칸에 "${name(e.e)}" 이 없다`);
         }
+
+        /* 국기와 똑같이 두 벌을 들고 있는 자리다 — dday.js 는 브라우저가 받는
+           파일이라 tools/sky-art.mjs 를 import 할 수 없다. 그 두 벌이 같은 글자를
+           내는지 스물아홉 가지 모두에 대해 견준다. */
+        for (const [kind, e] of [
+            ...Array.from({ length: 24 }, (_, k) => ['term', { k }]),
+            ['moon', { f: 0 }], ['moon', { f: 1 }],
+            /* 층의 경계를 걸치는 수로 본다. 가운데 값(50 · 10)만 넣으면 문턱이
+               한 칸 옮겨져도 두 벌이 여전히 같은 답을 내서 조용히 통과한다. */
+            ...[150, 100, 99, 25, 24, 0].map((z) => ['shower', { z }]),
+        ]) {
+            const mineImg = skyIconImg(skyIconOf(kind, e));
+            const theirs = r.dday.skyIcon(kind, e);
+            if (mineImg !== theirs) {
+                bad(label, `dday.js 의 하늘 아이콘이 HTML 쪽과 다르다 — "${theirs}" (기대 "${mineImg}")`);
+                break;
+            }
+        }
+        /* 음력은 그림이 없다. dday.js 쪽에서만 하나 생기면 첫 화면과 표가 갈린다. */
+        if (r.dday.skyIcon('lunar', {}) !== '') bad(label, 'dday.js 가 음력에도 그림을 준다');
         for (const smell of ['undefined', 'NaN', '[object Object]']) {
             if (drawnSky.includes(smell)) bad(label, `하늘 칸에 "${smell}" 가 있다`);
         }

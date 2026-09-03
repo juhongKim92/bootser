@@ -18,6 +18,11 @@
   margin-bottom:14px;
 }
 .now .verdict.rest{color:var(--today)}
+/* 첫 화면 요약 카드의 국기. 이 줄만 22px 명조라 base.css 의 -2px(본문 15px 기준)이
+   그대로 오면 국기가 글자보다 아래로 처져 무게중심이 어긋난다. 밑선에 얹으면
+   (0) 국기 한가운데가 한글의 한가운데와 거의 맞는다 — 22px 에서 한글 글자 높이가
+   15px 남짓이라 15px 국기와 키가 같기 때문이다. 붙어 보이던 사이도 함께 벌린다. */
+.now .verdict img.flag{vertical-align:0;margin-right:8px}
 
 .now .pair{
   display:grid;grid-template-columns:auto 1fr;gap:6px 14px;
@@ -129,6 +134,22 @@ td.date .at{
 }
 td.ev{font-weight:500}
 td.ev .alt{display:block;font-size:12px;color:var(--ink-3);font-weight:400}
+
+/* 그림 칸. 국기와 같은 자리지만 받아 온 것이 아니라 우리가 그린 것이고
+   (tools/sky-art.mjs), 무엇보다 **행마다 다르다** — 절기는 황경, 삭·보름은 참과
+   빔, 유성우는 세기다. 표를 내려가면 해가 원을 한 바퀴 돈다.
+
+   테두리를 두르지 않는다. 국기에 테두리가 있는 것은 흰 바탕이 큰 국기가 종이색에
+   묻히기 때문인데, 이 그림들은 바탕이 없다.
+
+   크기를 HTML 속성과 여기 양쪽에 적는 것은 국기와 같은 이유다 — 속성은 그림이 늦게
+   와도 줄이 안 밀리게 자리를 잡고, 여기 값은 글자 크기에 흔들리지 않게 못박는다. */
+td.ico{width:1%;white-space:nowrap}
+img.sky-icon{
+  width:16px;height:16px;flex:0 0 auto;
+  /* 16px 그림을 밑선에 얹으면 글자 위로 솟는다. 4px 내려 글자 가운데와 맞춘다 */
+  vertical-align:-4px;
+}
 
 /* 분점 둘과 지점 둘. 24절기 가운데 이 넷만 천문학이 따로 이름을 붙인 자리다. */
 .cardinal{
