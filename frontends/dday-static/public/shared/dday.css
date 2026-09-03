@@ -9,8 +9,11 @@
   padding:18px 20px;
   margin-bottom:34px;
 }
+/* 카드 맨 윗줄 — "기준 …월 …일 · 내 기기 시간". 이 줄은 D-day 가 어느 날짜를
+   기준으로 센 것인지 밝히는 자리라, 안 읽히면 카드 전체가 근거 없는 숫자가 된다.
+   .cap · .pair dt 와 함께 한 단계 올렸다(2026-09-04). */
 .now .asof{
-  font-family:var(--mono);font-size:11px;letter-spacing:.08em;
+  font-family:var(--mono);font-size:12.5px;letter-spacing:.08em;
   color:var(--ink-3);margin-bottom:10px;
 }
 .now .verdict{
@@ -29,8 +32,10 @@
   align-items:baseline;
   border-top:1px solid var(--rule);padding-top:12px;
 }
+/* 줄 이름 — 다음 · 지난 · 다음 연휴 · 전체. 표의 thead th 와 같은 결이고 같은 값이다.
+   .cap · .asof 와 함께 한 단계 올렸다(2026-09-04). */
 .now .pair dt{
-  font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;
   color:var(--ink-3);white-space:nowrap;
 }
 .now .pair dd{font-size:14px}
@@ -50,8 +55,11 @@ table{
   width:100%;border-collapse:collapse;
   font-size:14px;
 }
+/* 열 이름. 카드의 `.now .pair dt` 와 같은 결이고 같은 값이다 — 한 사이트 안에서
+   "이건 내용이 아니라 이름표다" 라고 말하는 자리가 둘로 갈리면 안 된다.
+   .cap · .asof 와 함께 한 단계 올렸다(2026-09-04). */
 thead th{
-  font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;
   color:var(--ink-3);font-weight:400;text-align:left;
   border-bottom:1px solid var(--rule);padding:0 10px 6px 0;
 }
