@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>You added AsyncAppender and the logs went missing — a queue of 256 and two thresholds</title>
+<meta name="description" content="Asynchronous logging defaults to a queue of 256, and once 51 slots remain it starts dropping INFO. Thirty thousand events a second vanish 6.83ms in, with no exception and no warning. Then the errors arrive — and with nothing left to drop, your application threads block.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/logdrop/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/logdrop/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/logdrop/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/logdrop/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="You added AsyncAppender and the logs went missing">
+<meta property="og:description" content="Queue 256, dropping starts with 51 slots left. Thirty thousand events a second, silently.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/logdrop/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="You added AsyncAppender and the logs went missing">
+<meta name="twitter:description" content="Dropping is the safety valve — and it has nothing to drop exactly when the errors arrive.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/logdrop-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/logdrop/" hreflang="ko" lang="ko">KO</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>You added AsyncAppender and the logs went missing</h1>
+  <p class="lede">You heard that synchronous logging holds up requests, so you wrapped the appender in <code>AsyncAppender</code>. But the default queue is <strong>256 events</strong>, and <strong>the moment 51 slots remain it starts dropping INFO.</strong> Thirty thousand events a second disappear with no exception and no warning. What comes next is worse — <strong>when the errors start pouring in there is nothing left to drop, so your application threads block instead.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sQ">queueSize</label>
+          <span class="v" id="vQ">256<small>ev</small></span>
+          <input type="range" id="sQ" min="0" max="4" step="1" value="2" aria-label="How many events the queue holds">
+        </div>
+        <div class="dial">
+          <label>discardingThreshold</label>
+          <div class="seg" id="segDisc" role="group" aria-label="How much remaining capacity triggers dropping">
+            <button data-disc="0">Keep all</button>
+            <button data-disc="20" aria-pressed="true">20%</button>
+            <button data-disc="40">40%</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>neverBlock</label>
+          <div class="seg" id="segNever" role="group" aria-label="Block or drop when the queue is full">
+            <button data-never="0" aria-pressed="true">off (blocks)</button>
+            <button data-never="1">on (drops)</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sR">Arrival rate</label>
+          <span class="v" id="vR">8<small>k/s</small></span>
+          <input type="range" id="sR" min="1" max="200" step="1" value="8" aria-label="Events the application wants to log">
+        </div>
+        <div class="dial">
+          <label for="sW">Time per write</label>
+          <span class="v" id="vW">100<small>μs</small></span>
+          <input type="range" id="sW" min="0" max="4" step="1" value="3" aria-label="How long the worker takes to dispatch one event">
+        </div>
+        <div class="dial">
+          <label for="sE">WARN·ERROR share</label>
+          <span class="v" id="vE">5<small>%</small></span>
+          <input type="range" id="sE" min="0" max="4" step="1" value="1" aria-label="Share of arrivals that cannot be dropped">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->arriving 8,000/s · draining 10,000/s · queue 256 · drop threshold 51 · WARN·ERROR 5%<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">The order in which the queue meets its two thresholds</span>
+      <div class="board">
+        <div class="phases" id="phases"><!--pr--><div class="band ok" style="left:0;width:100%"></div><div class="blabel ok" style="left:1%">the queue does not grow</div><!--/pr--></div>
+        <div class="phasex" id="phasex"><!--pr--><span>0ms</span><span>0.5ms</span><span>1ms</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="fillup"></i>filling</span>
+          <span><i class="drop"></i>dropping INFO</span>
+          <span><i class="block"></i>threads blocked</span>
+          <span><i class="dropall"></i>dropping regardless of level</span>
+        </div>
+
+        <div class="gauge" id="gauge"><!--pr--><div class="qbar"><div class="qfill clean" style="width:0%"></div><div class="qline" style="left:80.078125%"></div></div><div class="qtext">queue 0 / 256 · drop line 205 (remaining capacity 51)</div><!--/pr--></div>
+        <table class="four" id="four"><!--pr--><tr><th>Setting</th><th>INFO lost</th><th>ERROR lost</th><th>Excess absorbed</th><th>Wait</th></tr><tr><td>default (256 · 20%)</td><td class="good">—</td><td class="good">—</td><td class="good">—</td><td>0.1ms</td></tr><tr><td>keep all (0)</td><td class="good">—</td><td class="good">—</td><td class="good">—</td><td>0.1ms</td></tr><tr><td>neverBlock on</td><td class="good">—</td><td class="good">—</td><td class="good">—</td><td>0.1ms</td></tr><tr><td>queue 4,096</td><td class="good">—</td><td class="good">—</td><td class="good">—</td><td>0.1ms</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">Dropping starts</span><span class="n">—</span></div><div class="m good"><span class="k">Blocking starts</span><span class="n">never blocks</span></div><div class="m good"><span class="k">INFO lost</span><span class="n">—</span></div><div class="m good"><span class="k">ERROR lost</span><span class="n">—</span></div><div class="m "><span class="k">Queue depth</span><span class="n">0 / 256</span></div><div class="m "><span class="k">Wait per event</span><span class="n">0.1ms</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>The queue does not grow.</b> 8,000/s arriving · 10,000/s draining<br><span class="at">the pipe keeps up — the stretch where AsyncAppender does what it advertises</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">Previous</button>
+        <button id="btnStep">Next step</button>
+        <button id="btnReset">Reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>The dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What it changes</th></tr>
+    <tr><td>queueSize</td><td>How many events the queue holds. <strong>256 is the documented default.</strong> Raising it delays the dropping — and <strong>lengthens the wait by exactly as much</strong>. That is Little's law.</td></tr>
+    <tr><td>discardingThreshold</td><td>Once remaining capacity falls to this share, TRACE·DEBUG·INFO are dropped. <strong>20% is the default</strong>, and <strong>Keep all</strong> is the documented <code>0</code> — which turns out to invite blocking.</td></tr>
+    <tr><td>neverBlock</td><td>When the queue is full, <strong>block or drop</strong>. The default is to block (<code>false</code>). <strong>Turn it on — the ERRORs start vanishing.</strong></td></tr>
+    <tr><td>Arrival rate</td><td>Events the application wants to log. A service that writes 20 lines per request at 2,000 requests a second offers 40k.</td></tr>
+    <tr><td>Time per write</td><td>How long the worker takes to dispatch one event. <strong>Its reciprocal is the pipe's throughput</strong> — 100μs means 10k events a second. <strong>The real cause is always this dial.</strong></td></tr>
+    <tr><td>WARN·ERROR share</td><td>The share of arrivals that <strong>cannot</strong> be dropped. A few percent in normal operation, and it spikes during an incident — <strong>which is this page's reversal.</strong></td></tr>
+  </table>
+
+  <p>Every value is determined — no randomness, no sampling. The excess always splits into <strong>exactly three parts that sum to (arrival − drain)</strong>.</p>
+
+  <h2>Things to try</h2>
+
+  <div class="recipe">
+    <h4>1. The pipe keeps up — nothing happens</h4>
+    <div class="seq">8k/s arriving · 10k/s draining · queue 256 · dropping at 20%
+queue <em>0 / 256</em> · dropped <em>none</em> · wait <em>0.1ms</em></div>
+    <p class="why">Arrivals are below the drain rate, so the queue never grows. One event clears the pipe in 0.1ms — exactly the time to write it. <strong>Here AsyncAppender does precisely what it advertises.</strong> The trouble is that this is the normal state, not the interesting one.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Four times the arrivals — gone from 6.83ms on</h4>
+    <div class="seq">arrivals 8k → <em>40k/s</em> (drain unchanged at 10k/s)
+dropping from <em>6.83ms</em> · INFO <em>30k/s</em> lost · blocking <em>none</em>
+queue <em>205 / 256</em> · wait <em>20.6ms</em></div>
+    <p class="why">The queue fills at 30k a second, and at <strong>205 events</strong> (that is 256 − 51) dropping begins. From there the queue stops growing — the entire excess leaves as discarded INFO. <strong>The application notices nothing.</strong> No exception, no warning line, no metric. And the wait went from 0.1ms to <strong>20.6ms, a factor of 206</strong> — because 205 events are queued ahead of each new one.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. The errors arrive — now it blocks</h4>
+    <div class="seq">WARN·ERROR share 5% → <em>50%</em> (an incident has started)
+blocking from <em>11.93ms</em> · INFO <em>20k/s</em> lost · <em>ERROR calls block at 10k/s</em></div>
+    <p class="why">Dropping only sheds <strong>INFO</strong>. But half of what arrives now is WARN or ERROR — 20k a second against a pipe that passes 10k. <strong>Dropping cannot close the gap.</strong> The queue takes on its last 51 events, fills, and <code>put()</code> starts blocking: every logging call now waits <strong>100μs</strong>. <strong>Dropping was the valve that protected the application, and it is empty exactly when you need it.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Turn on neverBlock — the ERRORs vanish</h4>
+    <div class="seq">neverBlock off → <em>on</em> (same incident)
+blocking <em>none</em> · but <em>ERROR lost at 10k/s</em> · INFO <em>20k/s</em></div>
+    <p class="why">The blocking is gone. In its place, <strong>anything arriving at a full queue is dropped regardless of level.</strong> <code>put()</code> became <code>offer()</code>, and a failed offer simply disappears. <strong>The very ERRORs you would investigate the incident with are vanishing at 10k a second.</strong> This dial does not remove the cost — it <em>converts blocking into loss</em>.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Set "keep all" — and it blocks sooner</h4>
+    <div class="seq">discardingThreshold 20% → <em>keep all (0)</em> · error share back to 5%
+blocking from <em>8.53ms</em> · dropped <em>none</em> · absorbed <em>30k/s</em></div>
+    <p class="why">This is the setting the documentation describes as <em>"To keep all events, set discardingThreshold to 0"</em>. Not one line is lost. Instead <strong>the dropping threshold is gone, so the queue runs straight to 256 and blocks at 8.53ms</strong> rather than merely dropping at 6.83ms. Step 2 survived this load; this configuration does not. <strong>Turning off dropping is turning off the safety valve.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Queue of 4,096 — later dropping, sixteen times the wait</h4>
+    <div class="seq">queueSize 256 → <em>4,096</em> (20% dropping · 5% errors)
+dropping from 6.83 → <em>109.23ms</em> · wait 20.6 → <em>327.8ms</em></div>
+    <p class="why">Dropping now starts close to sixteen times later. The amount lost is <strong>exactly the same</strong> — 30k a second — it merely starts later. And there is a bill: the queue settles at 3,277 events, drained at 10k a second, so <strong>one event takes 327.8ms to clear the pipe</strong>. That is <strong>Little's law</strong> — queue length over drain rate. During an incident you would be reading logs from a third of a second ago.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. A faster sink — everything disappears</h4>
+    <div class="seq">time per write 100 → <em>5μs</em> (drain 10k → <em>200k/s</em>)
+dropped <em>none</em> · blocking <em>none</em> · queue <em>0 / 256</em></div>
+    <p class="why">Arrivals are still 40k. The only thing that changed is the drain rate. <strong>The queue, the thresholds and the dials are all symptoms; the cause is a drain rate below the arrival rate.</strong> A local file sits around 5μs, but an appender that ships over the network — Logstash, Kafka, CloudWatch — makes 100μs optimistic. <strong>This page begins on the day you start shipping logs over the wire.</strong></p>
+  </div>
+
+  <h2>The specification fixes two thresholds</h2>
+
+  <p>The checkpoint for this episode is the <code>AsyncAppender</code> property table in the logback documentation. Two rows hand us numbers.</p>
+
+  <div class="callout"><em>"queueSize — The maximum capacity of the blocking queue. <strong>By default, queueSize is set to 256.</strong>"</em></div>
+
+  <div class="callout"><em>"discardingThreshold — By default, <strong>when the blocking queue has 20% capacity remaining</strong>, it will drop events of level TRACE, DEBUG and INFO, keeping only events of level WARN and ERROR. <strong>To keep all events, set discardingThreshold to 0.</strong>"</em></div>
+
+  <p>Multiply the two and one threshold falls out exactly — <strong>256 × 0.2 = 51.2 → 51 events</strong>. Once 51 or fewer slots remain, which is to say once the queue length reaches <strong>205</strong>, INFO starts disappearing. That is the first threshold.</p>
+
+  <p>The second comes from the <code>neverBlock</code> row of the same table.</p>
+
+  <div class="callout"><em>"If the queue is filled up, then <strong>application threads are blocked</strong> from logging new events until the worker thread has had a chance to dispatch one or more events."</em></div>
+
+  <p><strong>This is where asynchronous logging turns back into synchronous logging.</strong> And the reason the sentence is so quiet is that <em>"blocked"</em> comes with no exception and no log line — things simply get slower.</p>
+
+  <table class="keytable">
+    <tr><th>Remaining capacity</th><th>Which events</th><th>What happens</th></tr>
+    <tr><td>52 or more</td><td>all of them</td><td>enter the queue</td></tr>
+    <tr><td><strong>51 or fewer</strong></td><td>TRACE·DEBUG·INFO</td><td><strong>dropped</strong> — no exception</td></tr>
+    <tr><td>51 or fewer</td><td>WARN·ERROR</td><td>enter the queue</td></tr>
+    <tr><td><strong>0</strong></td><td>WARN·ERROR</td><td><strong>block</strong> (default) or <strong>drop</strong> (<code>neverBlock</code>)</td></tr>
+  </table>
+
+  <h2>The excess splits three ways and only three</h2>
+
+  <p>The model rests on one sentence. There is a rate the application wants to log at, <strong>λ</strong>, and a rate the pipe passes, <strong>μ</strong>, and the difference is handled in one of three ways.</p>
+
+  <table class="keytable">
+    <tr><th>Handling</th><th>When</th><th>What it costs</th></tr>
+    <tr><td>drop INFO</td><td>remaining capacity ≤ threshold</td><td>the context you debug with is gone. <strong>Silently</strong></td></tr>
+    <tr><td>drop regardless of level</td><td>full and <code>neverBlock</code></td><td><strong>the ERRORs go too.</strong> Also silently</td></tr>
+    <tr><td>threads absorb it</td><td>full, default settings</td><td>requests slow down. <strong>The log pipe becomes the throughput ceiling</strong></td></tr>
+  </table>
+
+  <div class="callout">The three are exclusive and <strong>sum to exactly λ − μ</strong>. Which is to say: <em>remove one and another grows.</em> The dials only choose <strong>the form in which you pay</strong> — <strong>whether you pay at all is decided by the drain rate alone.</strong></div>
+
+  <p>Step 3 shows that multiplication. It drops <em>and</em> blocks. Above the dropping line an INFO event never enters the queue at all, so <strong>that call is not blocked, it is simply lost</strong>, while the WARN and ERROR events competing for slots are the ones that block. Not one or the other — <strong>both at once.</strong></p>
+
+  <h2>The valve is empty exactly when you need it</h2>
+
+  <p>This is the most valuable reversal on the page. <code>discardingThreshold</code> is the mechanism that <em>protects the application by losing logs</em>. But <strong>the only thing it can lose is INFO.</strong></p>
+
+  <p>In normal operation 95% of arrivals are INFO, so it works well. Then an incident starts —</p>
+
+  <table class="keytable">
+    <tr><th>Situation</th><th>WARN·ERROR share</th><th>Can dropping close the gap?</th></tr>
+    <tr><td>normal</td><td>5%</td><td><strong>yes</strong> — the whole excess leaves as INFO</td></tr>
+    <tr><td>error storm</td><td>50%</td><td><strong>no</strong> — 20k a second remains after dropping everything</td></tr>
+    <tr><td>all errors</td><td>100%</td><td>there is nothing to drop at all</td></tr>
+  </table>
+
+  <div class="callout"><strong>The capacity of the safety valve is inversely proportional to the size of the accident.</strong> Generous while everything is quiet, and zero at the moment you actually need it.</div>
+
+  <h2>A bigger queue is not a fix</h2>
+
+  <p>Raising <code>queueSize</code> is the first fix anyone reaches for, and step 6 prices it.</p>
+
+  <table class="keytable">
+    <tr><th>queueSize</th><th>Dropping starts</th><th>Amount lost</th><th>Wait per event</th></tr>
+    <tr><td>256</td><td>6.83ms</td><td>30k/s</td><td>20.6ms</td></tr>
+    <tr><td>4,096</td><td>109.23ms</td><td><strong>30k/s (identical)</strong></td><td><strong>327.8ms</strong></td></tr>
+  </table>
+
+  <p><strong>Not one event fewer is lost.</strong> The steady-state loss rate is <code>λ − μ</code> and the queue size does not appear in it. What a queue does is <strong>absorb a burst</strong>, and that does nothing for a <em>sustained</em> excess.</p>
+
+  <p>What it does add is waiting. This is <strong>Little's law</strong>, showing up in the same role for the fifth time on this site — <a href="/en/connpool/">no. 8</a> (connection pools), <a href="/en/throughput/">no. 19</a> (window × connections), <a href="/en/mqtt/">no. 5</a> (Receive Maximum), <a href="/en/usl/">no. 30</a> (threads), and here.</p>
+
+  <div class="callout">327.8ms is an operational problem in its own right. <strong>You are making incident decisions on logs from a third of a second ago.</strong> And if the process dies in that window, the 3,277 events in the queue <strong>never reach the disk</strong> — which is where the documented <code>maxFlushTime</code> lives: <em>"Events that cannot be processed within this window are discarded."</em></div>
+
+  <h2>What this model assumes</h2>
+
+  <table class="keytable">
+    <tr><th>Assumption</th><th>What breaks if it fails</th></tr>
+    <tr><td>a constant drain rate</td><td>Time per write is treated as a constant. Real sinks <strong>stall for tens of milliseconds on fsync or log rotation</strong> — μ goes to zero for that window and the queue takes on that time × λ. A 20ms stall on a 100μs pipe is 2,000 events on its own, which <strong>overruns a 256-event queue eightfold</strong></td></tr>
+    <tr><td>a constant arrival rate</td><td>This is a steady-state view. Real logs arrive in bursts — which is why the queue exists. If the burst is smaller than the queue, nothing on this page happens at all</td></tr>
+    <tr><td>a constant level mix</td><td>The interesting thing is the mix <em>changing</em> during an incident, and the model only ever shows one instant of it. You compare two points with a dial; the transition itself is not drawn</td></tr>
+    <tr><td>one worker thread</td><td><code>AsyncAppender</code> has a single worker — that is the implementation, not an assumption. Which is why the only way to raise μ is <strong>to make one write faster</strong>, never to parallelise</td></tr>
+    <tr><td>256 and 20% are specified</td><td>Those the documentation fixes, so they do not move. <strong>The time per write, however, is an input we chose</strong> — it is not in any specification, and it is the number you have to measure in your own environment</td></tr>
+  </table>
+
+  <h2>In the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>First thing to look at</td><td><strong>You cannot find missing logs in the logs.</strong> Look at counts instead — if you know how many lines a request ought to write, the number of lines absent is the only evidence you get. Grouping by correlation ID makes it visible (<a href="/en/correlation/">no. 12</a>)</td></tr>
+    <tr><td>Getting a metric out of it</td><td>logback does not expose a dropped-event counter. <strong>Exporting the queue depth is effectively your only gauge</strong> — if it is pinned at <code>queueSize − discardingThreshold</code>, you were dropping for that entire period</td></tr>
+    <tr><td>Order of fixes</td><td>① <strong>raise the drain rate</strong> (write to a local file and let a separate process ship it — get the remote appender off the request path) ② log less ③ and only then the queue size. <strong>Starting at ③ is the most common ordering mistake</strong></td></tr>
+    <tr><td>Before turning on neverBlock</td><td>It makes ERRORs disappear. <strong>"Better than stalling the service during an incident" may well be the right call</strong> — but then route ERROR to its own appender, synchronous and unqueued. The point is to choose what you lose</td></tr>
+    <tr><td>includeCallerData</td><td>The property the documentation calls <em>"rather expensive"</em>. Turning it on captures a stack per event, so <strong>μ falls</strong> — it turns this page's causal dial the wrong way</td></tr>
+    <tr><td>On shutdown</td><td>Whatever the queue could not flush within <code>maxFlushTime</code> is <strong>discarded.</strong> The moment a deploy takes the pod down, your last log lines leave by this path — and they may be exactly the ones before the failure</td></tr>
+    <tr><td>Other frameworks</td><td>Log4j2's async logger uses the LMAX Disruptor and makes the same choice through <code>AsyncQueueFullPolicy</code> (the default has the calling thread write directly — which is to say, block). <strong>Different names, the same two thresholds</strong></td></tr>
+  </table>
+
+  <p>Where <a href="/en/backpressure/">no. 11</a> argued that <em>rejection is a signal</em>, this page is <strong>rejection that sends no signal</strong>. Nobody hears that the queue was full — which is how it meets the conclusion of <a href="/en/omission/">no. 25</a>: <strong>what is missing from the measurement is the worst thing in it.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/backpressure/"><span class="no">11</span><span><span class="t">Rejection is a signal, not a bug</span><span class="why">If rejection is a signal, this page is rejection that sends none — nobody hears that the queue was full.</span></span></a></li>
+      <li><a href="/en/omission/"><span class="no">25</span><span><span class="t">The load test never counted the 30 seconds it was frozen</span><span class="why">The same conclusion — what is missing from the measurement is the worst of it — reached from the logging side.</span></span></a></li>
+      <li><a href="/en/connpool/"><span class="no">08</span><span><span class="t">A 17-millisecond query drains the pool</span><span class="why">Queue length over drain rate gives the wait — connections there, log events here.</span></span></a></li>
+      <li><a href="/en/correlation/"><span class="no">12</span><span><span class="t">When does matching responses by order go wrong</span><span class="why">You cannot find missing logs in the logs — counting the lines one request left behind is the only evidence.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">Index</a> · <a href="/logdrop/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uMs:'ms', uPerSec:'/s', uKPerSec:'k/s', uEv:'ev', uUs:'μs', uPct:'%',
+  hint:'arriving $1 · draining $2 · queue $3 · drop threshold $4 · WARN·ERROR $5%',
+  bClean:'the queue does not grow', bFill:'filling',
+  bDiscAt:'$1 — INFO dropping starts', bDisc:'dropping INFO',
+  bFullAt:'$1 — full', bBlock:'threads blocked', bDropAll:'dropping regardless of level',
+  gText:'queue $1 / $2 · drop line $3 (remaining capacity $4)',
+  fWhat:'Setting', fLost:'INFO lost', fErrLost:'ERROR lost', fBlocked:'Excess absorbed', fWait:'Wait',
+  fBase:'default (256 · 20%)', fKeepAll:'keep all (0)', fNever:'neverBlock on', fBigQ:'queue 4,096',
+  mDiscAt:'Dropping starts', mFullAt:'Blocking starts', mNever:'never blocks',
+  mLostInfo:'INFO lost', mLostErr:'ERROR lost', mQueue:'Queue depth', mWait:'Wait per event',
+  vClean:'<b>The queue does not grow.</b> $1 arriving · $2 draining<br><span class="at">the pipe keeps up — the stretch where AsyncAppender does what it advertises</span>',
+  vDisc:'<b>From $1 onward INFO disappears — $2.</b><br>The queue settles at $3 (remaining capacity $4) <span class="at">— no exception, no warning</span>',
+  vBlock:'<b>Full at $1 — every logging call now waits $2.</b><br>Asynchronous became synchronous · pipe ceiling $3 <span class="at">— threads are carrying $4 of excess</span>',
+  vDropAll:'<b>Full at $1 and no longer sorting by level — ERROR $2 is being lost.</b><br>Along with INFO $3 <span class="at">— blocking was converted into loss</span>',
+  scene:[
+    'Normal operation. Eight thousand events a second arrive and the pipe passes ten thousand. The queue never grows and one event clears it in a tenth of a millisecond — exactly the time to write it. This is the stretch where AsyncAppender does what it advertises. The trouble is that it is the normal state, and all six steps below change exactly one dial from here.',
+    'Four times the arrivals: forty thousand a second against a pipe that still passes ten. The queue fills at thirty thousand a second, and the moment it reaches 205 events — that is 6.83 milliseconds — INFO dropping begins. Two hundred and five is 256 minus 51. From there the queue stops growing, because the entire excess leaves as discarded INFO. Thirty thousand events a second vanish with no exception, no warning line, no metric. And the wait went from a tenth of a millisecond to 20.6.',
+    'Say an incident has begun. The WARN and ERROR share goes from five percent to fifty. Dropping only sheds INFO, and half of what arrives is now a level it cannot touch — twenty thousand a second against a pipe passing ten. Dropping cannot close the gap. The queue takes on its last 51 events, fills at 11.93 milliseconds, and put starts blocking: every logging call now waits a hundred microseconds. Dropping was the valve that protected the application, and it is empty exactly when you need it.',
+    'Turn on neverBlock. The blocking is gone. In its place, anything arriving at a full queue is dropped regardless of level. Put became offer, and a failed offer simply disappears. The very ERRORs you would investigate with are vanishing at ten thousand a second. This dial does not remove the cost, it converts blocking into loss — it is where you choose which one you would rather have.',
+    'Now the other direction. Put the error share back to five percent and set discardingThreshold to zero, the keep-all setting the documentation describes. Not one line is lost. Instead the dropping line is gone, so the queue runs straight to 256 and blocks at 8.53 milliseconds. Step two survived this exact load. Turning off dropping is turning off the safety valve.',
+    'Raise the queue to 4,096. Dropping now begins at 109.23 milliseconds instead of 6.83 — close to sixteen times later. But the amount lost is still thirty thousand a second; it merely starts later. The loss rate is arrivals minus drain, and queue size does not appear in it. What does change is the wait, from 20.6 milliseconds to 327.8. That is Little’s law. You would be making incident decisions on logs from a third of a second ago.',
+    'The last step is the real cause. Leave the queue and the thresholds alone and change only the time per write, from a hundred microseconds to five. The drain rate becomes two hundred thousand a second, and forty thousand arrivals stop being a problem at all. No dropping, no blocking. The queue and its thresholds are symptoms; the cause is always a drain rate below the arrival rate. A local file sits around five microseconds — start shipping logs over the network and a hundred is optimistic.'
+  ],
+};
+</script>
+<script src="/shared/logdrop-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "You added AsyncAppender and the logs went missing",
+  "description": "Asynchronous logging defaults to a queue of 256, and once 51 slots remain it starts dropping INFO. Thirty thousand events a second vanish 6.83ms in, with no exception and no warning. Then the errors arrive — and with nothing left to drop, your application threads block.",
+  "url": "https://lab.vermilion19.com/en/logdrop/",
+  "inLanguage": "en",
+  "datePublished": "2026-09-04",
+  "dateModified": "2026-09-04",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "You added AsyncAppender and the logs went missing"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

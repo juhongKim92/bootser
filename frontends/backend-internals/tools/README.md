@@ -33,6 +33,7 @@ node tools/verify-nagle.mjs        # 28편
 node tools/verify-pagesplit.mjs    # 29편
 node tools/verify-usl.mjs          # 30편
 node tools/verify-quorum.mjs       # 31편
+node tools/verify-logdrop.mjs      # 32편
 node tools/verify-favicon.mjs      # 파비콘 네 파일이 원화와 같은지
 
 node tools/gen-related.mjs         # "이어서 볼 것" 블록을 박는다
@@ -102,6 +103,12 @@ TCP 에서 성립하지 않는데(FIN 은 시퀀스 번호를 차지해 스트�
 | 파비콘 원화의 받침을 스테이지보다 좁게 | 원화 1건 + 생성물 4건 |
 | `favicon.svg` 의 `<rect>` 하나 삭제 | 래스터 대조에서 27곳 |
 | `icon-192.png` 의 IDAT 바이트 하나 뒤집기 | 압축 손상으로 감지 |
+| 32편 — 명세 기본값 `queueSize` 256 → 255 | 7건 |
+| 32편 — 버림 문턱을 `floor` → `ceil` | 34건 |
+| 32편 — 막힘 중에도 INFO 를 버리는 줄 제거 | 563건 (불변식① 합이 안 맞는다) |
+| 32편 — "전부 보관"(0)인데 버리게 함 | 454건 |
+| 32편 — `neverBlock` 인데도 막게 함 | 384건 (불변식④) |
+| 32편 — 대기에서 `+1` 제거 (리틀) | 2,257건 (불변식⑥) |
 
 > 변이 테스트를 짤 때 주의 — perl 정규식 안의 `@type` 은 **배열로 보간되어** 치환이
 > 조용히 안 먹는다. 처음 이걸로 "검사가 통과했다" 는 잘못된 결론을 냈다.

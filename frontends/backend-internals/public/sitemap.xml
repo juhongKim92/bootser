@@ -9,7 +9,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/"/>
-    <lastmod>2026-08-25</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -17,7 +17,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/"/>
-    <lastmod>2026-08-25</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -73,7 +73,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/backpressure/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/backpressure/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/backpressure/"/>
-    <lastmod>2026-08-25</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -81,7 +81,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/backpressure/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/backpressure/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/backpressure/"/>
-    <lastmod>2026-08-25</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -89,7 +89,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/connpool/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/connpool/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/connpool/"/>
-    <lastmod>2026-08-25</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -97,7 +97,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/connpool/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/connpool/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/connpool/"/>
-    <lastmod>2026-08-25</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -229,6 +229,22 @@
   </url>
 
   <url>
+    <loc>https://lab.vermilion19.com/logdrop/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/logdrop/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/logdrop/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/logdrop/"/>
+    <lastmod>2026-09-04</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/logdrop/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/logdrop/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/logdrop/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/logdrop/"/>
+    <lastmod>2026-09-04</lastmod>
+  </url>
+
+  <url>
     <loc>https://lab.vermilion19.com/mqtt/</loc>
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/mqtt/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/mqtt/"/>
@@ -281,7 +297,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/omission/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/omission/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/omission/"/>
-    <lastmod>2026-08-25</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -289,7 +305,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/omission/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/omission/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/omission/"/>
-    <lastmod>2026-08-25</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>

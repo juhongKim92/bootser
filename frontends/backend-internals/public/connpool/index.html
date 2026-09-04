@@ -307,6 +307,7 @@ LIMIT 20;</code></pre>
       <li><a href="/throughput/"><span class="no">19</span><span><span class="t">대역폭은 남는데 처리량이 안 나온다</span><span class="why">같은 식이 네트워크에서는 바이트 단위로 나타납니다. 풀 크기 대신 띄운 바이트입니다.</span></span></a></li>
       <li><a href="/mvcc/"><span class="no">01</span><span><span class="t">DELETE 했는데 테이블이 줄지 않는 이유</span><span class="why">트랜잭션을 오래 열어두는 또 다른 대가.</span></span></a></li>
       <li><a href="/slowstart/"><span class="no">26</span><span><span class="t">파일이 1바이트 커졌는데 왕복이 한 번 더 든다</span><span class="why">풀이 커넥션을 살려두는 진짜 이득 — 대역폭이 아니라 왕복 계단을 건너뜁니다.</span></span></a></li>
+      <li><a href="/logdrop/"><span class="no">32</span><span><span class="t">AsyncAppender 를 붙였더니 로그가 사라진다</span><span class="why">같은 리틀의 법칙이 로그 큐에서도 돕니다 — 큐를 키우면 대기가 그만큼 늘어납니다.</span></span></a></li>
       <li><a href="/usl/"><span class="no">30</span><span><span class="t">스레드를 늘렸더니 느려졌다</span><span class="why">작은 풀이 더 빠른 그 최적점을 식으로 계산해 봅니다.</span></span></a></li>
     </ul>
   </nav>
@@ -358,7 +359,7 @@ window.LAB_I18N = {
   "url": "https://lab.vermilion19.com/connpool/",
   "inLanguage": "ko",
   "datePublished": "2026-08-12",
-  "dateModified": "2026-08-25",
+  "dateModified": "2026-09-04",
   "author": {
     "@type": "Organization",
     "name": "Backend Internals",

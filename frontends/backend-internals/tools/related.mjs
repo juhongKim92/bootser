@@ -19,7 +19,7 @@ export const NO = {
   timeout: '17', lockttl: '18', throughput: '19', rebalance: '20', tcpclose: '21',
   aggregate: '22', alignment: '23', fanout: '24', omission: '25', slowstart: '26',
   backlog: '27', nagle: '28', pagesplit: '29', usl: '30',
-  quorum: '31'
+  quorum: '31', logdrop: '32'
 };
 
 /* slug → [{ to, ko, en }] */
@@ -71,6 +71,7 @@ export const RELATED = {
     { to: 'throughput', ko: '같은 식이 네트워크에서는 바이트 단위로 나타납니다. 풀 크기 대신 띄운 바이트입니다.', en: 'The same formula in bytes on the network — bytes in flight instead of pool size.' },
     { to: 'mvcc', ko: '트랜잭션을 오래 열어두는 또 다른 대가.', en: 'The other price of holding a transaction open.' },
     { to: 'slowstart', ko: '풀이 커넥션을 살려두는 진짜 이득 — 대역폭이 아니라 왕복 계단을 건너뜁니다.', en: 'What keeping a connection alive really buys — not bandwidth but skipping the round-trip staircase.' },
+    { to: 'logdrop', ko: '같은 리틀의 법칙이 로그 큐에서도 돕니다 — 큐를 키우면 대기가 그만큼 늘어납니다.', en: 'The same Little’s law runs in the log queue — grow it and the wait grows with it.' },
     { to: 'usl', ko: '작은 풀이 더 빠른 그 최적점을 식으로 계산해 봅니다.', en: 'Computing the optimum behind “a smaller pool is faster”.' }
   ],
   jobclaim: [
@@ -89,7 +90,8 @@ export const RELATED = {
     { to: 'timeout', ko: '거부가 신호라는 것과 남은 예산을 아래로 넘기는 것은 같은 이야기입니다.', en: 'Rejection as a signal and passing the remaining budget downward are the same idea.' },
     { to: 'omission', ko: '큐에서 기다린 시간은 서버가 재는 응답시간에 안 들어갑니다 — 통째로 사라집니다.', en: 'Time spent waiting in the queue never enters server-side latency — it vanishes whole.' },
     { to: 'backlog', ko: '큐를 키우면 거부가 대기로 바뀌는 일이 커널 안에서도 똑같이 벌어집니다.', en: 'Growing the queue turns rejection into waiting — the same thing happens inside the kernel.' },
-    { to: 'usl', ko: '동시성을 늘리는 것이 언제부터 손해로 바뀌는가 — 정점이 그 자리입니다.', en: 'Where adding concurrency turns into a loss — the peak is that point.' }
+    { to: 'usl', ko: '동시성을 늘리는 것이 언제부터 손해로 바뀌는가 — 정점이 그 자리입니다.', en: 'Where adding concurrency turns into a loss — the peak is that point.' },
+    { to: 'logdrop', ko: '거부를 아무에게도 알리지 않는 큐 — 로그 파이프가 조용히 버리고 조용히 막습니다.', en: 'A queue that tells nobody it rejected — the log pipe drops silently and blocks silently.' }
   ],
   correlation: [
     { to: 'timeout', ko: '타임아웃으로 포기한 요청의 응답이 늦게 오면, 그게 다음 요청의 짝이 됩니다.', en: 'When the answer to a timed-out request arrives late, it becomes the next request’s pair.' },
@@ -174,7 +176,8 @@ export const RELATED = {
     { to: 'aggregate', ko: '같은 사건이 두 숫자가 되는 다른 이유 — 이쪽은 둘 다 맞습니다.', en: 'The other way one event becomes two numbers — there, both are right.' },
     { to: 'connpool', ko: '큐와 풀에서 기다린 시간이 응답시간에서 사라지는 자리.', en: 'Where time spent waiting in the queue and the pool drops out of the latency number.' },
     { to: 'backlog', ko: '측정이 시작되기 전의 시간 — 서버의 시계는 accept() 부터 돕니다.', en: 'The time before the measurement starts — the server’s clock begins at accept().' },
-    { to: 'usl', ko: '정점을 넘긴 상태를 폐루프로 재면 아예 안 보일 수 있습니다.', en: 'Measure a past-the-peak system with a closed loop and you may not see it at all.' }
+    { to: 'usl', ko: '정점을 넘긴 상태를 폐루프로 재면 아예 안 보일 수 있습니다.', en: 'Measure a past-the-peak system with a closed loop and you may not see it at all.' },
+    { to: 'logdrop', ko: '측정이 아니라 증거 쪽이 사라지는 경우 — 로그가 조용히 버려집니다.', en: 'When it is the evidence that goes missing rather than the measurement — logs, dropped silently.' }
   ],
   slowstart: [
     { to: 'throughput', ko: '정상 상태로 넘어가면 이번엔 손실률이 처리량을 정합니다 — 거기도 대역폭은 식에 없습니다.', en: 'Once the steady state arrives, loss rate sets the throughput — and bandwidth is not in that formula either.' },
@@ -201,6 +204,12 @@ export const RELATED = {
     { to: 'connpool', ko: '같은 곡선을 커넥션 풀 크기로 — 리틀의 법칙이 세 번째로 나옵니다.', en: 'The same curve as pool size — Little’s law for the third time.' },
     { to: 'omission', ko: '정점을 넘겼는지 재려면 측정이 먼저 정직해야 합니다.', en: 'To measure whether you are past the peak, the measurement has to be honest first.' },
     { to: 'backpressure', ko: '정점 위에서 들어오는 요청을 어떻게 할 것인가.', en: 'What to do with the requests that arrive past the peak.' }
+  ],
+  logdrop: [
+    { to: 'backpressure', ko: '거부가 신호라면 이 페이지는 신호를 안 보내는 거부입니다 — 큐가 찼다는 것을 아무도 못 듣습니다.', en: 'If rejection is a signal, this page is rejection that sends none — nobody hears that the queue was full.' },
+    { to: 'omission', ko: '측정에서 빠진 것이 가장 나쁘다는 결론에 로그 쪽에서 도달합니다.', en: 'The same conclusion — what is missing from the measurement is the worst of it — reached from the logging side.' },
+    { to: 'connpool', ko: '큐 길이를 소비율로 나누면 대기가 나옵니다. 저쪽은 커넥션, 여기는 로그 이벤트입니다.', en: 'Queue length over drain rate gives the wait — connections there, log events here.' },
+    { to: 'correlation', ko: '사라진 로그를 로그로는 못 찾습니다. 요청 하나가 남긴 줄 수를 세는 것이 유일한 증거입니다.', en: 'You cannot find missing logs in the logs — counting the lines one request left behind is the only evidence.' }
   ],
   quorum: [
     { to: 'raft', ko: '같은 문제를 확률이 아니라 합의로 푸는 쪽.', en: 'The same problem solved by consensus instead of probability.' },

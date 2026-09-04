@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>AsyncAppender 를 붙였더니 로그가 사라진다 — 큐 256 과 두 개의 문턱</title>
+<meta name="description" content="비동기 로깅의 기본 큐는 256건이고, 51건이 남았을 때부터 INFO 가 버려집니다. 6.83밀리초 뒤부터 초당 3만 건이 사라지는데 예외도 경고도 없어요. 그리고 에러가 쏟아지면 버릴 것이 없어서 애플리케이션 스레드가 막힙니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/logdrop/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/logdrop/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/logdrop/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/logdrop/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="AsyncAppender 를 붙였더니 로그가 사라진다">
+<meta property="og:description" content="큐 256 · 남은 용량 51건부터 버림. 예외도 경고도 없이 초당 3만 건이 사라집니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/logdrop/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="AsyncAppender 를 붙였더니 로그가 사라진다">
+<meta name="twitter:description" content="버림이 애플리케이션을 지키는 장치인데, 정작 에러가 쏟아질 때는 버릴 것이 없습니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/logdrop-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/logdrop/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>AsyncAppender 를 붙였더니 로그가 사라진다</h1>
+  <p class="lede">동기 로깅이 요청을 붙잡는다는 이야기를 듣고 <code>AsyncAppender</code> 를 감쌌습니다. 그런데 기본 큐는 <strong>256건</strong>이고, <strong>51건이 남는 순간부터 INFO 가 버려집니다.</strong> 초당 3만 건이 조용히 사라지는데 예외도 경고도 없어요. 더 나쁜 건 그다음입니다 — <strong>에러가 쏟아지면 버릴 것이 없어서, 그때는 애플리케이션 스레드가 막힙니다.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sQ">queueSize</label>
+          <span class="v" id="vQ">256<small>건</small></span>
+          <input type="range" id="sQ" min="0" max="4" step="1" value="2" aria-label="큐가 담을 수 있는 이벤트 수">
+        </div>
+        <div class="dial">
+          <label>discardingThreshold</label>
+          <div class="seg" id="segDisc" role="group" aria-label="남은 용량이 얼마일 때 버리기 시작하나">
+            <button data-disc="0">전부 보관</button>
+            <button data-disc="20" aria-pressed="true">20%</button>
+            <button data-disc="40">40%</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>neverBlock</label>
+          <div class="seg" id="segNever" role="group" aria-label="꽉 찼을 때 막을 것인가 버릴 것인가">
+            <button data-never="0" aria-pressed="true">끔 (막는다)</button>
+            <button data-never="1">켬 (버린다)</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sR">로그 도착률</label>
+          <span class="v" id="vR">8<small>천/초</small></span>
+          <input type="range" id="sR" min="1" max="200" step="1" value="8" aria-label="애플리케이션이 내려는 로그 이벤트 수">
+        </div>
+        <div class="dial">
+          <label for="sW">한 건 쓰는 시간</label>
+          <span class="v" id="vW">100<small>μs</small></span>
+          <input type="range" id="sW" min="0" max="4" step="1" value="3" aria-label="소비 스레드가 한 건을 내보내는 데 걸리는 시간">
+        </div>
+        <div class="dial">
+          <label for="sE">WARN·ERROR 비율</label>
+          <span class="v" id="vE">5<small>%</small></span>
+          <input type="range" id="sE" min="0" max="4" step="1" value="1" aria-label="도착하는 로그 중 버려지지 않는 등급의 비율">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->도착 8,000/초 · 소비 10,000/초 · 큐 256건 · 버림 문턱 51건 · WARN·ERROR 5%<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">큐가 두 문턱을 밟아 가는 순서</span>
+      <div class="board">
+        <div class="phases" id="phases"><!--pr--><div class="band ok" style="left:0;width:100%"></div><div class="blabel ok" style="left:1%">큐가 자라지 않는다</div><!--/pr--></div>
+        <div class="phasex" id="phasex"><!--pr--><span>0ms</span><span>0.5ms</span><span>1ms</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="fillup"></i>차오르는 중</span>
+          <span><i class="drop"></i>INFO 를 버린다</span>
+          <span><i class="block"></i>스레드가 막힌다</span>
+          <span><i class="dropall"></i>등급 없이 버린다</span>
+        </div>
+
+        <div class="gauge" id="gauge"><!--pr--><div class="qbar"><div class="qfill clean" style="width:0%"></div><div class="qline" style="left:80.078125%"></div></div><div class="qtext">큐 0 / 256건 · 버림 선 205건 (남은 용량 51건)</div><!--/pr--></div>
+        <table class="four" id="four"><!--pr--><tr><th>설정</th><th>INFO 손실</th><th>ERROR 손실</th><th>막힌 초과분</th><th>대기</th></tr><tr><td>기본 (256 · 20%)</td><td class="good">—</td><td class="good">—</td><td class="good">—</td><td>0.1ms</td></tr><tr><td>전부 보관 (0)</td><td class="good">—</td><td class="good">—</td><td class="good">—</td><td>0.1ms</td></tr><tr><td>neverBlock 켬</td><td class="good">—</td><td class="good">—</td><td class="good">—</td><td>0.1ms</td></tr><tr><td>큐 4,096</td><td class="good">—</td><td class="good">—</td><td class="good">—</td><td>0.1ms</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">버림 시작</span><span class="n">—</span></div><div class="m good"><span class="k">막힘 시작</span><span class="n">안 막힌다</span></div><div class="m good"><span class="k">사라지는 INFO</span><span class="n">—</span></div><div class="m good"><span class="k">사라지는 ERROR</span><span class="n">—</span></div><div class="m "><span class="k">큐 길이</span><span class="n">0 / 256</span></div><div class="m "><span class="k">로그 한 건의 대기</span><span class="n">0.1ms</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>큐가 자라지 않는다.</b> 도착 8,000/초 · 소비 10,000/초<br><span class="at">파이프가 도착을 다 소화한다 — AsyncAppender 가 광고한 대로 일하는 구간</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>queueSize</td><td>큐가 담을 이벤트 수. <strong>256이 명세 기본값</strong>입니다. 키우면 버림이 늦게 시작되는데 <strong>대기 시간이 그만큼 늘어납니다</strong> — 리틀의 법칙이에요.</td></tr>
+    <tr><td>discardingThreshold</td><td>남은 용량이 이 비율 이하면 TRACE·DEBUG·INFO 를 버립니다. <strong>20%가 기본</strong>이고, <strong>전부 보관</strong>은 문서가 정한 <code>0</code> 입니다 — 그런데 그게 막힘을 부릅니다.</td></tr>
+    <tr><td>neverBlock</td><td>큐가 꽉 찼을 때 <strong>막을 것인가 버릴 것인가</strong>. 기본은 막는 쪽(<code>false</code>)입니다. <strong>켜 보세요 — ERROR 가 사라집니다.</strong></td></tr>
+    <tr><td>로그 도착률</td><td>애플리케이션이 내려는 이벤트 수. 요청당 20건을 찍는 서비스가 초당 2,000 요청을 받으면 4만 건입니다.</td></tr>
+    <tr><td>한 번 쓰는 시간</td><td>소비 스레드가 한 건을 내보내는 데 걸리는 시간. <strong>이 값의 역수가 파이프의 처리량입니다.</strong> 100μs 면 초당 1만 건이에요. <strong>진짜 원인은 늘 이 손잡이입니다.</strong></td></tr>
+    <tr><td>WARN·ERROR 비율</td><td>도착하는 로그 중 <strong>버려지지 않는</strong> 등급의 비율. 평시에는 몇 퍼센트인데 장애 중에는 치솟습니다 — <strong>그게 이 페이지의 반전입니다.</strong></td></tr>
+  </table>
+
+  <p>모든 값이 결정됩니다 — 난수도 표본도 없어요. 초과분은 언제나 <strong>버림 · 막힘 셋으로 정확히 나뉘고 합이 (도착률 − 소비율)</strong> 입니다.</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 파이프가 소화하는 만큼만 온다 — 아무 일도 없다</h4>
+    <div class="seq">도착 8천/초 · 소비 1만/초 · 큐 256 · 버림 20%
+큐 <em>0 / 256</em> · 버림 <em>없음</em> · 대기 <em>0.1ms</em></div>
+    <p class="why">도착률이 소비율보다 낮으니 큐가 자라지 않습니다. 로그 한 건이 파이프를 통과하는 데 0.1ms — 한 건 쓰는 시간 그대로예요. <strong>여기서는 AsyncAppender 가 정확히 광고한 대로 일합니다.</strong> 문제는 이 상태가 평시라는 겁니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 도착률이 네 배 — 6.83ms 뒤부터 사라진다</h4>
+    <div class="seq">도착 8천 → <em>4만/초</em> (소비는 그대로 1만/초)
+버림 시작 <em>6.83ms</em> · INFO <em>3만/초</em> 사라짐 · 막힘 <em>없음</em>
+큐 <em>205 / 256</em> · 대기 <em>20.6ms</em></div>
+    <p class="why">큐가 초당 3만 건씩 차오르고, <strong>205건에 닿으면</strong>(= 256 − 51) 버림이 시작됩니다. 그 뒤로는 큐가 거기서 멈춰요 — 초과분 전부가 INFO 로 빠져나가니까요. <strong>애플리케이션은 아무것도 못 느낍니다.</strong> 예외도, 경고 로그도, 지표도 없습니다. 그리고 대기 시간이 0.1ms 에서 <strong>20.6ms 로 206배</strong>가 됐어요 — 큐에 205건이 줄 서 있으니까요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 에러가 쏟아진다 — 이번엔 막힌다</h4>
+    <div class="seq">WARN·ERROR 비율 5% → <em>50%</em> (장애가 시작됐다)
+막힘 시작 <em>11.93ms</em> · INFO <em>2만/초</em> 사라짐 · <em>ERROR 호출이 초당 1만 건 막힌다</em></div>
+    <p class="why">버림은 <strong>INFO 만</strong> 버립니다. 그런데 지금 도착하는 것의 절반이 WARN·ERROR 예요 — 초당 2만 건이고 파이프는 1만 건만 통과시킵니다. <strong>버려도 못 줄입니다.</strong> 큐가 51건을 더 채우고 꽉 차면 <code>put()</code> 이 막고, 그때부터 로그 호출 하나가 <strong>100μs</strong> 를 기다립니다. <strong>버림이 애플리케이션을 지키는 장치였는데, 정작 위급할 때 버릴 것이 없습니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. neverBlock 을 켠다 — ERROR 가 사라진다</h4>
+    <div class="seq">neverBlock 끔 → <em>켬</em> (같은 장애 상황)
+막힘 <em>없음</em> · 그런데 <em>ERROR 초당 1만 건 사라짐</em> · INFO <em>2만/초</em></div>
+    <p class="why">막힘이 사라졌습니다. 대신 <strong>꽉 찬 큐에 도착한 것은 등급을 안 가리고 버려집니다.</strong> <code>put()</code> 이 <code>offer()</code> 로 바뀐 것이고, 실패하면 그냥 없어져요. <strong>장애를 조사할 그 ERROR 가 초당 1만 건씩 사라집니다.</strong> 이 손잡이는 막힘을 없애는 것이 아니라 <em>막힘을 버림으로 바꾸는</em> 것입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. "전부 보관" 으로 두면 — 더 빨리 막힌다</h4>
+    <div class="seq">discardingThreshold 20% → <em>전부 보관 (0)</em> · 에러 비율은 5% 로 되돌림
+막힘 시작 <em>8.53ms</em> · 버림 <em>없음</em> · 흡수 <em>3만/초</em></div>
+    <p class="why">문서가 <em>"To keep all events, set discardingThreshold to 0"</em> 이라고 적어둔 그 설정입니다. 로그는 한 건도 안 잃어요. 대신 <strong>버림 선이 없어져서 큐가 곧장 256까지 차고, 6.83ms 가 아니라 8.53ms 에 막힙니다.</strong> 2단계에서는 멀쩡했던 상황인데 여기서는 막혀요. <strong>버림을 끄는 것은 안전을 끄는 것입니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. 큐를 4,096으로 — 버림은 늦어지고 대기는 16배</h4>
+    <div class="seq">queueSize 256 → <em>4,096</em> (버림 20% · 에러 5%)
+버림 시작 6.83 → <em>109.23ms</em> · 대기 20.6 → <em>327.8ms</em></div>
+    <p class="why">버림이 시작되는 시각이 16배 뒤로 갔습니다. 초당 3만 건이 사라지는 것은 <strong>똑같아요</strong> — 늦게 시작할 뿐입니다. 그리고 대가가 붙습니다. 큐가 3,277건에서 안정되고, 그 줄을 초당 1만 건으로 빼내니 <strong>로그 한 건이 파이프를 통과하는 데 327.8ms</strong> 입니다. <strong>리틀의 법칙</strong>이에요 — 큐 길이 ÷ 소비율. 장애 직후 로그를 보는데 3분의 1초 전 것을 보고 있는 셈입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. 디스크를 빠르게 — 전부 사라진다</h4>
+    <div class="seq">한 건 쓰는 시간 100 → <em>5μs</em> (소비 1만 → <em>20만/초</em>)
+버림 <em>없음</em> · 막힘 <em>없음</em> · 큐 <em>0 / 256</em></div>
+    <p class="why">도착률은 4만 건 그대로입니다. 바뀐 것은 소비율 하나예요. <strong>큐도 문턱도 손잡이도 증상일 뿐이고, 원인은 소비율이 도착률보다 낮은 것입니다.</strong> 로컬 파일이면 5μs 대인데, 네트워크로 보내는 appender(Logstash·Kafka·CloudWatch)면 100μs 도 낙관적입니다. <strong>그래서 로그를 원격으로 보내기 시작한 날 이 페이지가 시작됩니다.</strong></p>
+  </div>
+
+  <h2>명세가 문턱을 둘 정해뒀다</h2>
+
+  <p>이 편의 검산점은 logback 문서의 <code>AsyncAppender</code> 속성표입니다. 두 줄이 숫자를 줍니다.</p>
+
+  <div class="callout"><em>"queueSize — The maximum capacity of the blocking queue. <strong>By default, queueSize is set to 256.</strong>"</em></div>
+
+  <div class="callout"><em>"discardingThreshold — By default, <strong>when the blocking queue has 20% capacity remaining</strong>, it will drop events of level TRACE, DEBUG and INFO, keeping only events of level WARN and ERROR. <strong>To keep all events, set discardingThreshold to 0.</strong>"</em></div>
+
+  <p>두 값을 곱하면 문턱 하나가 정확히 나옵니다 — <strong>256 × 0.2 = 51.2 → 51건</strong>. 남은 용량이 51건 이하, 곧 큐 길이가 <strong>205건</strong>에 닿는 순간부터 INFO 가 사라집니다. 이게 첫 번째 문턱이에요.</p>
+
+  <p>두 번째는 같은 표의 <code>neverBlock</code> 줄이 줍니다.</p>
+
+  <div class="callout"><em>"If the queue is filled up, then <strong>application threads are blocked</strong> from logging new events until the worker thread has had a chance to dispatch one or more events."</em></div>
+
+  <p><strong>비동기 로깅이 동기로 되돌아가는 자리입니다.</strong> 그리고 이 문장이 조용한 이유는 <em>"blocked"</em> 라는 말에 예외도 로그도 없다는 겁니다 — 그냥 느려집니다.</p>
+
+  <table class="keytable">
+    <tr><th>남은 용량</th><th>어떤 이벤트가</th><th>무슨 일이</th></tr>
+    <tr><td>52건 이상</td><td>전부</td><td>큐에 들어간다</td></tr>
+    <tr><td><strong>51건 이하</strong></td><td>TRACE·DEBUG·INFO</td><td><strong>버려진다</strong> — 예외 없음</td></tr>
+    <tr><td>51건 이하</td><td>WARN·ERROR</td><td>큐에 들어간다</td></tr>
+    <tr><td><strong>0건</strong></td><td>WARN·ERROR</td><td><strong>막는다</strong>(기본) 또는 <strong>버린다</strong>(<code>neverBlock</code>)</td></tr>
+  </table>
+
+  <h2>초과분은 셋으로만 나뉜다</h2>
+
+  <p>이 모델의 뼈대는 한 줄입니다. 애플리케이션이 내려는 비율 <strong>λ</strong> 와 파이프가 통과시키는 비율 <strong>μ</strong> 가 있고, 그 차이는 셋 중 하나로 처리됩니다.</p>
+
+  <table class="keytable">
+    <tr><th>처리</th><th>언제</th><th>대가</th></tr>
+    <tr><td>INFO 를 버린다</td><td>남은 용량 ≤ 문턱</td><td>디버깅에 필요한 흐름이 사라진다. <strong>조용하다</strong></td></tr>
+    <tr><td>등급 없이 버린다</td><td>꽉 찼고 <code>neverBlock</code></td><td><strong>ERROR 도 사라진다.</strong> 역시 조용하다</td></tr>
+    <tr><td>스레드가 흡수한다</td><td>꽉 찼고 기본 설정</td><td>요청이 느려진다. <strong>로그 파이프가 처리량 상한이 된다</strong></td></tr>
+  </table>
+
+  <div class="callout">셋은 배타적이고 <strong>합이 정확히 λ − μ</strong> 입니다. 그래서 <em>"어느 하나를 없애면 다른 것이 늘어납니다."</em> 손잡이로 고를 수 있는 것은 <strong>어느 형태로 지불할지</strong>뿐이고, <strong>지불 여부는 소비율만이 정합니다.</strong></div>
+
+  <p>3단계가 그 곱셈을 보여줍니다 — 버림도 되고 막힘도 됩니다. 버림 선 위에서는 INFO 가 큐에 들어가지도 못하니 <strong>그 호출은 막히지 않고 사라지고</strong>, 큐 자리를 다투는 WARN·ERROR 만 막힙니다. 둘 중 하나가 아니라 <strong>동시에</strong>예요.</p>
+
+  <h2>버림이 안전장치인데, 위급할 때 안 듣는다</h2>
+
+  <p>이 페이지에서 가장 값나가는 반전입니다. <code>discardingThreshold</code> 는 <em>"로그를 잃는 대신 애플리케이션을 지키는"</em> 장치예요. 그런데 <strong>버릴 수 있는 것은 INFO 뿐입니다.</strong></p>
+
+  <p>평시에는 도착하는 로그의 95%가 INFO 라 잘 듣습니다. 그런데 장애가 시작되면 —</p>
+
+  <table class="keytable">
+    <tr><th>상황</th><th>WARN·ERROR 비율</th><th>버림으로 줄 수 있나</th></tr>
+    <tr><td>평시</td><td>5%</td><td><strong>된다</strong> — 초과분 전부를 INFO 로 뺀다</td></tr>
+    <tr><td>에러 폭주</td><td>50%</td><td><strong>안 된다</strong> — 버려도 초당 2만 건이 남는다</td></tr>
+    <tr><td>전부 에러</td><td>100%</td><td>버릴 것이 하나도 없다</td></tr>
+  </table>
+
+  <div class="callout"><strong>안전장치의 용량이 하필 사고 규모에 반비례합니다.</strong> 조용히 잘 도는 동안에는 넉넉하고, 정말 필요한 순간에 0 이 됩니다.</div>
+
+  <h2>큐를 키우는 것은 처방이 아니다</h2>
+
+  <p><code>queueSize</code> 를 올리는 것이 가장 먼저 떠오르는 처방인데, 6단계가 그 대가를 보여줍니다.</p>
+
+  <table class="keytable">
+    <tr><th>queueSize</th><th>버림 시작</th><th>사라지는 양</th><th>로그 한 건의 대기</th></tr>
+    <tr><td>256</td><td>6.83ms</td><td>3만/초</td><td>20.6ms</td></tr>
+    <tr><td>4,096</td><td>109.23ms</td><td><strong>3만/초 (같다)</strong></td><td><strong>327.8ms</strong></td></tr>
+  </table>
+
+  <p><strong>사라지는 양은 한 건도 안 줄어듭니다.</strong> 정상 상태의 손실률은 <code>λ − μ</code> 이고 큐 크기는 거기 안 들어가요. 큐가 하는 일은 <strong>버스트를 흡수하는 것</strong>뿐이고, 그건 <em>지속되는</em> 초과에는 안 듣습니다.</p>
+
+  <p>대신 대기 시간이 붙습니다. <strong>리틀의 법칙</strong>이고, 이 사이트에서 다섯 번째로 같은 자리에 나옵니다 — <a href="/connpool/">8번</a>(커넥션 풀) · <a href="/throughput/">19번</a>(창 × 커넥션) · <a href="/mqtt/">5번</a>(Receive Maximum) · <a href="/usl/">30번</a>(스레드), 그리고 여기.</p>
+
+  <div class="callout">327.8ms 는 그 자체로 운영 문제입니다. <strong>장애 대응 중에 3분의 1초 전 로그를 보고 판단합니다.</strong> 그리고 프로세스가 그 사이에 죽으면 큐에 있던 3,277건은 <strong>디스크에 닿지 못합니다</strong> — 문서의 <code>maxFlushTime</code> 이 그 자리예요. <em>"Events that cannot be processed within this window are discarded."</em></div>
+
+  <h2>이 모델이 가정하는 것</h2>
+
+  <table class="keytable">
+    <tr><th>가정</th><th>깨지면 어떻게 되나</th></tr>
+    <tr><td>소비율이 일정하다</td><td>한 건 쓰는 시간을 상수로 봤습니다. 실제 디스크는 <strong>fsync 나 로그 로테이션에서 수십 밀리초씩 멈춥니다</strong> — 그 순간 μ 가 0 이 되고 큐는 그 시간 × λ 만큼 찹니다. 100μs 짜리 파이프가 20ms 멈추면 그것만으로 2,000건이에요. 256짜리 큐는 <strong>8배 넘칩니다</strong></td></tr>
+    <tr><td>도착률이 일정하다</td><td>정상 상태를 봤습니다. 실제 로그는 버스트로 옵니다 — 그래서 큐가 있는 거고요. 버스트가 큐보다 작으면 이 페이지의 일은 아무것도 안 일어납니다</td></tr>
+    <tr><td>등급 비율이 일정하다</td><td>장애 중에 비율이 <em>바뀌는 것</em>이 핵심인데, 모델은 한 시점의 비율만 봅니다. 손잡이로 두 시점을 견주는 방식이라 그 전환 과정은 그리지 않습니다</td></tr>
+    <tr><td>소비 스레드가 하나다</td><td><code>AsyncAppender</code> 는 워커 스레드 하나입니다 — 이건 가정이 아니라 구현이에요. 그래서 μ 를 늘리는 길은 <strong>한 건을 빨리 쓰는 것뿐</strong>이고, 병렬화가 아닙니다</td></tr>
+    <tr><td>256 과 20% 는 명세값</td><td>그건 문서가 정한 것이라 안 흔들립니다. 반면 <strong>한 건 쓰는 시간은 우리가 정한 입력</strong>입니다 — 명세에 없고, 여러분 환경에서 재야 하는 값이에요</td></tr>
+  </table>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>제일 먼저 볼 것</td><td><strong>로그가 사라진 것을 로그로는 못 찾습니다.</strong> 대신 순번을 보세요 — 요청 하나가 찍어야 할 줄 수를 알고 있다면, 그중 몇 줄이 없는지가 유일한 증거입니다. 상관관계 ID 로 묶어 세면 보입니다(<a href="/correlation/">12번</a>)</td></tr>
+    <tr><td>지표로 잡는 방법</td><td>logback 은 버린 건수를 지표로 안 냅니다. <strong>그래서 큐 길이를 직접 내보내는 것이 사실상 유일한 계기판입니다</strong> — 큐 길이가 <code>queueSize − discardingThreshold</code> 에 붙어 있으면 그 시간 내내 버리고 있는 겁니다</td></tr>
+    <tr><td>고칠 순서</td><td>① <strong>소비율을 올린다</strong>(로컬 파일에 쓰고 수집은 별도 프로세스가 — 원격 appender 를 요청 경로에서 뺀다) ② 찍는 양을 줄인다 ③ 그다음이 큐 크기입니다. <strong>③부터 손대는 것이 가장 흔한 순서 착오예요</strong></td></tr>
+    <tr><td>neverBlock 을 켜기 전에</td><td>켜면 ERROR 가 사라집니다. <strong>"장애 때 서비스가 멈추는 것보다는 낫다" 가 맞는 판단일 수 있는데</strong>, 그때는 ERROR 를 별도 appender(동기 · 큐 없음)로 빼는 편이 낫습니다. 잃을 것을 고르는 것이 요점입니다</td></tr>
+    <tr><td>includeCallerData</td><td>문서가 <em>"rather expensive"</em> 라고 적어둔 그것입니다. 켜면 이벤트마다 스택을 뜨므로 <strong>μ 가 떨어집니다</strong> — 이 페이지의 원인 쪽 손잡이를 나쁜 방향으로 돌리는 설정이에요</td></tr>
+    <tr><td>종료할 때</td><td><code>maxFlushTime</code> 안에 못 비운 큐는 <strong>버려집니다.</strong> 배포로 파드를 내리는 순간 마지막 로그가 이 경로로 사라집니다 — 장애 직전 로그가 하필 그것일 수 있어요</td></tr>
+    <tr><td>다른 프레임워크</td><td>Log4j2 의 비동기 로거는 LMAX Disruptor 를 쓰고 <code>AsyncQueueFullPolicy</code> 로 같은 선택을 합니다(기본은 호출 스레드가 직접 쓰는 것 — 곧 막힘). <strong>이름만 다르고 문턱 둘은 같습니다</strong></td></tr>
+  </table>
+
+  <p><a href="/backpressure/">11번</a>이 <em>거부는 신호다</em> 라고 했다면, 이 페이지는 <strong>신호를 안 보내는 거부</strong>입니다. 큐가 가득 찼다는 사실을 아무도 듣지 못해요 — 그래서 <a href="/omission/">25번</a>의 결론과 만납니다. <strong>측정에서 빠진 것이 가장 나쁜 것입니다.</strong></p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/backpressure/"><span class="no">11</span><span><span class="t">거부는 버그가 아니라 신호다</span><span class="why">거부가 신호라면 이 페이지는 신호를 안 보내는 거부입니다 — 큐가 찼다는 것을 아무도 못 듣습니다.</span></span></a></li>
+      <li><a href="/omission/"><span class="no">25</span><span><span class="t">멈춰 있던 30초를 부하 테스트가 세지 않았다</span><span class="why">측정에서 빠진 것이 가장 나쁘다는 결론에 로그 쪽에서 도달합니다.</span></span></a></li>
+      <li><a href="/connpool/"><span class="no">08</span><span><span class="t">17밀리초 쿼리가 커넥션 풀을 말린다</span><span class="why">큐 길이를 소비율로 나누면 대기가 나옵니다. 저쪽은 커넥션, 여기는 로그 이벤트입니다.</span></span></a></li>
+      <li><a href="/correlation/"><span class="no">12</span><span><span class="t">응답을 순서로 맞추면 언제 어긋나는가</span><span class="why">사라진 로그를 로그로는 못 찾습니다. 요청 하나가 남긴 줄 수를 세는 것이 유일한 증거입니다.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/logdrop/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uMs:'ms', uPerSec:'/초', uKPerSec:'천/초', uEv:'건', uUs:'μs', uPct:'%',
+  hint:'도착 $1 · 소비 $2 · 큐 $3건 · 버림 문턱 $4건 · WARN·ERROR $5%',
+  bClean:'큐가 자라지 않는다', bFill:'차오르는 중',
+  bDiscAt:'$1 — INFO 버림 시작', bDisc:'INFO 를 버린다',
+  bFullAt:'$1 — 꽉 찼다', bBlock:'스레드가 막힌다', bDropAll:'등급 없이 버린다',
+  gText:'큐 $1 / $2건 · 버림 선 $3건 (남은 용량 $4건)',
+  fWhat:'설정', fLost:'INFO 손실', fErrLost:'ERROR 손실', fBlocked:'막힌 초과분', fWait:'대기',
+  fBase:'기본 (256 · 20%)', fKeepAll:'전부 보관 (0)', fNever:'neverBlock 켬', fBigQ:'큐 4,096',
+  mDiscAt:'버림 시작', mFullAt:'막힘 시작', mNever:'안 막힌다',
+  mLostInfo:'사라지는 INFO', mLostErr:'사라지는 ERROR', mQueue:'큐 길이', mWait:'로그 한 건의 대기',
+  vClean:'<b>큐가 자라지 않는다.</b> 도착 $1 · 소비 $2<br><span class="at">파이프가 도착을 다 소화한다 — AsyncAppender 가 광고한 대로 일하는 구간</span>',
+  vDisc:'<b>$1 부터 INFO 가 사라진다 — $2.</b><br>큐가 $3건에서 멈춘다 (남은 용량 $4건) <span class="at">— 예외도 경고도 없다</span>',
+  vBlock:'<b>$1 에 꽉 찼다 — 로그 호출 하나가 $2 를 기다린다.</b><br>비동기가 동기로 되돌아갔다 · 파이프 상한 $3 <span class="at">— 초과 $4 를 스레드가 이고 있다</span>',
+  vDropAll:'<b>$1 에 꽉 찼고 등급을 안 가린다 — ERROR $2 가 사라진다.</b><br>INFO $3 도 함께 <span class="at">— 막힘을 버림으로 바꾼 것이다</span>',
+  scene:[
+    '평시입니다. 초당 8천 건이 도착하고 파이프는 1만 건을 통과시켜요. 큐가 자라지 않고 로그 한 건이 0.1밀리초에 빠져나갑니다 — 한 건 쓰는 시간 그대로죠. AsyncAppender 가 정확히 광고한 대로 일하는 구간입니다. 문제는 이 상태가 평시라는 것이고, 아래 여섯 단계는 전부 여기서 손잡이 하나씩만 돌린 것입니다.',
+    '도착률을 네 배로 올렸습니다. 초당 4만 건인데 파이프는 여전히 1만 건이에요. 큐가 초당 3만 건씩 차오르고 205건에 닿는 순간 — 6.83밀리초입니다 — INFO 버림이 시작됩니다. 256에서 51을 뺀 자리죠. 그 뒤로 큐는 거기서 멈춥니다. 초과분 전부가 INFO 로 빠져나가니까요. 초당 3만 건이 사라지는데 예외도, 경고 로그도, 지표도 없습니다. 그리고 대기 시간이 0.1밀리초에서 20.6밀리초가 됐어요.',
+    '장애가 시작됐다고 봅시다. WARN·ERROR 비율을 5%에서 50%로 올렸습니다. 버림은 INFO 만 버리는데, 지금 도착하는 것의 절반이 버릴 수 없는 등급이에요. 초당 2만 건이고 파이프는 1만 건만 통과시킵니다. 버려도 못 줄입니다. 큐가 51건을 더 채우고 11.93밀리초에 꽉 차면 put 이 막고, 그때부터 로그 호출 하나가 100마이크로초를 기다립니다. 버림이 애플리케이션을 지키는 장치였는데 정작 위급할 때 버릴 것이 없습니다.',
+    'neverBlock 을 켰습니다. 막힘이 사라졌어요. 대신 꽉 찬 큐에 도착한 것은 등급을 안 가리고 버려집니다. put 이 offer 로 바뀐 것이고 실패하면 그냥 없어져요. 장애를 조사할 그 ERROR 가 초당 1만 건씩 사라집니다. 이 손잡이는 막힘을 없애는 것이 아니라 막힘을 버림으로 바꾸는 것입니다. 어느 쪽을 잃을지 고르는 자리죠.',
+    '이번엔 반대로 가 봅시다. 에러 비율을 5%로 되돌리고 discardingThreshold 를 0, 문서가 말한 전부 보관으로 뒀습니다. 로그는 한 건도 안 잃어요. 대신 버림 선이 없어져서 큐가 곧장 256까지 차고 8.53밀리초에 막힙니다. 2단계에서는 멀쩡했던 상황인데 여기서는 막혀요. 버림을 끄는 것은 안전을 끄는 것입니다.',
+    '큐를 4,096으로 키웠습니다. 버림이 시작되는 시각이 6.83밀리초에서 109.23밀리초로 약 열여섯 배 뒤로 갔어요. 그런데 사라지는 양은 초당 3만 건 그대로입니다 — 늦게 시작할 뿐이죠. 손실률은 도착률 빼기 소비율이고 큐 크기는 거기 안 들어갑니다. 대신 대기가 20.6밀리초에서 327.8밀리초가 됐어요. 리틀의 법칙입니다. 장애 대응 중에 3분의 1초 전 로그를 보고 판단하는 셈이에요.',
+    '마지막은 진짜 원인입니다. 큐도 문턱도 그대로 두고 한 건 쓰는 시간만 100마이크로초에서 5마이크로초로 바꿨습니다. 소비율이 초당 20만 건이 되니 도착 4만 건은 아무 문제가 아니에요. 버림도 막힘도 없습니다. 큐와 문턱은 증상이고, 원인은 늘 소비율이 도착률보다 낮은 것입니다. 로컬 파일이면 5마이크로초 대인데, 로그를 네트워크로 보내기 시작하면 100마이크로초도 낙관적입니다.'
+  ],
+};
+</script>
+<script src="/shared/logdrop-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "AsyncAppender 를 붙였더니 로그가 사라진다",
+  "description": "비동기 로깅의 기본 큐는 256건이고, 51건이 남았을 때부터 INFO 가 버려집니다. 6.83밀리초 뒤부터 초당 3만 건이 사라지는데 예외도 경고도 없어요. 그리고 에러가 쏟아지면 버릴 것이 없어서 애플리케이션 스레드가 막힙니다.",
+  "url": "https://lab.vermilion19.com/logdrop/",
+  "inLanguage": "ko",
+  "datePublished": "2026-09-04",
+  "dateModified": "2026-09-04",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "AsyncAppender 를 붙였더니 로그가 사라진다"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>
