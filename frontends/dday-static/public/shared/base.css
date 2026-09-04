@@ -119,7 +119,15 @@ h2{
   font-family:var(--serif);
   font-size:19px;font-weight:700;margin-bottom:12px;
 }
-.lede{color:var(--ink-2);font-size:16px;margin-bottom:12px;max-width:62ch}
+/* 62ch 는 한 줄에 예순두 글자쯤 — 읽기 좋은 길이라 여기서 끊는다.
+
+   `word-break:keep-all` 이 없으면 **한국어가 낱글자로 쪼개진다.** 기본값은 한글
+   음절 사이 어디서나 줄을 바꿀 수 있다고 보므로 "봅니다." 가 "봅니" / "다." 로
+   갈렸다 — 하늘 허브에서 실제로 그랬다. keep-all 은 띄어쓰기에서만 끊는다. */
+.lede{
+  color:var(--ink-2);font-size:16px;margin-bottom:12px;
+  max-width:62ch;word-break:keep-all;
+}
 
 /* 빌드 타임에 확정된 사실을 적어 두는 자리. 스니펫에 담길 문장이라 화면에서도
    실제로 읽혀야 한다 — 숨기면 구글이 감춘 텍스트로 본다. */

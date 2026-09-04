@@ -189,6 +189,10 @@ check('favicon.svg', (file) => {
         [/\.worldwide \.what \.dd\{/, '첫 화면 하늘 목록의 D-day 가 붙어 나온다'],
         [/\.worldwide \.what em\{/, '첫 화면 하늘 목록의 날짜가 붙어 나온다'],
         [/\.worldwide \.who img\{/, '첫 화면 목록의 그림과 이름 사이 여백이 없다'],
+        /* 한국어는 기본값이 음절 사이 어디서나 끊는다 — "봅니다." 가 "봅니"/"다." 로
+           갈린다. 하늘 허브에서 실제로 그랬고, 화면으로만 보이는 종류의 흠이다. */
+        [/\.lede\{[^}]*word-break:\s*keep-all/, '머리글이 낱글자로 쪼개진다 — 한국어에 keep-all 이 없다'],
+        [/body\[data-sky-hub\] \.lede\{/, '하늘 허브 머리글이 62ch 에 갇혀 마지막 한 마디가 다음 줄로 떨어진다'],
         [/prefers-color-scheme:\s*dark/, '어두운 테마 토큰이 없다'],
         [/@media \(max-width:\s*640px\)/, '좁은 화면 대응이 없다'],
     ];
