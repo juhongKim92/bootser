@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>The database blinked and every instance dropped out at once — health check asymmetry and fail-open</title>
+<meta name="description" content="On ALB defaults it takes 60 seconds to go out and 150 to come back. Same interval, but the thresholds are 2 and 5, so the two directions differ by 2.5×. And once they are all out, the load balancer sends to all of them — the behaviour the documentation calls failing open.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/healthfan/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/healthfan/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/healthfan/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/healthfan/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="The database blinked and every instance dropped out at once">
+<meta property="og:description" content="60 seconds out, 150 seconds back. And losing half is worse than losing all of them.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/healthfan/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The database blinked and every instance dropped out at once">
+<meta name="twitter:description" content="A 10-second blip is invisible; a 90-second one costs you 240. There is nothing in between.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/healthfan-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/healthfan/" hreflang="ko" lang="ko">KO</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>The database blinked and every instance dropped out at once</h1>
+  <p class="lede">Your health endpoint pokes the database — you were told that was good practice. So when the database is unwell for 90 seconds, <strong>all four instances drop out simultaneously.</strong> They share the dependency, so they reach the same answer at the same moment. Sixty seconds to go out, <strong>a hundred and fifty to come back</strong> — the same interval, but the thresholds are 2 and 5, so the two directions differ by 2.5×. And the instant they are all out, the load balancer <strong>sends to all of them.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>What the health check looks at</label>
+          <div class="seg" id="segMode" role="group" aria-label="Whether the health check touches the shared dependency">
+            <button data-mode="shallow">shallow (no DB)</button>
+            <button data-mode="half">deep — half affected</button>
+            <button data-mode="all" aria-pressed="true">deep — all affected</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sN">Instances</label>
+          <span class="v" id="vN">4<small>inst</small></span>
+          <input type="range" id="sN" min="0" max="4" step="1" value="2" aria-label="Instances registered in the target group">
+        </div>
+        <div class="dial">
+          <label for="sO">Outage length</label>
+          <span class="v" id="vO">10<small>s</small></span>
+          <input type="range" id="sO" min="1" max="300" step="1" value="10" aria-label="How long the shared dependency is unwell">
+        </div>
+        <div class="dial">
+          <label for="sI">Check interval</label>
+          <span class="v" id="vI">30<small>s</small></span>
+          <input type="range" id="sI" min="0" max="4" step="1" value="2" aria-label="HealthCheckIntervalSeconds">
+        </div>
+        <div class="dial">
+          <label for="sU">Unhealthy threshold</label>
+          <span class="v" id="vU">2<small>×</small></span>
+          <input type="range" id="sU" min="2" max="10" step="1" value="2" aria-label="UnhealthyThresholdCount">
+        </div>
+        <div class="dial">
+          <label for="sH">Healthy threshold</label>
+          <span class="v" id="vH">5<small>×</small></span>
+          <input type="range" id="sH" min="2" max="10" step="1" value="5" aria-label="HealthyThresholdCount">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->4 instances · interval 30s · unhealthy 2× · healthy 5× — out at 60s · back at 150s<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">How the outage, the eviction and the return overlap</span>
+      <div class="board">
+        <div class="time" id="time"><!--pr--><div class="axis"></div><div class="tick" style="left:0%"></div><div class="tick" style="left:33.33333333333333%"></div><div class="tick" style="left:66.66666666666666%"></div><div class="tick" style="left:100%"></div><div class="span out" style="left:0;width:11.11111111111111%"></div><div class="slabel out" style="left:0">DB unwell 10s</div><!--/pr--></div>
+        <div class="timex" id="timex"><!--pr--><span>0s</span><span>45s</span><span>90s</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="outl"></i>database unwell</span>
+          <span><i class="badl"></i>routing not normal</span>
+          <span><i class="evictl"></i>evicted</span>
+          <span><i class="backl"></i>back in service</span>
+        </div>
+
+        <div class="pool" id="pool"><!--pr--><div class="inst up"><span></span></div><div class="inst up"><span></span></div><div class="inst up"><span></span></div><div class="inst up"><span></span></div><!--/pr--></div>
+        <div class="poolnote" id="poolnote"><!--pr-->healthy 4 / 4 · load on survivors ×1<!--/pr--></div>
+        <table class="four" id="four"><!--pr--><tr><th>Setting</th><th>Eviction</th><th>Return</th><th>Load on survivors</th><th>Routing abnormal</th></tr><tr><td>shallow</td><td class="good">—</td><td class="good">—</td><td class="good">×1</td><td class="good">—</td></tr><tr><td>deep · half</td><td class="good">—</td><td class="good">—</td><td class="good">×1</td><td class="good">—</td></tr><tr><td>deep · all</td><td class="good">—</td><td class="good">—</td><td class="good">×1</td><td class="good">—</td></tr><tr><td>deep · all · 5s interval</td><td class="good">—</td><td class="good">—</td><td class="good">×1</td><td class="good">—</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">Evicted at</span><span class="n">none</span></div><div class="m good"><span class="k">Back at</span><span class="n">none</span></div><div class="m bad"><span class="k">Return / eviction</span><span class="n">×2.5</span></div><div class="m good"><span class="k">healthy</span><span class="n">4 / 4</span></div><div class="m good"><span class="k">Load on survivors</span><span class="n">×1</span></div><div class="m good"><span class="k">New instance</span><span class="n">30s</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>The health check never saw this outage.</b> 0 checks failed during 10s — 2 consecutive are required<br><span class="at">with these settings the shortest detectable outage is 30s</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">Previous</button>
+        <button id="btnStep">Next step</button>
+        <button id="btnReset">Reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>The dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What it changes</th></tr>
+    <tr><td>What the check looks at</td><td><strong>Shallow</strong> only asks whether the process is alive. <strong>Deep</strong> pokes the database — which turns an outage in a shared dependency into <strong>simultaneous eviction of several instances</strong>. Why half differs from all is the picture on this page.</td></tr>
+    <tr><td>Instances</td><td>How many are registered in the target group. <strong>It only matters during partial eviction</strong> — the load multiplier on the survivors is <code>N ÷ survivors</code>.</td></tr>
+    <tr><td>Outage length</td><td>How long the shared dependency is unwell. <strong>Short outages are never detected</strong> — the consecutive-failure count cannot be reached. That there is no middle ground is the point.</td></tr>
+    <tr><td>Check interval</td><td><code>HealthCheckIntervalSeconds</code>. <strong>30 seconds by default</strong>, and the documented range is 5–300. This one value fixes eviction, return and new-instance entry <strong>all three at once</strong>.</td></tr>
+    <tr><td>Unhealthy threshold</td><td><code>UnhealthyThresholdCount</code>. <strong>Default 2</strong>, range 2–10. That many consecutive failures takes a target out.</td></tr>
+    <tr><td>Healthy threshold</td><td><code>HealthyThresholdCount</code>. <strong>Default 5</strong>, range 2–10. <strong>That the default differs from the unhealthy threshold is where this page starts.</strong></td></tr>
+  </table>
+
+  <p>All times are <strong>relative to the start of the outage</strong> and fully determined — no randomness, no sampling. Load balancer nodes are fixed at two (two AZs), and the figures shown are the <strong>worst phase</strong> (why that is computed as two ends rather than sampled is below).</p>
+
+  <h2>Things to try</h2>
+
+  <div class="recipe">
+    <h4>1. A ten-second blip — nothing happens</h4>
+    <div class="seq">deep·all · 4 instances · 30s interval · unhealthy 2 · healthy 5 · outage <em>10s</em>
+eviction <em>none</em> · healthy <em>4 / 4</em> · failed checks <em>0–1</em></div>
+    <p class="why">On a 30-second interval, <strong>at most one check</strong> lands inside a 10-second window. Two consecutive failures cannot happen. <strong>The health check never sees this outage.</strong> Some requests failed, but the routing did not move a hair — and that is usually the right behaviour.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. Stretch it to ninety — all out, so all get traffic</h4>
+    <div class="seq">outage 10 → <em>90s</em>
+evicted at <em>60s</em> · back at <em>240s</em> · routing abnormal for <em>180s</em>
+healthy <em>0 / 4</em> · <em>fail-open</em> · load on survivors <em>×1</em></div>
+    <p class="why">At 60 seconds all four go out <strong>simultaneously</strong> — same database, same answer, same moment. And when healthy reaches zero the documented behaviour fires: <em>"the load balancer fails open"</em> — <strong>all of them are unhealthy, so all of them get traffic.</strong> In routing terms nothing changed. <strong>The database was unwell for 90 seconds and routing is not normal until 240.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. Only half affected — this is worse</h4>
+    <div class="seq">deep·all → <em>deep·half</em> (same 90-second outage)
+healthy <em>2 / 4</em> · load on survivors <em>×2</em> · times <em>unchanged</em></div>
+    <p class="why">Only two went out, so fail-open does not trigger. The remaining two <strong>carry four instances' worth of traffic.</strong> If they cannot, the next check takes them out too — and then you are in fail-open anyway. <strong>A partial failure is worse than a total one</strong>, because when everything is out the load is at least spread across four again. The opposite of the intuition.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. Switch to a shallow check — no eviction</h4>
+    <div class="seq">deep·half → <em>shallow</em> (does not touch the DB)
+eviction <em>none</em> · healthy <em>4 / 4</em> · routing abnormal for <em>0s</em></div>
+    <p class="why">Same database outage. Requests still fail. <strong>The only difference is that routing does not wobble.</strong> The moment the database returns, so does the service — no extra 150 seconds. <strong>One setting decides whether the same outage is "a few failed requests" or "everyone evicted plus 150 seconds of recovery".</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. Healthy threshold to 2 — half the abnormal window</h4>
+    <div class="seq">deep·all · healthy threshold 5 → <em>2</em>
+back 240 → <em>150s</em> · routing abnormal 180 → <em>90s</em> · asymmetry ×2.5 → <em>×1</em></div>
+    <p class="why">Eviction is unchanged at 60 seconds. The only thing that moved is <strong>how long coming back takes</strong>, and that alone halves the abnormal window. The default of 5 is a conservative choice — <em>don't readmit a flapping instance</em> — but <strong>during a shared-dependency outage that conservatism only ever delays recovery.</strong> This is the cheapest dial on the page.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. Interval down to five — everything speeds up, but</h4>
+    <div class="seq">interval 30 → <em>5s</em> (healthy threshold back to 5)
+evicted 60 → <em>10s</em> · back 240 → <em>115s</em> · new instance 30 → <em>5s</em></div>
+    <p class="why">The documented minimum. Eviction, return and new-instance entry all get faster. <strong>But eviction at 10 seconds means a single 10-second pause takes an instance out.</strong> The timeout default is 5 seconds, so one <a href="/en/gc/">GC pause</a> or <a href="/en/lockttl/">stop-the-world</a> becomes two consecutive failures. <strong>The price of a shorter interval is false positives, not database load.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. Interval up to three hundred — everything gets worse</h4>
+    <div class="seq">interval 5 → <em>300s</em> (the documented maximum)
+eviction <em>none</em> (the 90-second outage is invisible) · new instance <em>300s</em></div>
+    <p class="why">Nothing is detected, which looks like a win — except <strong>the same interval also governs new-instance entry.</strong> A scaled-out instance waits 300 seconds before it takes traffic. And a <em>genuinely</em> dead instance survives for 600. <strong>This dial does not improve in one direction</strong>, because it fixes three things at once.</p>
+  </div>
+
+  <h2>The documentation fixes the arithmetic</h2>
+
+  <p>The checkpoint for this episode is ALB's target-group health check page. Defaults and rule live in the same table.</p>
+
+  <table class="keytable">
+    <tr><th>Setting</th><th>Default</th><th>Range</th></tr>
+    <tr><td>HealthCheckIntervalSeconds</td><td><strong>30s</strong></td><td>5–300</td></tr>
+    <tr><td>UnhealthyThresholdCount</td><td><strong>2</strong></td><td>2–10</td></tr>
+    <tr><td>HealthyThresholdCount</td><td><strong>5</strong></td><td>2–10</td></tr>
+    <tr><td>HealthCheckTimeoutSeconds</td><td>5s</td><td>2–120</td></tr>
+  </table>
+
+  <div class="callout"><em>"If the health checks exceed <strong>UnhealthyThresholdCount</strong> consecutive failures, the load balancer takes the target out of service. When the health checks exceed <strong>HealthyThresholdCount</strong> consecutive successes, the load balancer puts the target back in service."</em></div>
+
+  <p>Put the defaults into the rule and two times fall out — <strong>eviction at 2 × 30 = 60 seconds</strong>, <strong>return at 5 × 30 = 150 seconds</strong>. The same interval, and yet the two directions <strong>differ by 2.5×</strong>. That is the starting point of this whole page, and no document warns you about the asymmetry.</p>
+
+  <p>The documentation also guarantees why those times come out as clean multiples.</p>
+
+  <div class="callout"><em>"Each health check request is independent and <strong>the result lasts for the entire interval.</strong> The time that it takes for the target to respond does not affect the interval for the next health check request."</em></div>
+
+  <p>So <strong>response time never mixes into the detection time.</strong> It is always a whole multiple of the interval — which is precisely why this model needs no randomness.</p>
+
+  <h2>Fail-open — all dead means all get traffic</h2>
+
+  <p>The instant healthy reaches zero, routing inverts. The documentation even names the behaviour.</p>
+
+  <div class="callout"><em>"If a target group contains only unhealthy registered targets, the load balancer routes requests to all those targets, <strong>regardless of their health status.</strong> This means that if all targets fail health checks at the same time in all enabled Availability Zones, the load balancer <strong>fails open.</strong>"</em></div>
+
+  <p>It is a reasonable choice — better than sending nowhere. But <strong>the premise that health checks protect you disappears here.</strong> And it has one side effect.</p>
+
+  <table class="keytable">
+    <tr><th>How many are out</th><th>fail-open</th><th>Load on survivors</th><th>What happens</th></tr>
+    <tr><td>0 / 4</td><td>—</td><td>×1</td><td>normal</td></tr>
+    <tr><td><strong>2 / 4</strong></td><td>no</td><td><strong>×2</strong></td><td><strong>two carry four instances' load — cascade</strong></td></tr>
+    <tr><td>3 / 4</td><td>no</td><td><strong>×4</strong></td><td>one carries four instances' load</td></tr>
+    <tr><td>4 / 4</td><td><strong>yes</strong></td><td>×1</td><td>spread across four again</td></tr>
+  </table>
+
+  <div class="callout"><strong>The load multiplier is not monotonic.</strong> It worsens with every instance lost, and then <strong>the moment the last one goes it drops from ×4 back to ×1.</strong> Which means there really is a band where <em>somewhat broken</em> is worse than <em>entirely broken</em>.</div>
+
+  <h2>One interval fixes three things</h2>
+
+  <p>This is what steps 6 and 7 show. A single <code>HealthCheckIntervalSeconds</code> sets three different times simultaneously.</p>
+
+  <table class="keytable">
+    <tr><th>Interval</th><th>Eviction</th><th>Return (90s outage)</th><th>New instance</th><th>False-positive margin</th></tr>
+    <tr><td>5s</td><td>10s</td><td>115s</td><td><strong>5s</strong></td><td><strong>10s — risky</strong></td></tr>
+    <tr><td><strong>30s (default)</strong></td><td>60s</td><td>240s</td><td>30s</td><td>60s</td></tr>
+    <tr><td>300s</td><td><strong>not detected</strong></td><td>—</td><td><strong>300s</strong></td><td>600s</td></tr>
+  </table>
+
+  <p>Why new instances are quick is spelled out separately in the documentation.</p>
+
+  <div class="callout"><em>"After your target is registered, <strong>it must pass one health check</strong> to be considered healthy."</em></div>
+
+  <p><strong>A new instance only has to pass once.</strong> An instance that dropped out needs five. So <strong>scaling out is five times faster than bringing an existing instance back.</strong> During a deploy that asymmetry inverts the intuition — the new pod takes traffic almost at once, while the pod that merely stumbled stays out for a long while.</p>
+
+  <h2>The phase is not sampled</h2>
+
+  <p>There is no telling where in the interval an outage begins. But <strong>compute both ends</strong> and no randomness is needed.</p>
+
+  <table class="keytable">
+    <tr><th>Phase</th><th>To the first failure</th><th>Eviction (defaults)</th></tr>
+    <tr><td>best — outage starts just before a check</td><td>immediately</td><td><code>(2−1) × 30</code> = 30s</td></tr>
+    <tr><td>worst — outage starts just after a check</td><td>one interval</td><td><code>2 × 30</code> = 60s</td></tr>
+  </table>
+
+  <p>The difference is <strong>exactly one interval</strong>. What the screen shows is the worst case, because that is the one you can plan capacity against. The same approach <a href="/en/nagle/">no. 28</a> took when it split segment counts into odd and even.</p>
+
+  <h2>What this model assumes</h2>
+
+  <table class="keytable">
+    <tr><th>Assumption</th><th>What breaks if it fails</th></tr>
+    <tr><td>instances fail together</td><td>They share a database, so they are treated as reaching the same answer at the same moment. In reality <strong>connection pool states differ slightly</strong> and evictions scatter by a few seconds — and that scatter <strong>creates the partial-eviction band</strong> that step 3 warns about. The model does not draw that intermediate state</td></tr>
+    <tr><td>one clean outage</td><td>Repeated blips reset the consecutive-failure count, so eviction comes later or not at all. It moves <strong>non-monotonically</strong></td></tr>
+    <tr><td>evicted instances stay healthy</td><td>The path where survivors actually die under the extra load is outside the model. That belongs to <a href="/en/backpressure/">no. 11</a> and <a href="/en/retrystorm/">no. 14</a> — this page only walks you to that door</td></tr>
+    <tr><td>two nodes (two AZs)</td><td>The documentation says <em>"Each load balancer node checks the health of each target"</em>, so the check count multiplies by AZ. <strong>The eviction time does not change</strong>, though — each node decides on its own</td></tr>
+    <tr><td>the defaults are specified, the outage is not</td><td>30 · 2 · 5 are fixed by the documentation and do not move. <strong>The outage length is an input we supplied</strong> — no specification could contain it</td></tr>
+  </table>
+
+  <h2>In the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>First thing to look at</td><td>Overlay <code>HealthyHostCount</code> <strong>on the same time axis as your database metrics.</strong> If it steps down 60 seconds after a database wobble and only climbs back <strong>150 seconds later</strong>, this is your page. Viewed on separate charts, the causality is invisible</td></tr>
+    <tr><td>The cheapest fix</td><td><strong>Take the shared dependency out of the health check.</strong> Evicting instances because the database died fixes nothing — every destination fails anyway. Expose dependency status on a <em>different</em> endpoint and use it for alerting only</td></tr>
+    <tr><td>Then</td><td><code>HealthyThresholdCount</code> to 2. Step 5 prices it — the abnormal window halves. The unhealthy threshold <strong>cannot go below 2</strong>; that is the documented floor</td></tr>
+    <tr><td>Before shortening the interval</td><td>It means eviction at <code>interval × 2</code>. Five seconds gives you <strong>ten</strong>, which is the length of one <a href="/en/gc/">GC pause</a>. The timeout default is 5 seconds, so checks during a pause count as plain failures</td></tr>
+    <tr><td>Kubernetes</td><td>Different names and <strong>different defaults</strong> — <code>periodSeconds</code> 10, <code>failureThreshold</code> 3, <code>successThreshold</code> 1. With a healthy threshold of <strong>1</strong>, ALB's asymmetry is absent. But putting the same deep check on both readiness and liveness makes <strong>a database outage into pod restarts</strong> — considerably worse</td></tr>
+    <tr><td>Do not rely on fail-open</td><td>It does <strong>not</strong> trigger when a single AZ is wiped out — the documentation says <em>"in all enabled Availability Zones"</em>. If one AZ's instances all drop, they stay dropped and the other AZ absorbs their load</td></tr>
+    <tr><td>How to measure it</td><td>Leave the database alone and make <strong>only the health path return 500.</strong> Do it on one instance and time when <code>HealthyHostCount</code> falls and rises — 60 and 150 seconds will confirm whether the arithmetic above holds in your account</td></tr>
+  </table>
+
+  <p>Where <a href="/en/raft/">no. 4</a> treated <em>how long it takes to decide a node is dead</em> through election timeouts, this page is the other side of the same dial — <strong>how long it takes to decide a node is alive again</strong>, and that side is 2.5× longer.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/raft/"><span class="no">04</span><span><span class="t">Who becomes leader when the network splits</span><span class="why">The other side of the same dial — how long it takes to decide a node is dead is set by the election timeout.</span></span></a></li>
+      <li><a href="/en/gc/"><span class="no">02</span><span><span class="t">Why G1 and ZGC stop differently</span><span class="why">Tighten the unhealthy threshold and one pause becomes an eviction — how long is that pause?</span></span></a></li>
+      <li><a href="/en/backpressure/"><span class="no">11</span><span><span class="t">Rejection is a signal, not a bug</span><span class="why">Once the survivors start taking double, what do you have to refuse?</span></span></a></li>
+      <li><a href="/en/retrystorm/"><span class="no">14</span><span><span class="t">The load is gone and it still will not recover</span><span class="why">The door where partial eviction turns into a cascade — it will not come back even after the load does.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">Index</a> · <a href="/healthfan/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uSec:'s', uInst:'inst', uTimes:'×',
+  hint:'$1 instances · interval $2 · unhealthy $3× · healthy $4× — out at $5 · back at $6',
+  tOut:'DB unwell $1', tEvict:'evicted $1', tBack:'back $1',
+  pNote:'healthy $1 / $2 · load on survivors $3',
+  fWhat:'Setting', fEvict:'Eviction', fBack:'Return', fLoad:'Load on survivors', fBad:'Routing abnormal',
+  fShallow:'shallow', fHalf:'deep · half', fAll:'deep · all', fTight:'deep · all · 5s interval',
+  mEvict:'Evicted at', mBack:'Back at', mSkew:'Return / eviction',
+  mHealthy:'healthy', mLoad:'Load on survivors', mNewIn:'New instance', mNone:'none',
+  vShallow:'<b>No eviction.</b> The database was unwell for $1, but the check only looks at the process<br><span class="at">requests fail while routing stays put — when the database returns, so does the service</span>',
+  vUnseen:'<b>The health check never saw this outage.</b> $2 checks failed during $1 — $3 consecutive are required<br><span class="at">with these settings the shortest detectable outage is $4</span>',
+  vFailOpen:'<b>All out at $1, so all of them get traffic (fail-open).</b><br>Back at $2 — routing is not normal for $3 <span class="at">— the load is at least spread across all of them</span>',
+  vPartial:'<b>$1 of $2 evicted — fail-open does not trigger.</b><br>The remaining $3 carry $4 load · back at $5 <span class="at">— this is where the cascade starts</span>',
+  scene:[
+    'The database blinked for ten seconds. With a 30-second check interval, at most one check lands inside that window, and eviction needs two consecutive failures — so it cannot happen. The health check never sees this outage. Some requests failed, but the routing did not move a hair, and usually that is the right behaviour.',
+    'The same outage, now ninety seconds. Two consecutive failures are reached, and at 60 seconds all four go out simultaneously — same database, same answer, same moment. But when healthy hits zero the documented behaviour fires: all of them are unhealthy, so the load balancer sends to all of them. That is failing open. And the return is at 240 seconds. The database was unwell for 90 and routing takes three times that to be normal again.',
+    'Now only half are affected. Two went out, so fail-open does not trigger, and the remaining two carry four instances of traffic — double load. If they cannot hold, the next check takes them out too and then you land in fail-open anyway. A partial failure is worse than a total one, because when everything is out the load is at least spread across four. The opposite of the intuition.',
+    'Switch to a shallow check, one that only asks whether the process is alive. Same database outage, requests still failing — the only difference is that routing does not wobble. So the moment the database returns, so does the service. No extra 150 seconds. One setting decides whether the same outage ends as a few failed requests or as everyone evicted plus 150 seconds of recovery.',
+    'Back to the deep check, and lower only the healthy threshold from five to two. Eviction is unchanged at 60 seconds. The only thing that moved is the time to come back, and that alone halves the abnormal window from 180 seconds to 90. The default of five is a conservative choice about not readmitting a flapping instance, but during a shared-dependency outage that conservatism only ever delays recovery. It is the cheapest dial here.',
+    'Interval down to five seconds, the documented minimum. Eviction, return and new-instance entry all get faster — 10 seconds, 115 seconds and 5 seconds. But eviction at 10 seconds means a single 10-second pause takes an instance out. The timeout default is five seconds, so one GC pause becomes two consecutive failures. The price of a shorter interval is false positives, not database load.',
+    'The other way now, up to three hundred, the documented maximum. The 90-second outage is invisible, which looks like a win — except the same interval also governs new-instance entry. A scaled-out instance waits 300 seconds for traffic. And a genuinely dead instance survives 600. This dial does not improve in one direction, because it fixes three things at once.'
+  ],
+};
+</script>
+<script src="/shared/healthfan-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "The database blinked and every instance dropped out at once",
+  "description": "On ALB defaults it takes 60 seconds to go out and 150 to come back. Same interval, but the thresholds are 2 and 5, so the two directions differ by 2.5×. And once they are all out, the load balancer sends to all of them — the behaviour the documentation calls failing open.",
+  "url": "https://lab.vermilion19.com/en/healthfan/",
+  "inLanguage": "en",
+  "datePublished": "2026-09-04",
+  "dateModified": "2026-09-04",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "The database blinked and every instance dropped out at once"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

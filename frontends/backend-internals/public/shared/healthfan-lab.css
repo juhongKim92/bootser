@@ -1,0 +1,115 @@
+/* ============================================================
+   33. DB 가 깜빡했더니 전 인스턴스가 동시에 빠졌다 — 헬스체크의 비대칭과 fail-open
+   ============================================================ */
+
+.lab{margin:32px 0 8px;border:1px solid var(--rule);border-radius:4px;background:var(--paper-2);overflow:hidden}
+.lab section{border-bottom:1px solid var(--rule);padding:16px 18px}
+.lab section:last-child{border-bottom:none}
+.cap{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;display:block}
+
+/* --- 손잡이 --- */
+.dials{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-end}
+.dial label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px}
+.dial input[type=range]{width:124px;max-width:42vw;accent-color:var(--horizon);vertical-align:middle}
+.dial .v{font-family:var(--mono);font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums;min-width:64px;display:inline-block}
+.dial .v small{font-size:11px;color:var(--ink-3)}
+.seg{display:flex;gap:0;border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+.seg button{border:none;border-right:1px solid var(--rule);border-radius:0;padding:6px 12px;font-size:11px;white-space:nowrap}
+.seg button:last-child{border-right:none}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.hint{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:8px;min-height:14px}
+.hint.warn{color:var(--blocked)}
+
+.board{border:1px solid var(--rule);border-radius:3px;background:var(--paper);padding:13px 14px 10px}
+
+/* --- 시간축 -----------------------------------------------------------
+   가로가 시간이다. 세로 눈금 하나가 검사 한 번 — 문서가 정한 "간격의 정수배" 성질이
+   눈금 간격으로 그대로 보인다. 실패한 검사만 색이 다르다. */
+.time{position:relative;height:78px;margin-bottom:2px}
+.time .axis{position:absolute;left:0;right:0;top:38px;height:1px;background:var(--rule)}
+.time .tick{position:absolute;top:32px;height:13px;border-left:1px solid var(--ink-3);opacity:.5}
+.time .tick.fail{border-left:1.5px solid var(--blocked);opacity:1;top:28px;height:21px}
+.time .span{position:absolute;height:12px;border-radius:1px}
+.time .span.out{top:18px;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--blocked) 38%,transparent) 0 3px,transparent 3px 6px)}
+.time .span.bad{top:48px;background:color-mix(in srgb,var(--free) 34%,transparent)}
+.time .slabel{position:absolute;top:2px;font-family:var(--mono);font-size:8.5px;white-space:nowrap;color:var(--blocked)}
+.time .mark{position:absolute;top:14px;height:44px;border-left:1.5px solid var(--ink-2)}
+.time .mark.evict{border-left-color:var(--blocked)}
+.time .mark.back{border-left-color:var(--live)}
+.time .mlabel{position:absolute;top:62px;font-family:var(--mono);font-size:8.5px;white-space:nowrap;transform:translateX(-50%)}
+.time .mlabel.evict{color:var(--blocked)}
+.time .mlabel.back{color:var(--live)}
+.timex{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:4px}
+
+/* --- 인스턴스 줄 — 빠진 것과 남은 것, 그리고 fail-open 의 세 번째 상태 --- */
+.pool{display:flex;gap:7px;flex-wrap:wrap;margin-top:15px}
+.pool .inst{width:34px;height:26px;border:1px solid var(--rule);border-radius:2px;display:flex;align-items:center;justify-content:center}
+.pool .inst span{display:block;width:9px;height:9px;border-radius:50%}
+.pool .inst.up{background:color-mix(in srgb,var(--live) 12%,transparent)}
+.pool .inst.up span{background:var(--live)}
+.pool .inst.down{background:var(--paper-2)}
+.pool .inst.down span{background:var(--ink-3);opacity:.45}
+/* unhealthy 인데도 트래픽을 받는 상태 — 문서가 fail-open 이라고 부르는 그것 */
+.pool .inst.openx{background:color-mix(in srgb,var(--blocked) 10%,transparent);border-style:dashed;border-color:var(--blocked)}
+.pool .inst.openx span{background:var(--blocked)}
+.poolnote{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);margin-top:7px}
+
+/* --- 네 가지 설정 비교 --- */
+.four{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:15px}
+.four th,.four td{text-align:right;padding:5px 0 5px 10px;border-bottom:1px solid var(--rule);vertical-align:baseline}
+.four th{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--ink-3);font-weight:400}
+.four td{font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.four th:first-child,.four td:first-child{text-align:left;padding-left:0;color:var(--ink);white-space:nowrap}
+.four td.bad{color:var(--blocked)}
+.four td.good{color:var(--live)}
+
+/* --- 미터 --- */
+.meters{display:flex;gap:24px;flex-wrap:wrap;margin-top:15px}
+.meters .m{min-width:84px}
+.meters .k{display:block;font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.meters .n{font-family:var(--mono);font-size:19px;color:var(--ink);font-variant-numeric:tabular-nums}
+.meters .n small{font-size:11px;color:var(--ink-3);margin-left:2px}
+.meters .m.bad .n{color:var(--blocked)}
+.meters .m.good .n{color:var(--live)}
+
+/* --- 판정 --- */
+.verdict{border-left:2px solid var(--rule);background:var(--paper);padding:10px 0 10px 13px;margin-top:14px;
+  font-family:var(--mono);font-size:10.5px;line-height:1.8;color:var(--ink-2)}
+.verdict.stuck{border-left-color:var(--blocked)}
+.verdict.stuck b{color:var(--blocked)}
+.verdict.ok{border-left-color:var(--live)}
+.verdict.ok b{color:var(--live)}
+.verdict b{font-weight:500;color:var(--ink)}
+.verdict .at{color:var(--ink-3)}
+
+/* --- 조작대 --- */
+.transport{background:var(--paper-3);display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.transport .keys{display:flex;gap:6px;flex-wrap:wrap}
+.narration{flex:1;min-width:240px;font-family:var(--serif);font-size:14.5px;line-height:1.65;color:var(--ink)}
+.narration .n{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-3);display:block;margin-bottom:3px}
+
+/* --- 안내 --- */
+.recipe{border:1px solid var(--rule);border-radius:3px;background:var(--paper-2);padding:14px 16px;margin:14px 0;max-width:68ch}
+.recipe h4{font-family:var(--sans);font-size:14px;font-weight:700;margin:0 0 4px}
+.recipe .seq{font-family:var(--mono);font-size:11px;line-height:1.9;background:var(--paper);border:1px solid var(--rule);
+  border-radius:2px;padding:9px 11px;margin:9px 0;white-space:pre-wrap;color:var(--ink-2)}
+.recipe .seq em{font-style:normal;color:var(--horizon)}
+.recipe .why{font-size:13.5px;color:var(--ink-2);margin:0}
+.keytable{width:100%;border-collapse:collapse;margin:12px 0;max-width:68ch;font-size:13.5px}
+.keytable th,.keytable td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.keytable th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:400}
+.keytable td:first-child{font-family:var(--mono);font-size:11.5px;white-space:nowrap;width:1%;padding-right:18px;color:var(--ink)}
+
+/* 범례 */
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:11px;font-family:var(--mono);font-size:9.5px;color:var(--ink-3)}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend i{width:16px;height:9px;border-radius:1px;display:block;flex:none}
+.legend i.outl{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--blocked) 38%,transparent) 0 3px,transparent 3px 6px)}
+.legend i.badl{background:color-mix(in srgb,var(--free) 34%,transparent)}
+.legend i.evictl{background:var(--blocked);height:2px}
+.legend i.backl{background:var(--live);height:2px}
+
+@media (max-width:600px){
+  .time{height:88px}
+  .time .slabel,.time .mlabel{font-size:8px}
+}

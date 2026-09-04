@@ -19,7 +19,7 @@ export const NO = {
   timeout: '17', lockttl: '18', throughput: '19', rebalance: '20', tcpclose: '21',
   aggregate: '22', alignment: '23', fanout: '24', omission: '25', slowstart: '26',
   backlog: '27', nagle: '28', pagesplit: '29', usl: '30',
-  quorum: '31', logdrop: '32'
+  quorum: '31', logdrop: '32', healthfan: '33'
 };
 
 /* slug → [{ to, ko, en }] */
@@ -33,7 +33,8 @@ export const RELATED = {
   gc: [
     { to: 'lockttl', ko: '그 정지가 분산 락의 TTL 을 넘으면 락을 잃습니다. 본인은 모릅니다.', en: 'When that pause outlasts a distributed lock’s TTL the lock is gone — and the process cannot tell.' },
     { to: 'keepalive', ko: '정지 중에는 하트비트도 못 나갑니다. 살아 있는데 죽은 것으로 처리됩니다.', en: 'During a pause the heartbeat cannot go out either — alive, and treated as dead.' },
-    { to: 'connpool', ko: '정지한 시간도 커넥션을 잡고 있는 시간에 들어갑니다.', en: 'Time spent paused still counts as time holding the connection.' }
+    { to: 'connpool', ko: '정지한 시간도 커넥션을 잡고 있는 시간에 들어갑니다.', en: 'Time spent paused still counts as time holding the connection.' },
+    { to: 'healthfan', ko: '그 정지가 헬스체크 두 번에 걸치면 로드밸런서가 인스턴스를 빼 버립니다.', en: 'Let that pause span two health checks and the load balancer takes the instance out.' }
   ],
   hashring: [
     { to: 'stampede', ko: '노드가 빠져서 캐시가 무너지는 것이 이 페이지라면, 아무도 빠지지 않았는데 무너지는 것이 16번입니다.', en: 'Here a node leaves and the cache collapses; in no. 16 nobody leaves and it collapses anyway.' },
@@ -44,7 +45,8 @@ export const RELATED = {
   raft: [
     { to: 'keepalive', ko: '노드가 죽었다고 판단하는 데 걸리는 시간 — 선거 타임아웃과 같은 저울입니다.', en: 'How long it takes to decide a node is dead — the same dial as the election timeout.' },
     { to: 'hashring', ko: '멤버가 바뀌면 데이터는 어디로 옮겨가는가.', en: 'When the membership changes, where does the data move?' },
-    { to: 'quorum', ko: '합의로 푸는 대신 확률로 사는 쪽 — 정족수가 정확히 무엇을 보장하나.', en: 'The side that buys with probability instead of consensus — what a quorum actually guarantees.' }
+    { to: 'quorum', ko: '합의로 푸는 대신 확률로 사는 쪽 — 정족수가 정확히 무엇을 보장하나.', en: 'The side that buys with probability instead of consensus — what a quorum actually guarantees.' },
+    { to: 'healthfan', ko: '살아났다고 판단하는 데 걸리는 시간 — 그쪽이 2.5배 깁니다.', en: 'How long it takes to decide a node is alive again — that side is 2.5× longer.' }
   ],
   mqtt: [
     { to: 'retrystorm', ko: 'QoS 1 의 재전송이 부하 자체가 되면 어떻게 되는가.', en: 'What happens when QoS 1’s retransmissions become the load itself.' },
@@ -91,7 +93,8 @@ export const RELATED = {
     { to: 'omission', ko: '큐에서 기다린 시간은 서버가 재는 응답시간에 안 들어갑니다 — 통째로 사라집니다.', en: 'Time spent waiting in the queue never enters server-side latency — it vanishes whole.' },
     { to: 'backlog', ko: '큐를 키우면 거부가 대기로 바뀌는 일이 커널 안에서도 똑같이 벌어집니다.', en: 'Growing the queue turns rejection into waiting — the same thing happens inside the kernel.' },
     { to: 'usl', ko: '동시성을 늘리는 것이 언제부터 손해로 바뀌는가 — 정점이 그 자리입니다.', en: 'Where adding concurrency turns into a loss — the peak is that point.' },
-    { to: 'logdrop', ko: '거부를 아무에게도 알리지 않는 큐 — 로그 파이프가 조용히 버리고 조용히 막습니다.', en: 'A queue that tells nobody it rejected — the log pipe drops silently and blocks silently.' }
+    { to: 'logdrop', ko: '거부를 아무에게도 알리지 않는 큐 — 로그 파이프가 조용히 버리고 조용히 막습니다.', en: 'A queue that tells nobody it rejected — the log pipe drops silently and blocks silently.' },
+    { to: 'healthfan', ko: '그 부하가 어디서 오는가 — 인스턴스 절반이 빠지면 남은 절반이 두 배를 받습니다.', en: 'Where that load comes from — lose half the instances and the other half takes double.' }
   ],
   correlation: [
     { to: 'timeout', ko: '타임아웃으로 포기한 요청의 응답이 늦게 오면, 그게 다음 요청의 짝이 됩니다.', en: 'When the answer to a timed-out request arrives late, it becomes the next request’s pair.' },
@@ -204,6 +207,12 @@ export const RELATED = {
     { to: 'connpool', ko: '같은 곡선을 커넥션 풀 크기로 — 리틀의 법칙이 세 번째로 나옵니다.', en: 'The same curve as pool size — Little’s law for the third time.' },
     { to: 'omission', ko: '정점을 넘겼는지 재려면 측정이 먼저 정직해야 합니다.', en: 'To measure whether you are past the peak, the measurement has to be honest first.' },
     { to: 'backpressure', ko: '정점 위에서 들어오는 요청을 어떻게 할 것인가.', en: 'What to do with the requests that arrive past the peak.' }
+  ],
+  healthfan: [
+    { to: 'raft', ko: '같은 저울의 반대쪽 — 죽었다고 판단하는 데 걸리는 시간은 선거 타임아웃이 정합니다.', en: 'The other side of the same dial — how long it takes to decide a node is dead is set by the election timeout.' },
+    { to: 'gc', ko: '이탈 문턱을 조이면 정지 한 번이 이탈이 됩니다. 그 정지가 얼마나 긴가.', en: 'Tighten the unhealthy threshold and one pause becomes an eviction — how long is that pause?' },
+    { to: 'backpressure', ko: '남은 인스턴스가 두 배를 받기 시작하면 무엇을 거절해야 하는가.', en: 'Once the survivors start taking double, what do you have to refuse?' },
+    { to: 'retrystorm', ko: '부분 이탈이 연쇄로 넘어가는 그 문 — 부하가 걷혀도 안 돌아옵니다.', en: 'The door where partial eviction turns into a cascade — it will not come back even after the load does.' }
   ],
   logdrop: [
     { to: 'backpressure', ko: '거부가 신호라면 이 페이지는 신호를 안 보내는 거부입니다 — 큐가 찼다는 것을 아무도 못 듣습니다.', en: 'If rejection is a signal, this page is rejection that sends none — nobody hears that the queue was full.' },

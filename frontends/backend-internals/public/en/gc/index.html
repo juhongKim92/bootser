@@ -258,6 +258,7 @@ jcmd &lt;pid&gt; VM.flags | tr ' ' '\n' | grep -i gc
       <li><a href="/en/lockttl/"><span class="no">18</span><span><span class="t">You took the lock and two of you got in</span><span class="why">When that pause outlasts a distributed lock’s TTL the lock is gone — and the process cannot tell.</span></span></a></li>
       <li><a href="/en/keepalive/"><span class="no">07</span><span><span class="t">Your server believes it for two hours</span><span class="why">During a pause the heartbeat cannot go out either — alive, and treated as dead.</span></span></a></li>
       <li><a href="/en/connpool/"><span class="no">08</span><span><span class="t">A 17-millisecond query drains the pool</span><span class="why">Time spent paused still counts as time holding the connection.</span></span></a></li>
+      <li><a href="/en/healthfan/"><span class="no">33</span><span><span class="t">The database blinked and every instance dropped out at once</span><span class="why">Let that pause span two health checks and the load balancer takes the instance out.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->
@@ -303,7 +304,7 @@ jcmd &lt;pid&gt; VM.flags | tr ' ' '\n' | grep -i gc
   "url": "https://lab.vermilion19.com/en/gc/",
   "inLanguage": "en",
   "datePublished": "2026-08-11",
-  "dateModified": "2026-08-25",
+  "dateModified": "2026-09-04",
   "author": {
     "@type": "Organization",
     "name": "Backend Internals",

@@ -137,7 +137,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/gc/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/gc/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/gc/"/>
-    <lastmod>2026-08-25</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -145,7 +145,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/gc/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/gc/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/gc/"/>
-    <lastmod>2026-08-25</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -178,6 +178,22 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/hashring/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/hashring/"/>
     <lastmod>2026-08-25</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/healthfan/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/healthfan/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/healthfan/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/healthfan/"/>
+    <lastmod>2026-09-04</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/healthfan/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/healthfan/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/healthfan/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/healthfan/"/>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -345,7 +361,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/raft/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/raft/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/raft/"/>
-    <lastmod>2026-08-25</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -353,7 +369,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/raft/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/raft/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/raft/"/>
-    <lastmod>2026-08-25</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>

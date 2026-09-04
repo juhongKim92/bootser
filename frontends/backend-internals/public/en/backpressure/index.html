@@ -349,6 +349,7 @@ void submit(Task task) throws InterruptedException {
       <li><a href="/en/backlog/"><span class="no">27</span><span><span class="t">The kernel drops connections and the application log stays clean</span><span class="why">Growing the queue turns rejection into waiting — the same thing happens inside the kernel.</span></span></a></li>
       <li><a href="/en/usl/"><span class="no">30</span><span><span class="t">Adding threads made it slower</span><span class="why">Where adding concurrency turns into a loss — the peak is that point.</span></span></a></li>
       <li><a href="/en/logdrop/"><span class="no">32</span><span><span class="t">You added AsyncAppender and the logs went missing</span><span class="why">A queue that tells nobody it rejected — the log pipe drops silently and blocks silently.</span></span></a></li>
+      <li><a href="/en/healthfan/"><span class="no">33</span><span><span class="t">The database blinked and every instance dropped out at once</span><span class="why">Where that load comes from — lose half the instances and the other half takes double.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->

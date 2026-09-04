@@ -259,6 +259,7 @@ jcmd &lt;pid&gt; VM.flags | tr ' ' '\n' | grep -i gc
       <li><a href="/lockttl/"><span class="no">18</span><span><span class="t">락을 잡았는데 둘이 들어왔다</span><span class="why">그 정지가 분산 락의 TTL 을 넘으면 락을 잃습니다. 본인은 모릅니다.</span></span></a></li>
       <li><a href="/keepalive/"><span class="no">07</span><span><span class="t">서버는 두 시간 동안 살아있다고 믿는다</span><span class="why">정지 중에는 하트비트도 못 나갑니다. 살아 있는데 죽은 것으로 처리됩니다.</span></span></a></li>
       <li><a href="/connpool/"><span class="no">08</span><span><span class="t">17밀리초 쿼리가 커넥션 풀을 말린다</span><span class="why">정지한 시간도 커넥션을 잡고 있는 시간에 들어갑니다.</span></span></a></li>
+      <li><a href="/healthfan/"><span class="no">33</span><span><span class="t">DB 가 깜빡했더니 전 인스턴스가 동시에 빠졌다</span><span class="why">그 정지가 헬스체크 두 번에 걸치면 로드밸런서가 인스턴스를 빼 버립니다.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->
@@ -304,7 +305,7 @@ jcmd &lt;pid&gt; VM.flags | tr ' ' '\n' | grep -i gc
   "url": "https://lab.vermilion19.com/gc/",
   "inLanguage": "ko",
   "datePublished": "2026-08-11",
-  "dateModified": "2026-08-25",
+  "dateModified": "2026-09-04",
   "author": {
     "@type": "Organization",
     "name": "Backend Internals",

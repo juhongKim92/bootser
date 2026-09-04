@@ -34,6 +34,7 @@ node tools/verify-pagesplit.mjs    # 29편
 node tools/verify-usl.mjs          # 30편
 node tools/verify-quorum.mjs       # 31편
 node tools/verify-logdrop.mjs      # 32편
+node tools/verify-healthfan.mjs    # 33편
 node tools/verify-favicon.mjs      # 파비콘 네 파일이 원화와 같은지
 
 node tools/gen-related.mjs         # "이어서 볼 것" 블록을 박는다
@@ -109,6 +110,12 @@ TCP 에서 성립하지 않는데(FIN 은 시퀀스 번호를 차지해 스트�
 | 32편 — "전부 보관"(0)인데 버리게 함 | 454건 |
 | 32편 — `neverBlock` 인데도 막게 함 | 384건 (불변식④) |
 | 32편 — 대기에서 `+1` 제거 (리틀) | 2,257건 (불변식⑥) |
+| 33편 — 이탈 문턱 `u` 를 하나 빼먹음 | 1,898건 |
+| 33편 — 복귀에 `h` 대신 `u` 를 씀 (비대칭 소실) | 1,425건 |
+| 33편 — fail-open 을 없앰 | 905건 (불변식③) |
+| 33편 — 얕은 검사도 이탈하게 함 | 904건 (불변식①) |
+| 33편 — 신규 투입을 복귀와 같게 함 | 9,607건 (불변식⑦) |
+| 33편 — 감지 시각에 응답 시간 5초를 섞음 | 1,987건 (간격의 정수배) |
 
 > 변이 테스트를 짤 때 주의 — perl 정규식 안의 `@type` 은 **배열로 보간되어** 치환이
 > 조용히 안 먹는다. 처음 이걸로 "검사가 통과했다" 는 잘못된 결론을 냈다.

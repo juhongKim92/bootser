@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>DB 가 깜빡했더니 전 인스턴스가 동시에 빠졌다 — 헬스체크의 비대칭과 fail-open</title>
+<meta name="description" content="ALB 기본값으로 빠지는 데 60초, 돌아오는 데 150초입니다. 같은 간격인데 문턱이 2 와 5 라서 2.5배 어긋나요. 그리고 전부 빠지면 로드밸런서는 전부에게 보냅니다 — 문서가 fail-open 이라고 부르는 그것입니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/healthfan/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/healthfan/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/healthfan/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/healthfan/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="DB 가 깜빡했더니 전 인스턴스가 동시에 빠졌다">
+<meta property="og:description" content="빠지는 데 60초, 돌아오는 데 150초. 그리고 절반만 빠지는 것이 전부 빠지는 것보다 나쁩니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/healthfan/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="DB 가 깜빡했더니 전 인스턴스가 동시에 빠졌다">
+<meta name="twitter:description" content="10초짜리 깜빡임은 아예 안 보이고, 90초짜리는 240초를 끕니다. 중간이 없습니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/healthfan-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/healthfan/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>DB 가 깜빡했더니 전 인스턴스가 동시에 빠졌다</h1>
+  <p class="lede">헬스체크 엔드포인트가 DB 를 한 번 찔러 봅니다 — 그게 좋은 습관이라고 배웠으니까요. 그런데 DB 가 90초 아프면 <strong>인스턴스 넷이 전부 동시에 빠집니다.</strong> 공유 의존성이라 같은 순간에 같은 답을 내니까요. 빠지는 데 60초, <strong>돌아오는 데 150초</strong> — 같은 간격인데 문턱이 2 와 5 라서 2.5배 어긋납니다. 그리고 전부 빠진 순간 로드밸런서는 <strong>전부에게 보냅니다.</strong></p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label>헬스체크가 보는 것</label>
+          <div class="seg" id="segMode" role="group" aria-label="헬스체크가 공유 의존성을 보는가">
+            <button data-mode="shallow">얕음 (DB 안 봄)</button>
+            <button data-mode="half">깊음 — 절반이 걸린다</button>
+            <button data-mode="all" aria-pressed="true">깊음 — 전부 걸린다</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sN">인스턴스 수</label>
+          <span class="v" id="vN">4<small>대</small></span>
+          <input type="range" id="sN" min="0" max="4" step="1" value="2" aria-label="타깃 그룹에 등록된 인스턴스 수">
+        </div>
+        <div class="dial">
+          <label for="sO">DB 장애 길이</label>
+          <span class="v" id="vO">10<small>초</small></span>
+          <input type="range" id="sO" min="1" max="300" step="1" value="10" aria-label="공유 의존성이 아픈 시간">
+        </div>
+        <div class="dial">
+          <label for="sI">검사 간격</label>
+          <span class="v" id="vI">30<small>초</small></span>
+          <input type="range" id="sI" min="0" max="4" step="1" value="2" aria-label="HealthCheckIntervalSeconds">
+        </div>
+        <div class="dial">
+          <label for="sU">이탈 문턱</label>
+          <span class="v" id="vU">2<small>회</small></span>
+          <input type="range" id="sU" min="2" max="10" step="1" value="2" aria-label="UnhealthyThresholdCount">
+        </div>
+        <div class="dial">
+          <label for="sH">복귀 문턱</label>
+          <span class="v" id="vH">5<small>회</small></span>
+          <input type="range" id="sH" min="2" max="10" step="1" value="5" aria-label="HealthyThresholdCount">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->인스턴스 4대 · 간격 30초 · 이탈 2회 · 복귀 5회 — 이탈 60초 · 복귀 150초<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">장애 · 이탈 · 복귀가 겹치는 모양</span>
+      <div class="board">
+        <div class="time" id="time"><!--pr--><div class="axis"></div><div class="tick" style="left:0%"></div><div class="tick" style="left:33.33333333333333%"></div><div class="tick" style="left:66.66666666666666%"></div><div class="tick" style="left:100%"></div><div class="span out" style="left:0;width:11.11111111111111%"></div><div class="slabel out" style="left:0">DB 장애 10초</div><!--/pr--></div>
+        <div class="timex" id="timex"><!--pr--><span>0초</span><span>45초</span><span>90초</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="outl"></i>DB 가 아픈 구간</span>
+          <span><i class="badl"></i>라우팅이 정상이 아닌 구간</span>
+          <span><i class="evictl"></i>이탈</span>
+          <span><i class="backl"></i>복귀</span>
+        </div>
+
+        <div class="pool" id="pool"><!--pr--><div class="inst up"><span></span></div><div class="inst up"><span></span></div><div class="inst up"><span></span></div><div class="inst up"><span></span></div><!--/pr--></div>
+        <div class="poolnote" id="poolnote"><!--pr-->healthy 4 / 4대 · 남은 것이 받는 부하 ×1<!--/pr--></div>
+        <table class="four" id="four"><!--pr--><tr><th>설정</th><th>이탈</th><th>복귀</th><th>남은 것의 부하</th><th>라우팅 비정상</th></tr><tr><td>얕음</td><td class="good">—</td><td class="good">—</td><td class="good">×1</td><td class="good">—</td></tr><tr><td>깊음 · 절반</td><td class="good">—</td><td class="good">—</td><td class="good">×1</td><td class="good">—</td></tr><tr><td>깊음 · 전부</td><td class="good">—</td><td class="good">—</td><td class="good">×1</td><td class="good">—</td></tr><tr><td>깊음 · 전부 · 간격 5초</td><td class="good">—</td><td class="good">—</td><td class="good">×1</td><td class="good">—</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m good"><span class="k">이탈 시각</span><span class="n">없음</span></div><div class="m good"><span class="k">복귀 시각</span><span class="n">없음</span></div><div class="m bad"><span class="k">복귀 / 이탈</span><span class="n">×2.5</span></div><div class="m good"><span class="k">healthy</span><span class="n">4 / 4</span></div><div class="m good"><span class="k">남은 것의 부하</span><span class="n">×1</span></div><div class="m good"><span class="k">신규 투입</span><span class="n">30초</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>헬스체크가 이 장애를 보지 못했다.</b> 10초 동안 실패한 검사가 0회 — 연속 2회가 필요하다<br><span class="at">이 설정에서 감지가 시작되는 최소 장애 길이는 30초 다</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>헬스체크가 보는 것</td><td><strong>얕음</strong>은 프로세스가 살아 있나만 봅니다. <strong>깊음</strong>은 DB 를 찔러 보고요 — 그러면 공유 의존성 장애가 <strong>여러 인스턴스의 동시 이탈</strong>이 됩니다. 절반과 전부가 왜 다른지가 이 페이지의 그림입니다.</td></tr>
+    <tr><td>인스턴스 수</td><td>타깃 그룹에 등록된 수. <strong>부분 이탈일 때만 의미가 있습니다</strong> — 남은 것이 받는 부하 배수가 <code>N ÷ 남은 수</code> 니까요.</td></tr>
+    <tr><td>DB 장애 길이</td><td>공유 의존성이 아픈 시간. <strong>짧으면 아예 감지되지 않습니다</strong> — 연속 실패 횟수를 못 채우니까요. 중간이 없다는 게 요점입니다.</td></tr>
+    <tr><td>검사 간격</td><td><code>HealthCheckIntervalSeconds</code>. <strong>기본 30초</strong>, 문서가 정한 범위는 5–300초입니다. 이 값이 이탈·복귀·신규 투입 <strong>셋을 한꺼번에</strong> 정합니다.</td></tr>
+    <tr><td>이탈 문턱</td><td><code>UnhealthyThresholdCount</code>. <strong>기본 2</strong>, 범위 2–10. 연속 이만큼 실패해야 빠집니다.</td></tr>
+    <tr><td>복귀 문턱</td><td><code>HealthyThresholdCount</code>. <strong>기본 5</strong>, 범위 2–10. <strong>이탈 문턱과 다른 값이 기본이라는 것이 이 페이지의 시작입니다.</strong></td></tr>
+  </table>
+
+  <p>시각은 전부 <strong>장애 시작 기준</strong>이고 결정됩니다 — 난수도 표본도 없어요. 로드밸런서 노드는 2개(AZ 둘)로 뒀고, 표시하는 시각은 <strong>최악의 위상</strong>입니다(왜 그렇게 두 갈래로 계산하는지는 아래에 있습니다).</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 10초짜리 깜빡임 — 아무 일도 없다</h4>
+    <div class="seq">깊음·전부 · 인스턴스 4 · 간격 30초 · 이탈 2회 · 복귀 5회 · 장애 <em>10초</em>
+이탈 <em>없음</em> · healthy <em>4 / 4</em> · 실패한 검사 <em>0~1회</em></div>
+    <p class="why">30초 간격에서 10초 안에 들어오는 검사는 <strong>많아도 한 번</strong>입니다. 연속 두 번을 채울 수가 없어요. <strong>헬스체크는 이 장애를 보지 못합니다.</strong> 요청 몇 개는 실패했겠지만 라우팅은 한 톨도 안 움직였습니다 — 그리고 이게 대개 옳은 동작입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 90초로 늘린다 — 전부 빠지고, 그래서 전부에게 간다</h4>
+    <div class="seq">장애 10 → <em>90초</em>
+이탈 <em>60초</em> · 복귀 <em>240초</em> · 라우팅 비정상 <em>180초</em>
+healthy <em>0 / 4</em> · <em>fail-open</em> · 남은 것의 부하 <em>×1</em></div>
+    <p class="why">60초에 넷이 <strong>동시에</strong> 빠집니다 — 같은 DB 를 보니 같은 순간에 같은 답을 내니까요. 그런데 healthy 가 0 이 되면 문서가 정한 일이 벌어집니다: <em>"the load balancer fails open"</em> — <strong>전부 unhealthy 니까 전부에게 보냅니다.</strong> 라우팅으로 보면 아무것도 안 바뀐 셈이에요. <strong>90초 아팠는데 240초까지 정상이 아닙니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 절반만 걸린다 — 이게 더 나쁘다</h4>
+    <div class="seq">깊음·전부 → <em>깊음·절반</em> (같은 90초 장애)
+healthy <em>2 / 4</em> · 남은 것의 부하 <em>×2</em> · 시각은 <em>그대로</em></div>
+    <p class="why">두 대만 빠졌으니 fail-open 이 걸리지 않습니다. 남은 두 대가 <strong>네 대 몫의 트래픽을 받습니다.</strong> 그 두 대가 버티지 못하면 다음 검사에서 그쪽도 빠지고, 그러면 fail-open 으로 넘어가요. <strong>부분 장애가 전체 장애보다 나쁩니다</strong> — 전부 빠지면 부하는 그래도 넷으로 나뉘니까요. 직관과 반대입니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. 얕은 검사로 바꾼다 — 이탈이 없다</h4>
+    <div class="seq">깊음·절반 → <em>얕음</em> (DB 를 안 본다)
+이탈 <em>없음</em> · healthy <em>4 / 4</em> · 라우팅 비정상 <em>0초</em></div>
+    <p class="why">같은 DB 장애입니다. 요청은 여전히 실패하고요. <strong>다른 것은 라우팅이 안 흔들린다는 것뿐입니다.</strong> DB 가 돌아오는 순간 서비스도 돌아옵니다 — 150초를 더 기다리지 않아요. <strong>같은 장애가 설정 하나에 따라 "요청 몇 개 실패" 또는 "전원 이탈 + 150초 회복" 이 됩니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 복귀 문턱을 2로 — 비정상 기간이 절반</h4>
+    <div class="seq">깊음·전부 · 복귀 문턱 5 → <em>2회</em>
+복귀 240 → <em>150초</em> · 라우팅 비정상 180 → <em>90초</em> · 비대칭 ×2.5 → <em>×1</em></div>
+    <p class="why">이탈은 그대로 60초입니다. 바뀐 건 <strong>돌아오는 데 걸리는 시간</strong>뿐이고, 그것만으로 비정상 기간이 절반이 됩니다. 기본값 5 는 <em>"오르내리는 인스턴스를 다시 넣지 않겠다"</em>는 보수적인 선택인데, <strong>공유 의존성 장애에서는 그 보수성이 회복을 늦추는 쪽으로만 작동합니다.</strong> 여기가 가장 값싼 손잡이예요.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. 간격을 5초로 — 양쪽이 다 빨라진다, 대신</h4>
+    <div class="seq">간격 30 → <em>5초</em> (복귀 문턱은 5 로 되돌림)
+이탈 60 → <em>10초</em> · 복귀 240 → <em>115초</em> · 신규 투입 30 → <em>5초</em></div>
+    <p class="why">문서가 허용하는 최소값입니다. 이탈도 복귀도 신규 투입도 다 빨라져요. <strong>그런데 이탈이 10초라는 건 10초짜리 정지 하나로 인스턴스가 빠진다는 뜻입니다.</strong> 타임아웃 기본값이 5초니까 <a href="/gc/">GC 정지</a> 하나, <a href="/lockttl/">STW</a> 한 번이면 두 번 연속 실패가 됩니다. <strong>간격을 줄이는 대가는 DB 부하가 아니라 오탐입니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. 간격을 300초로 — 양쪽이 다 나빠진다</h4>
+    <div class="seq">간격 5 → <em>300초</em> (문서가 허용하는 최대)
+이탈 <em>없음</em> (90초 장애를 못 본다) · 신규 투입 <em>300초</em></div>
+    <p class="why">감지가 아예 안 되니 좋은 것처럼 보이는데, <strong>같은 간격이 신규 인스턴스 투입도 정한다</strong>는 게 문제입니다. 스케일아웃한 인스턴스가 트래픽을 받기까지 300초예요. 그리고 <em>진짜</em> 죽은 인스턴스도 600초를 버팁니다. <strong>이 손잡이는 한 방향으로 좋아지지 않습니다</strong> — 셋을 한꺼번에 정하니까요.</p>
+  </div>
+
+  <h2>문서가 산수를 정해뒀다</h2>
+
+  <p>이 편의 검산점은 ALB 의 타깃 그룹 헬스체크 문서입니다. 기본값과 규칙이 한 표에 있어요.</p>
+
+  <table class="keytable">
+    <tr><th>설정</th><th>기본값</th><th>범위</th></tr>
+    <tr><td>HealthCheckIntervalSeconds</td><td><strong>30초</strong></td><td>5–300</td></tr>
+    <tr><td>UnhealthyThresholdCount</td><td><strong>2</strong></td><td>2–10</td></tr>
+    <tr><td>HealthyThresholdCount</td><td><strong>5</strong></td><td>2–10</td></tr>
+    <tr><td>HealthCheckTimeoutSeconds</td><td>5초</td><td>2–120</td></tr>
+  </table>
+
+  <div class="callout"><em>"If the health checks exceed <strong>UnhealthyThresholdCount</strong> consecutive failures, the load balancer takes the target out of service. When the health checks exceed <strong>HealthyThresholdCount</strong> consecutive successes, the load balancer puts the target back in service."</em></div>
+
+  <p>기본값을 규칙에 넣으면 두 시각이 나옵니다 — <strong>이탈 2 × 30 = 60초</strong>, <strong>복귀 5 × 30 = 150초</strong>. 같은 간격을 쓰는데 <strong>2.5배 어긋납니다.</strong> 이게 이 페이지 전체의 출발점이고, 어느 문서도 이 비대칭을 경고하지 않습니다.</p>
+
+  <p>시각이 깔끔한 정수배로 나오는 것도 문서가 보장합니다.</p>
+
+  <div class="callout"><em>"Each health check request is independent and <strong>the result lasts for the entire interval.</strong> The time that it takes for the target to respond does not affect the interval for the next health check request."</em></div>
+
+  <p>그래서 <strong>감지 시각에 응답 시간이 섞이지 않습니다.</strong> 언제나 간격의 정수배예요. 이 성질이 있어서 이 편의 모델에 난수가 필요 없습니다.</p>
+
+  <h2>fail-open — 다 죽으면 다 보낸다</h2>
+
+  <p>healthy 가 0 이 되는 순간 라우팅이 뒤집힙니다. 문서가 그 동작에 이름까지 붙여뒀어요.</p>
+
+  <div class="callout"><em>"If a target group contains only unhealthy registered targets, the load balancer routes requests to all those targets, <strong>regardless of their health status.</strong> This means that if all targets fail health checks at the same time in all enabled Availability Zones, the load balancer <strong>fails open.</strong>"</em></div>
+
+  <p>합리적인 선택입니다 — 아무 데도 안 보내는 것보다는 나으니까요. 그런데 <strong>헬스체크가 나를 지켜준다는 전제가 여기서 사라집니다.</strong> 그리고 부작용이 하나 있어요.</p>
+
+  <table class="keytable">
+    <tr><th>얼마가 빠졌나</th><th>fail-open</th><th>남은 것이 받는 부하</th><th>어떻게 되나</th></tr>
+    <tr><td>0 / 4</td><td>—</td><td>×1</td><td>정상</td></tr>
+    <tr><td><strong>2 / 4</strong></td><td>안 걸림</td><td><strong>×2</strong></td><td><strong>남은 둘이 넷 몫을 받는다 — 연쇄</strong></td></tr>
+    <tr><td>3 / 4</td><td>안 걸림</td><td><strong>×4</strong></td><td>남은 하나가 넷 몫을 받는다</td></tr>
+    <tr><td>4 / 4</td><td><strong>걸림</strong></td><td>×1</td><td>다시 넷으로 나뉜다</td></tr>
+  </table>
+
+  <div class="callout"><strong>부하 배수가 단조롭지 않습니다.</strong> 하나씩 빠질 때마다 나빠지다가, <strong>마지막 하나가 빠지는 순간 ×4 에서 ×1 로 떨어집니다.</strong> 그래서 <em>"조금 아픈 것"</em>이 <em>"완전히 아픈 것"</em>보다 나쁜 구간이 실제로 있습니다.</div>
+
+  <h2>같은 간격이 세 가지를 정한다</h2>
+
+  <p>6·7단계가 보여주는 것입니다. <code>HealthCheckIntervalSeconds</code> 하나가 서로 다른 세 시각을 동시에 정합니다.</p>
+
+  <table class="keytable">
+    <tr><th>간격</th><th>이탈</th><th>복귀(90초 장애)</th><th>신규 투입</th><th>오탐 여유</th></tr>
+    <tr><td>5초</td><td>10초</td><td>115초</td><td><strong>5초</strong></td><td><strong>10초 — 위험</strong></td></tr>
+    <tr><td><strong>30초 (기본)</strong></td><td>60초</td><td>240초</td><td>30초</td><td>60초</td></tr>
+    <tr><td>300초</td><td><strong>감지 못 함</strong></td><td>—</td><td><strong>300초</strong></td><td>600초</td></tr>
+  </table>
+
+  <p>신규 투입이 빠른 이유는 문서에 따로 적혀 있습니다.</p>
+
+  <div class="callout"><em>"After your target is registered, <strong>it must pass one health check</strong> to be considered healthy."</em></div>
+
+  <p><strong>새 인스턴스는 한 번만 통과하면 됩니다.</strong> 그런데 빠졌던 인스턴스가 돌아오려면 다섯 번이에요. 그래서 <strong>스케일아웃이 기존 인스턴스 복귀보다 다섯 배 빠릅니다.</strong> 배포 중에 이 비대칭이 직관을 뒤집습니다 — 새 파드는 금방 트래픽을 받는데, 잠깐 삐끗한 기존 파드는 한참 안 돌아옵니다.</p>
+
+  <h2>위상을 난수로 다루지 않는다</h2>
+
+  <p>장애가 검사 사이 어디에서 시작하는지는 알 수 없습니다. 그런데 <strong>양 끝을 둘 다 계산하면</strong> 난수가 필요 없어요.</p>
+
+  <table class="keytable">
+    <tr><th>위상</th><th>첫 실패까지</th><th>이탈 시각(기본값)</th></tr>
+    <tr><td>최선 — 검사 바로 직전에 시작</td><td>즉시</td><td><code>(2−1) × 30</code> = 30초</td></tr>
+    <tr><td>최악 — 검사 바로 직후에 시작</td><td>한 간격</td><td><code>2 × 30</code> = 60초</td></tr>
+  </table>
+
+  <p>둘의 차이는 <strong>정확히 간격 하나</strong>입니다. 화면이 보여주는 것은 최악이고요 — 용량 계획에 쓸 수 있는 쪽이 그쪽이니까요. <a href="/nagle/">28번</a>이 세그먼트 개수의 홀짝을 두 갈래로 편 것과 같은 방식입니다.</p>
+
+  <h2>이 모델이 가정하는 것</h2>
+
+  <table class="keytable">
+    <tr><th>가정</th><th>깨지면 어떻게 되나</th></tr>
+    <tr><td>인스턴스가 동시에 걸린다</td><td>같은 DB 를 보므로 같은 순간에 같은 답을 낸다고 봤습니다. 실제로는 <strong>커넥션 풀 상태가 조금씩 달라서</strong> 이탈이 몇 초씩 흩어집니다 — 그 흩어짐이 오히려 <strong>부분 이탈 구간을 만들어</strong> 3단계의 연쇄를 부릅니다. 모델은 그 중간 상태를 그리지 않아요</td></tr>
+    <tr><td>장애가 한 번, 깔끔하게</td><td>깜빡임이 여러 번 오면 연속 실패가 리셋되어 이탈이 더 늦거나 아예 안 납니다. <strong>단조롭지 않은 방향으로</strong> 흔들립니다</td></tr>
+    <tr><td>이탈해도 인스턴스는 멀쩡하다</td><td>남은 것에 부하가 몰려 <em>실제로</em> 죽는 경로는 모델 밖입니다. 그쪽은 <a href="/backpressure/">11번</a>과 <a href="/retrystorm/">14번</a>의 자리예요 — 이 페이지는 그 문 앞까지만 데려갑니다</td></tr>
+    <tr><td>노드가 2개(AZ 둘)</td><td>문서가 <em>"Each load balancer node checks the health of each target"</em> 라고 하므로 검사 횟수는 AZ 수만큼 곱해집니다. 다만 <strong>이탈 시각은 안 바뀝니다</strong> — 노드마다 따로 판단하니까요</td></tr>
+    <tr><td>기본값은 명세, 장애 길이는 아니다</td><td>30 · 2 · 5 는 문서가 정한 값이라 안 흔들립니다. <strong>DB 장애 길이는 우리가 넣은 입력</strong>이에요 — 명세에 있을 수 없는 값입니다</td></tr>
+  </table>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>제일 먼저 볼 것</td><td><code>HealthyHostCount</code> 를 <strong>DB 지표와 같은 시간축에 겹쳐</strong> 보세요. DB 가 잠깐 흔들린 60초 뒤에 계단으로 떨어지고 <strong>150초 뒤에야 올라오면</strong> 이 페이지입니다. 두 지표를 따로 보면 인과가 안 보입니다</td></tr>
+    <tr><td>가장 값싼 처방</td><td><strong>헬스체크에서 공유 의존성을 뺍니다.</strong> DB 가 죽었을 때 인스턴스를 빼는 것은 아무것도 고치지 않아요 — 어디로 보내도 실패하니까요. 의존성 상태는 <em>다른 엔드포인트</em>로 내보내고 경보에만 씁니다</td></tr>
+    <tr><td>그다음</td><td><code>HealthyThresholdCount</code> 를 2로. 5단계가 그 값을 매깁니다 — 비정상 기간이 절반이 됩니다. 이탈 문턱은 <strong>2에서 더 내릴 수 없습니다</strong>(문서 범위의 하한이에요)</td></tr>
+    <tr><td>간격을 줄이기 전에</td><td>이탈이 <code>간격 × 2</code> 로 짧아진다는 뜻입니다. 5초면 <strong>10초</strong>고, 그건 <a href="/gc/">GC 정지</a> 한 번의 길이예요. 타임아웃 기본값이 5초라 정지 중의 검사는 그대로 실패로 셉니다</td></tr>
+    <tr><td>쿠버네티스</td><td>이름이 다르고 <strong>기본값도 다릅니다</strong> — <code>periodSeconds</code> 10 · <code>failureThreshold</code> 3 · <code>successThreshold</code> 1. 복귀 문턱이 <strong>1</strong>이라 ALB 의 비대칭이 없어요. 다만 readiness 와 liveness 를 같은 깊은 검사로 두면 <strong>DB 장애가 파드 재시작이 됩니다</strong> — 훨씬 나쁜 쪽입니다</td></tr>
+    <tr><td>fail-open 을 믿지 말 것</td><td>AZ 하나만 전멸하면 <strong>걸리지 않습니다</strong> — 문서가 <em>"in all enabled Availability Zones"</em> 라고 못박아뒀어요. 한 AZ 의 인스턴스가 다 빠지면 그쪽은 그냥 빠진 채로 남고 다른 AZ 가 그 부하를 받습니다</td></tr>
+    <tr><td>재 보는 방법</td><td>DB 를 만지지 말고 <strong>헬스체크 경로만 500을 내게</strong> 해 보세요. 인스턴스 하나에 걸고 <code>HealthyHostCount</code> 가 언제 떨어지고 언제 올라오는지 재면, 위 산수가 그 계정에서 맞는지 60초·150초로 확인됩니다</td></tr>
+  </table>
+
+  <p><a href="/raft/">4번</a>이 <em>죽었다고 판단하는 데 걸리는 시간</em>을 선거 타임아웃으로 다뤘다면, 이 페이지는 같은 저울의 반대쪽입니다 — <strong>살아났다고 판단하는 데 걸리는 시간</strong>이고, 그쪽이 2.5배 깁니다.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/raft/"><span class="no">04</span><span><span class="t">네트워크가 갈라지면 누가 리더가 되는가</span><span class="why">같은 저울의 반대쪽 — 죽었다고 판단하는 데 걸리는 시간은 선거 타임아웃이 정합니다.</span></span></a></li>
+      <li><a href="/gc/"><span class="no">02</span><span><span class="t">G1과 ZGC는 왜 다르게 멈추는가</span><span class="why">이탈 문턱을 조이면 정지 한 번이 이탈이 됩니다. 그 정지가 얼마나 긴가.</span></span></a></li>
+      <li><a href="/backpressure/"><span class="no">11</span><span><span class="t">거부는 버그가 아니라 신호다</span><span class="why">남은 인스턴스가 두 배를 받기 시작하면 무엇을 거절해야 하는가.</span></span></a></li>
+      <li><a href="/retrystorm/"><span class="no">14</span><span><span class="t">부하는 걷혔는데 돌아오지 않는다</span><span class="why">부분 이탈이 연쇄로 넘어가는 그 문 — 부하가 걷혀도 안 돌아옵니다.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/healthfan/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uSec:'초', uInst:'대', uTimes:'회',
+  hint:'인스턴스 $1대 · 간격 $2 · 이탈 $3회 · 복귀 $4회 — 이탈 $5 · 복귀 $6',
+  tOut:'DB 장애 $1', tEvict:'$1 이탈', tBack:'$1 복귀',
+  pNote:'healthy $1 / $2대 · 남은 것이 받는 부하 $3',
+  fWhat:'설정', fEvict:'이탈', fBack:'복귀', fLoad:'남은 것의 부하', fBad:'라우팅 비정상',
+  fShallow:'얕음', fHalf:'깊음 · 절반', fAll:'깊음 · 전부', fTight:'깊음 · 전부 · 간격 5초',
+  mEvict:'이탈 시각', mBack:'복귀 시각', mSkew:'복귀 / 이탈',
+  mHealthy:'healthy', mLoad:'남은 것의 부하', mNewIn:'신규 투입', mNone:'없음',
+  vShallow:'<b>이탈이 없다.</b> DB 가 $1 아팠지만 헬스체크는 프로세스만 본다<br><span class="at">요청은 실패해도 라우팅은 흔들리지 않는다 — DB 가 돌아오면 서비스도 돌아온다</span>',
+  vUnseen:'<b>헬스체크가 이 장애를 보지 못했다.</b> $1 동안 실패한 검사가 $2회 — 연속 $3회가 필요하다<br><span class="at">이 설정에서 감지가 시작되는 최소 장애 길이는 $4 다</span>',
+  vFailOpen:'<b>$1 에 전부 빠졌고, 그래서 전부에게 보낸다(fail-open).</b><br>복귀는 $2 — 라우팅이 $3 동안 정상이 아니다 <span class="at">— 부하는 그래도 전부로 나뉜다</span>',
+  vPartial:'<b>$1 / $2대가 빠졌다 — fail-open 이 걸리지 않는다.</b><br>남은 $3대가 부하 $4 를 받는다 · 복귀 $5 <span class="at">— 여기서 연쇄가 시작된다</span>',
+  scene:[
+    'DB 가 10초 깜빡였습니다. 헬스체크 간격이 30초니까 그 10초 안에 들어오는 검사는 많아도 한 번이에요. 이탈에는 연속 두 번이 필요하니 채울 수가 없습니다. 헬스체크는 이 장애를 아예 보지 못합니다. 요청 몇 개는 실패했겠지만 라우팅은 한 톨도 안 움직였고, 대개는 이게 옳은 동작입니다.',
+    '같은 장애를 90초로 늘렸습니다. 이제 연속 두 번이 채워져서 60초에 넷이 동시에 빠집니다 — 같은 DB 를 보니 같은 순간에 같은 답을 내니까요. 그런데 healthy 가 0 이 되면 문서가 정한 일이 벌어집니다. 전부 unhealthy 니까 로드밸런서가 전부에게 보내요. fail-open 입니다. 그리고 복귀는 240초입니다. DB 는 90초 아팠는데 라우팅은 그 세 배가 지나야 정상이 됩니다.',
+    '이번엔 절반만 걸리게 했습니다. 두 대만 빠졌으니 fail-open 이 안 걸리고, 남은 두 대가 네 대 몫을 받습니다. 부하 두 배예요. 그 두 대가 못 버티면 다음 검사에서 그쪽도 빠지고 그때 fail-open 으로 넘어갑니다. 부분 장애가 전체 장애보다 나쁩니다 — 전부 빠지면 부하는 그래도 넷으로 나뉘니까요. 직관과 반대죠.',
+    '헬스체크를 얕게 바꿨습니다. 프로세스가 살아 있나만 보는 거예요. 같은 DB 장애이고 요청도 여전히 실패하는데, 다른 것은 라우팅이 안 흔들린다는 것뿐입니다. 그래서 DB 가 돌아오는 순간 서비스도 돌아옵니다. 150초를 더 기다리지 않아요. 같은 장애가 설정 하나에 따라 요청 몇 개 실패로 끝나거나 전원 이탈에 150초 회복이 됩니다.',
+    '깊은 검사로 되돌리고, 복귀 문턱만 5에서 2로 내렸습니다. 이탈은 그대로 60초예요. 바뀐 건 돌아오는 데 걸리는 시간뿐인데 그것만으로 비정상 기간이 180초에서 90초로 절반이 됩니다. 기본값 5는 오르내리는 인스턴스를 다시 넣지 않겠다는 보수적인 선택인데, 공유 의존성 장애에서는 그 보수성이 회복을 늦추는 쪽으로만 작동합니다. 가장 값싼 손잡이예요.',
+    '간격을 5초로 줄였습니다. 문서가 허용하는 최소값이고, 이탈도 복귀도 신규 투입도 다 빨라집니다. 이탈이 10초, 복귀가 115초, 신규 투입이 5초예요. 그런데 이탈이 10초라는 건 10초짜리 정지 하나로 인스턴스가 빠진다는 뜻입니다. 타임아웃 기본값이 5초니까 GC 정지 하나로 두 번 연속 실패가 됩니다. 간격을 줄이는 대가는 DB 부하가 아니라 오탐입니다.',
+    '반대로 300초, 허용되는 최대까지 올렸습니다. 90초 장애는 아예 감지되지 않으니 좋아 보이는데, 같은 간격이 신규 인스턴스 투입도 정합니다. 스케일아웃한 인스턴스가 트래픽을 받기까지 300초예요. 그리고 진짜 죽은 인스턴스는 600초를 버팁니다. 이 손잡이는 한 방향으로 좋아지지 않습니다 — 셋을 한꺼번에 정하니까요.'
+  ],
+};
+</script>
+<script src="/shared/healthfan-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "DB 가 깜빡했더니 전 인스턴스가 동시에 빠졌다",
+  "description": "ALB 기본값으로 빠지는 데 60초, 돌아오는 데 150초입니다. 같은 간격인데 문턱이 2 와 5 라서 2.5배 어긋나요. 그리고 전부 빠지면 로드밸런서는 전부에게 보냅니다 — 문서가 fail-open 이라고 부르는 그것입니다.",
+  "url": "https://lab.vermilion19.com/healthfan/",
+  "inLanguage": "ko",
+  "datePublished": "2026-09-04",
+  "dateModified": "2026-09-04",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "DB 가 깜빡했더니 전 인스턴스가 동시에 빠졌다"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

@@ -349,6 +349,7 @@ void submit(Task task) throws InterruptedException {
       <li><a href="/backlog/"><span class="no">27</span><span><span class="t">커널이 커넥션을 버리는데 애플리케이션 로그는 깨끗하다</span><span class="why">큐를 키우면 거부가 대기로 바뀌는 일이 커널 안에서도 똑같이 벌어집니다.</span></span></a></li>
       <li><a href="/usl/"><span class="no">30</span><span><span class="t">스레드를 늘렸더니 느려졌다</span><span class="why">동시성을 늘리는 것이 언제부터 손해로 바뀌는가 — 정점이 그 자리입니다.</span></span></a></li>
       <li><a href="/logdrop/"><span class="no">32</span><span><span class="t">AsyncAppender 를 붙였더니 로그가 사라진다</span><span class="why">거부를 아무에게도 알리지 않는 큐 — 로그 파이프가 조용히 버리고 조용히 막습니다.</span></span></a></li>
+      <li><a href="/healthfan/"><span class="no">33</span><span><span class="t">DB 가 깜빡했더니 전 인스턴스가 동시에 빠졌다</span><span class="why">그 부하가 어디서 오는가 — 인스턴스 절반이 빠지면 남은 절반이 두 배를 받습니다.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->
