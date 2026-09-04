@@ -175,7 +175,7 @@
     function skyIcon(kind, e) {
         var name = kind === 'term' ? 'term-' + (e.k < 10 ? '0' + e.k : e.k)
             : kind === 'moon' ? (e.f ? 'moon-full' : 'moon-new')
-                : kind === 'shower' ? 'meteor-' + (e.z >= 100 ? 3 : e.z >= 25 ? 2 : 1)
+                : kind === 'shower' ? 'meteor-' + (e.z >= 100 ? 5 : e.z >= 25 ? 3 : 2)
                     : '';
         if (!name) return '';
         return '<img class="sky-icon" src="/sky-icons/' + name + '.svg"' +

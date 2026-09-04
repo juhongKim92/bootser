@@ -271,7 +271,18 @@ details.year[open] > summary::before{content:'▾ '}
   padding:8px 0;border-bottom:1px solid var(--rule);
 }
 .worldwide li:last-child{border-bottom:none}
-.worldwide .who{white-space:nowrap;display:inline-flex;align-items:center;gap:7px}
+/* ⚠ 여기를 inline-flex 로 두면 안 된다. 줄(li)이 `align-items:baseline` 인데,
+   플렉스 상자의 밑선은 **첫 항목**에서 나온다 — 첫 항목이 그림이면 밑선이 없으므로
+   그림의 아래 모서리가 대신 쓰인다. 그러면 이 칸의 글자는 제 밑선대로 앉아 있는데
+   줄은 그림 밑을 밑선으로 알고 오른쪽 칸(.what)을 그만큼 내려서, "다음 절기" 와
+   "D-3 백로" 가 몇 픽셀 어긋난다. 그림이 없던 시절에는 첫 항목이 글자라 안 보였고,
+   하늘 아이콘을 넣은 뒤에 드러났다.
+
+   그냥 글자 줄로 두면 밑선이 원래대로 글자에서 나온다. 그림은 제 vertical-align 이
+   자리를 잡는다 — 국기는 base.css 의 -2px, 하늘 아이콘은 위의 -4px 이고,
+   둘 다 이 사이트 어디에서나 쓰는 그 값이다. */
+.worldwide .who{white-space:nowrap}
+.worldwide .who img{margin-right:7px}
 .worldwide .who a{color:var(--ink);text-decoration:none}
 .worldwide .who a:hover{color:var(--soon);text-decoration:underline}
 .worldwide .what{color:var(--ink-2)}

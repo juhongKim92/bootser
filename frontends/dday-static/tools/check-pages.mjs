@@ -188,10 +188,20 @@ check('favicon.svg', (file) => {
            필요한데 그걸 빠뜨려서 "D-10다음 절기" 처럼 붙어 나온 적이 있다. */
         [/\.worldwide \.what \.dd\{/, '첫 화면 하늘 목록의 D-day 가 붙어 나온다'],
         [/\.worldwide \.what em\{/, '첫 화면 하늘 목록의 날짜가 붙어 나온다'],
+        [/\.worldwide \.who img\{/, '첫 화면 목록의 그림과 이름 사이 여백이 없다'],
         [/prefers-color-scheme:\s*dark/, '어두운 테마 토큰이 없다'],
         [/@media \(max-width:\s*640px\)/, '좁은 화면 대응이 없다'],
     ];
     for (const [re, msg] of need) if (!re.test(css)) bad('shared/*.css', msg);
+
+    /* 있으면 안 되는 것 하나. `.worldwide .who` 를 플렉스 상자로 두면 줄(li)의
+       `align-items:baseline` 이 이 칸의 밑선을 **첫 항목**에서 가져오는데, 첫 항목이
+       그림이라 밑선이 없어 아래 모서리가 대신 쓰인다. 그러면 오른쪽 칸(.what)이
+       몇 픽셀 내려앉는다 — "다음 절기" 와 "D-3 백로" 가 어긋나 보이던 것이 이것이다.
+       그림이 없던 시절에는 첫 항목이 글자라 아무 일도 없었고, 되돌리기도 쉽다. */
+    if (/\.worldwide \.who\{[^}]*flex/.test(css)) {
+        bad('shared/*.css', '.worldwide .who 가 다시 플렉스다 — 줄의 밑선이 그림 아래 모서리로 잡혀 오른쪽 칸이 내려간다');
+    }
 }
 
 /* ------------------------------------------------------------------- 글꼴
@@ -819,7 +829,7 @@ for (const { page, lang, slug, kind, label } of ALL) {
            자리다). 절기는 황경 k, 삭·보름은 f, 유성우는 ZHR 층이다. */
         const iconWant = (e) => (only === 'term' ? `term-${String(e.k).padStart(2, '0')}`
             : only === 'moon' ? (e.f ? 'moon-full' : 'moon-new')
-                : only === 'shower' ? `meteor-${e.z >= 100 ? 3 : e.z >= 25 ? 2 : 1}`
+                : only === 'shower' ? `meteor-${e.z >= 100 ? 5 : e.z >= 25 ? 3 : 2}`
                     : null);
         {
             const drawn = [...html.matchAll(
@@ -1751,7 +1761,7 @@ for (const [page, lang, langs, wantCc] of [
             }
             const ico = kind === 'term' ? `term-${String(e.e.k).padStart(2, '0')}`
                 : kind === 'moon' ? (e.e.f ? 'moon-full' : 'moon-new')
-                    : `meteor-${e.e.z >= 100 ? 3 : e.e.z >= 25 ? 2 : 1}`;
+                    : `meteor-${e.e.z >= 100 ? 5 : e.e.z >= 25 ? 3 : 2}`;
             const who = `<span class="who"><img class="sky-icon" src="/sky-icons/${ico}.svg"`
                 + ` width="16" height="16" alt="" loading="lazy" decoding="async">${esc(dt)}</span>`;
             if (!drawnSky.includes(who)) {
