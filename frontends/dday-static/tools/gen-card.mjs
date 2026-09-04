@@ -219,6 +219,7 @@ const SKY_CARDS = [
 const AXIS_CARDS = [
     [NAME_ROOT,    'HOLIDAY', 'HOLIDAYS BY NAME'],
     ['rank',       'RANK',    'COUNTRIES COMPARED'],
+    ['weekday',    'WEEKDAY', 'HOLIDAYS BY WEEKDAY'],
 ];
 
 /* 이름 축의 낱장. **원화(tools/holiday-names.mjs)만 본다** — 어느 이름이 문턱을

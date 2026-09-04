@@ -39,9 +39,13 @@ export const YEARS = (now = new Date()) => {
    'holiday' 와 'rank' 는 뒤에 붙은 축 둘이다.
      · /holiday/           이름 축의 허브 (어떤 이름을 몇 나라가 쓰나)
      · /holiday/{slug}/    이름 하나 (tools/holiday-names.mjs 가 정한다 — 아래 NAME_PAGE)
-     · /rank/              국가끼리 견주는 한 장 (공휴일 수 · 최장 연휴) */
+     · /rank/              국가끼리 견주는 한 장 (공휴일 수 · 최장 연휴)
+     · /weekday/           같은 축의 둘째 장 — 공휴일을 **요일**로 다시 묶는다.
+                           자료를 하나도 더 만들지 않는다(이름 축과 같은 방식)이고,
+                           축 탭은 새로 늘리지 않고 'rank' 를 잡는다 —
+                           /sky/term/ 이나 /holiday/{이름}/ 이 쓰는 그 관례다 */
 export const EXTRA = ['sky', 'sky/term', 'sky/moon', 'sky/meteor', 'sky/lunar',
-    'holiday', 'rank'];
+    'holiday', 'rank', 'weekday'];
 
 /* 이름 축의 낱장. **EXTRA 에 손으로 적지 않는다** — 몇 장이 될지는 자료가 정하고
    (문턱을 넘는 이름의 수) 달마다 늘거나 줄 수 있다. 손으로 적어 두면 자료가

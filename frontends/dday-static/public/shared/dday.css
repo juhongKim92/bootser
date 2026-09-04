@@ -209,6 +209,21 @@ table.who td.name{
 /* ------------------------------------------------ 순위 표 (/rank/)
    행이 나라다. 첫 칸의 숫자는 장식이 아니라 순위이므로 표 밖으로 빼지 않는다. */
 table.rank{margin-top:2px}
+
+/* --- 요일 축 표 (/weekday/)
+   순위 표와 골격이 다르다 — 첫 칸이 순위도 나라도 아니라 요일·해·이름이고,
+   나머지 칸이 전부 수다. 그래서 table.rank 를 빌려 쓰지 않고 따로 둔다.
+   수는 오른쪽으로 몰고 tabular-nums 를 걸어야 자리가 맞는다 — 일곱 줄을
+   위아래로 견주는 표라서 소수점이 흔들리면 읽는 뜻이 사라진다. */
+table.wk{margin-top:2px}
+table.wk td:first-child{font-weight:500;white-space:nowrap}
+table.wk td.num{
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+  text-align:right;white-space:nowrap;color:var(--ink-2);
+}
+table.wk thead th:not(:first-child){text-align:right}
+table.wk td a{color:var(--ink);text-decoration:none}
+table.wk td a:hover{color:var(--soon);text-decoration:underline}
 td.no{
   font-family:var(--mono);font-variant-numeric:tabular-nums;
   color:var(--ink-3);width:1%;white-space:nowrap;text-align:right;

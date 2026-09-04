@@ -210,6 +210,56 @@ const L = {
         rankBreakNote: '주말과 공휴일이 이어져 사흘 이상 쉬는 구간 가운데 가장 긴 것입니다.',
         rankBreaksCap: (n) => `상위 ${n}개국`,
         rankBreaksH2: (y) => `${y}년 황금연휴가 많은 나라`,
+
+        /* --- 요일 축 (같은 '나라끼리 견주기' 축의 둘째 장) --- */
+        wkTitle: (y) => `${y}년 공휴일 요일 분포 — 금요일에 몰리는 이유`,
+        wkDesc: (y, f) => `${y}년 ${f.total}개국의 쉬는 날짜 ${f.days}건을 요일로 세면`
+            + ` ${f.topName}요일이 ${f.top}건으로 가장 많고 ${f.lowName}요일이 ${f.low}건으로 가장 적습니다.`
+            + ` 주말에 떨어진 것은 ${f.we}건(${f.wePct}%)입니다.`,
+        wkH1: '공휴일은 무슨 요일에 몰리나',
+        wkLede: '요일이 고르게 흩어질 이유가 없습니다. 1월 1일 하나가 200개국에서 같은 요일에 떨어지기 때문입니다.',
+        wkCrumb: '요일 분포',
+        wkLink: '요일 분포 →',
+        wkNote: (y, n) => `${y}년 자료를 담긴 ${n}개국에 대해 세었습니다. 세는 단위는 순위 페이지와 같은 "공휴일이 있는 날짜" 입니다 — 그래서 요일 일곱 칸의 합이 그 페이지의 날짜 수와 맞습니다.`,
+        wkDistCap: (n) => `${n}개국 합계`,
+        wkDistH2: (y) => `${y}년 요일별 분포`,
+        wkDistNote: (e) => `고르게 흩어진다면 일곱 요일이 각각 ${e}% 일 것입니다.`,
+        wkWhyH2: '고정 날짜가 200개국에서 같은 요일에 떨어진다',
+        wkWhyNote: (f) => `${f.nyDate}은 ${f.nyDow}요일이고 그 하루가 ${f.nyN}개국의 공휴일입니다.`
+            + ` ${f.xmDate}은 ${f.xmDow}요일이고 ${f.xmN}개국입니다.`
+            + ` 이 두 날짜만으로 ${f.nyDow}요일의 ${f.nyShare}%, ${f.xmDow}요일의 ${f.xmShare}% 가 채워집니다.`,
+        wkYearCap: (n) => `${n}개 해`,
+        wkYearH2: '주말 겹침은 해마다 흔들린다',
+        wkYearNote: '공휴일이 토요일이나 일요일에 떨어지면 쉬는 날이 하루 줄어듭니다. 고정 날짜는 해마다 요일이 밀리므로, 그 손해는 전 세계가 같은 해에 함께 봅니다.',
+        wkNameCap: (n) => `이름 ${n}개`,
+        wkNameH2: (y) => `${y}년, 이름이 걸치는 요일 수`,
+        wkNameNote: '요일이 하나뿐인 이름은 요일이 정의에 박혀 있다는 뜻입니다 — 성금요일은 언제나 금요일이에요. 일곱이면 나라마다 날짜가 다르다는 뜻입니다.',
+        wkCleanCap: (n) => `상위 ${n}개국`,
+        wkCleanH2: (y) => `${y}년 주말과 겹치지 않는 나라`,
+        wkCleanNote: (m) => `공휴일이 ${m}건 이상인 나라만 세웁니다 — 두세 건뿐인 나라는 우연히 0%가 되기 쉽습니다.`,
+        wkWorstCap: (n) => `상위 ${n}개국`,
+        wkWorstH2: (y) => `${y}년 주말과 많이 겹치는 나라`,
+        wkMonCap: (n) => `상위 ${n}개국`,
+        wkMonH2: (y) => `${y}년 월요일 공휴일이 많은 나라`,
+        wkMonNote: '공휴일이 주말에 걸리면 월요일로 옮기는 제도를 둔 나라들입니다.',
+        wkWkndCap: (n) => `${n}가지`,
+        wkWkndH2: '주말이 토·일이 아닌 나라가 있다',
+        wkWkndNote: '그래서 주말 겹침은 토·일로 고정해 세지 않고 그 나라의 주말로 셉니다. 나라별 주말 요일은 자료에 없고 브라우저·Node 의 국제화 표(Intl)가 알려 줍니다.',
+        thWeekendDays: '주말',
+        thCountries: '나라 수',
+        thWeekday: '요일',
+        thCount: '건수',
+        thShare: '비율',
+        thVsEven: '고른 분포 대비',
+        thYear: '해',
+        thWeekendHit: '주말 겹침',
+        thWkName: '이름',
+        thSpans: '걸치는 요일',
+        thTopDow: '최다 요일',
+        wkDows: (n) => `${n}개`,
+        wkPct: (v) => `${v}%`,
+        wkRatio: (a, b) => `${a} / ${b}`,
+        wkTimes: (v) => `${v}배`,
         thRank: '순위',
         thCountry: '국가',
         thDayCount: '쉬는 날짜',
@@ -415,6 +465,56 @@ const L = {
         rankBreakNote: 'The longest stretches where weekends and public holidays run together for three days or more.',
         rankBreaksCap: (n) => `Top ${n}`,
         rankBreaksH2: (y) => `Most long weekends in ${y}`,
+
+        /* --- 요일 축 --- */
+        wkTitle: (y) => `Public Holidays by Weekday ${y} — Why Friday Wins`,
+        wkDesc: (y, f) => `Counting the ${f.days} days off of ${f.total} countries in ${y} by weekday,`
+            + ` ${f.topName} leads with ${f.top} and ${f.lowName} trails with ${f.low}.`
+            + ` ${f.we} of them (${f.wePct}%) land on a weekend.`,
+        wkH1: 'Which weekday do public holidays land on?',
+        wkLede: 'There is no reason for weekdays to come out even. One first of January falls on the same weekday in two hundred countries at once.',
+        wkCrumb: 'by weekday',
+        wkLink: 'By weekday →',
+        wkNote: (y, n) => `Counted over ${y} for all ${n} countries in the data. The unit is the same as on the rankings page — “dates carrying a public holiday” — so the seven weekday cells add up to the date counts there.`,
+        wkDistCap: (n) => `${n} countries`,
+        wkDistH2: (y) => `Distribution by weekday, ${y}`,
+        wkDistNote: (e) => `Spread evenly, each of the seven weekdays would hold ${e}%.`,
+        wkWhyH2: 'A fixed date falls on the same weekday in two hundred countries',
+        wkWhyNote: (f) => `${f.nyDate} is a ${f.nyDow} and that single day is a public holiday in ${f.nyN} countries.`
+            + ` ${f.xmDate} is a ${f.xmDow} and covers ${f.xmN}.`
+            + ` Those two dates alone fill ${f.nyShare}% of ${f.nyDow} and ${f.xmShare}% of ${f.xmDow}.`,
+        wkYearCap: (n) => `${n} years`,
+        wkYearH2: 'The weekend overlap swings from year to year',
+        wkYearNote: 'A holiday landing on a Saturday or Sunday is a day off lost. Fixed dates shift one weekday each year, so the whole world takes that loss in the same year.',
+        wkNameCap: (n) => `${n} names`,
+        wkNameH2: (y) => `How many weekdays each name spans in ${y}`,
+        wkNameNote: 'A name spanning one weekday has that weekday written into its definition — Good Friday is always a Friday. Seven means every country picks its own date.',
+        wkCleanCap: (n) => `Top ${n}`,
+        wkCleanH2: (y) => `Countries with no weekend overlap in ${y}`,
+        wkCleanNote: (m) => `Only countries with ${m} holidays or more — with two or three, zero happens by luck.`,
+        wkWorstCap: (n) => `Top ${n}`,
+        wkWorstH2: (y) => `Countries losing most to weekends in ${y}`,
+        wkMonCap: (n) => `Top ${n}`,
+        wkMonH2: (y) => `Most Monday holidays in ${y}`,
+        wkMonNote: 'These are the countries that move a holiday to Monday when it lands on a weekend.',
+        wkWkndCap: (n) => `${n} kinds`,
+        wkWkndH2: 'Not every country has its weekend on Saturday and Sunday',
+        wkWkndNote: 'So the weekend overlap is counted against each country’s own weekend rather than a fixed Saturday–Sunday. Those weekend days are not in the data — the internationalisation tables in the browser and in Node supply them.',
+        thWeekendDays: 'Weekend',
+        thCountries: 'Countries',
+        thWeekday: 'Weekday',
+        thCount: 'Count',
+        thShare: 'Share',
+        thVsEven: 'vs even',
+        thYear: 'Year',
+        thWeekendHit: 'On a weekend',
+        thWkName: 'Name',
+        thSpans: 'Weekdays spanned',
+        thTopDow: 'Most on',
+        wkDows: (n) => `${n}`,
+        wkPct: (v) => `${v}%`,
+        wkRatio: (a, b) => `${a} / ${b}`,
+        wkTimes: (v) => `×${v}`,
         thRank: '#',
         thCountry: 'Country',
         thDayCount: 'Days off',
@@ -1491,6 +1591,291 @@ ${rows}
       </table>`;
 }
 
+/* ================================================ 요일 축 (`/weekday/`)
+   국가별 자료를 공휴일의 **요일**로 다시 묶는다. 이름 축과 같은 자리다 —
+   밖에서 받아오는 것이 없고 `data/` 에 파일을 하나도 더 만들지 않는다.
+   여기서 묶어 HTML 에 박고, `check-pages` 가 **자기 손으로 다시 세어** 견준다.
+
+   축 탭을 새로 만들지 않는다. 물음이 "나라끼리 견주기" 와 같은 것이라
+   `/rank/` 의 둘째 장으로 두고 그 축을 잡는다 — `/sky/term/` 이나
+   `/holiday/{이름}/` 이 쓰는 그 관례다.
+
+   ⚠ 세는 단위가 순위 페이지와 같아야 한다(**공휴일이 있는 날짜**). 건수로 세면
+   한 날짜에 둘 겹치는 나라에서 요일 일곱 칸의 합이 그 페이지의 날짜 수와 갈라지고,
+   그러면 같은 자료를 두 페이지가 다르게 말하는 셈이 된다. */
+
+/** 요일 표에 세울 줄 수. 순위 페이지와 같은 값을 쓴다. */
+const WK_TOP = RANK_TOP;
+/** 주말 겹침 **비율**을 세울 최소 공휴일 수. 두세 건뿐인 나라는 우연히 0% 가 된다. */
+const WK_MIN = 8;
+
+/* 그 나라의 주말이 어느 요일인가. **Intl 이 알려준다** — 파일도 네트워크도 필요 없다.
+   README 가 *"주말이 어느 요일인지는 우리 자료에 없다"* 며 이 지표를 통째로 뺐던
+   자리인데(이집트는 금·토다), `Intl.Locale('und-XX').getWeekInfo().weekend` 로
+   204개국 전부 잡힌다 — 토·일 195 · 금·토 8 · 일 하루만 1(인도).
+
+   ⚠ 요일 번호가 ISO(1=월 … 7=일)다. 우리 dow() 는 0=일 … 6=토 이므로 `d % 7` 로
+   옮긴다 — 7(일)이 0 이 되고 6(토)은 그대로다. 안 옮기면 조용히 하루씩 밀린다. */
+const WEEKEND = new Map();
+function weekendOf(cc) {
+    if (WEEKEND.has(cc)) return WEEKEND.get(cc);
+    let set = new Set([0, 6]);
+    try {
+        const w = new Intl.Locale(`und-${cc}`).getWeekInfo();
+        if (w && Array.isArray(w.weekend) && w.weekend.length) {
+            set = new Set(w.weekend.map((d) => d % 7));
+        }
+    } catch { /* 주말 정보를 못 주는 런타임 — 토·일로 본다 */ }
+    WEEKEND.set(cc, set);
+    return set;
+}
+
+function weekdayIndex(datas, main, years) {
+    const y = String(main);
+
+    /* 나라별 일곱 칸. 날짜 수로 센다 — 위 ⚠ 참고. */
+    const rows = datas.map((d) => {
+        const dates = [...new Set(d.days.filter((x) => x.d.startsWith(y)).map((x) => x.d))];
+        const w = [0, 0, 0, 0, 0, 0, 0];
+        for (const iso of dates) w[dow(iso)]++;
+        /* 주말 겹침은 **그 나라의 주말**로 센다 — 토·일로 고정하면 금·토인 8개국에서
+           조용히 틀린다. 그게 이 지표가 한 번 기각됐던 이유다. */
+        const wknd = weekendOf(d.code);
+        return {
+            code: d.code, ko: d.ko, name: d.name, w, n: dates.length,
+            wknd: [...wknd].sort((a, b) => a - b),
+            we: dates.filter((iso) => wknd.has(dow(iso))).length,
+        };
+    }).filter((c) => c.n > 0);
+
+    const dist = [0, 0, 0, 0, 0, 0, 0];
+    let days = 0, we = 0;
+    for (const c of rows) { c.w.forEach((v, i) => { dist[i] += v; }); days += c.n; we += c.we; }
+
+    /* 주말이 어느 요일인가로 나라를 묶는다 — 셋뿐이지만 그 셋이 이 지표의 전제다 */
+    const wkndKinds = new Map();
+    for (const c of rows) {
+        const k = c.wknd.join(',');
+        if (!wkndKinds.has(k)) wkndKinds.set(k, { days: c.wknd, n: 0 });
+        wkndKinds.get(k).n++;
+    }
+
+    /* 해마다 요일이 하루씩 밀린다. 세 해를 같은 방식으로 세어 견준다 —
+       주말 겹침이 크게 흔들리는 것이 이 표의 요점이다. */
+    const byYear = years.map((yy) => {
+        const s = String(yy);
+        const d7 = [0, 0, 0, 0, 0, 0, 0];
+        let n = 0, we = 0;
+        for (const d of datas) {
+            const wknd = weekendOf(d.code);
+            for (const iso of new Set(d.days.filter((x) => x.d.startsWith(s)).map((x) => x.d))) {
+                const k = dow(iso);
+                d7[k]++; n++;
+                if (wknd.has(k)) we++;
+            }
+        }
+        return { y: yy, n, we, dist: d7, top: d7.indexOf(Math.max(...d7)) };
+    }).filter((x) => x.n > 0);
+
+    /* 이름이 몇 요일에 걸치나. **이름 축의 정규화(NORM)와 원화(NAMES)를 그대로 쓴다** —
+       여기서 묶는 규칙을 새로 만들면 두 축이 서로 다른 이름 집합을 갖는다.
+       걸치는 요일이 하나면 요일이 정의에 박힌 것(성금요일)이고, 일곱이면
+       나라마다 날짜가 다른 것(독립기념일)이다. */
+    const byName = new Map();
+    for (const d of datas) {
+        for (const x of d.days) {
+            if (!x.d.startsWith(y)) continue;
+            const k = NORM(x.e ?? x.n);
+            if (!NAMES[k]) continue;
+            if (!byName.has(k)) byName.set(k, { w: [0, 0, 0, 0, 0, 0, 0], n: 0 });
+            const e = byName.get(k);
+            e.w[dow(x.d)]++; e.n++;
+        }
+    }
+    const names = [...byName].map(([k, v]) => ({
+        ko: NAMES[k].ko, en: NAMES[k].en, slug: NAMES[k].slug,
+        n: v.n, w: v.w,
+        spans: v.w.filter((x) => x > 0).length,
+        top: v.w.indexOf(Math.max(...v.w)),
+    })).sort((a, b) => b.n - a.n || a.slug.localeCompare(b.slug));
+
+    /* 쏠림의 정체 — 고정 날짜 둘이 200개국에서 같은 요일에 떨어진다.
+       건수가 아니라 **그 날짜를 공휴일로 둔 나라 수**를 센다. */
+    const fixed = [y + '-01-01', y + '-12-25'].map((iso) => ({
+        iso, dw: dow(iso),
+        n: datas.filter((d) => d.days.some((x) => x.d === iso)).length,
+    }));
+
+    const by = (f) => (a, b) => f(b) - f(a) || a.code.localeCompare(b.code);
+    const enough = rows.filter((c) => c.n >= WK_MIN);
+    const ratio = (c) => c.we / c.n;
+
+    return {
+        total: rows.length, days, dist, we, rows,
+        years: byYear, names, fixed,
+        wknds: [...wkndKinds.values()].sort((a, b) => b.n - a.n || a.days[0] - b.days[0]),
+        mondays: [...rows].sort(by((c) => c.w[1])).slice(0, WK_TOP),
+        clean: [...enough].sort((a, b) => ratio(a) - ratio(b) || a.code.localeCompare(b.code)).slice(0, WK_TOP),
+        worst: [...enough].sort((a, b) => ratio(b) - ratio(a) || a.code.localeCompare(b.code)).slice(0, WK_TOP),
+    };
+}
+
+const pct1 = (v, n) => (Math.round(v / n * 1000) / 10).toFixed(1);
+
+/* 요일 분포 · 해별 · 이름별 표. 국가 칸이 없어서 table.rank 를 쓸 수 없다 —
+   저쪽은 첫 칸이 순위이고 둘째가 국기 붙은 나라다. */
+function wkTable(head, rows) {
+    return '      <table class="wk">\n'
+        + '        <thead><tr>' + head.map((h) => '<th>' + esc(h) + '</th>').join('') + '</tr></thead>\n'
+        + '        <tbody>\n'
+        + rows.map((cells) => '        <tr>' + cells.map((c, i) =>
+            '<td' + (i === 0 ? '' : ' class="num"') + '>' + c + '</td>').join('') + '</tr>').join('\n')
+        + '\n        </tbody>\n      </table>';
+}
+
+const dowSpan = (t, i) =>
+    '<span class="dow' + (i === 0 ? ' sun' : i === 6 ? ' sat' : '') + '">' + esc(t.dow[i]) + '</span>';
+
+function weekdayPage(t, wk, main, generated) {
+    const slug = 'weekday/';
+    const even = pct1(1, 7);
+    const hi = wk.dist.indexOf(Math.max(...wk.dist));
+    const lo = wk.dist.indexOf(Math.min(...wk.dist));
+    const f = {
+        total: wk.total, days: wk.days,
+        top: wk.dist[hi], topName: t.dow[hi],
+        low: wk.dist[lo], lowName: t.dow[lo],
+        we: wk.we, wePct: pct1(wk.we, wk.days),
+    };
+    const [ny, xm] = wk.fixed;
+    const why = {
+        nyDate: DATE_ONE[t.lang](ny.iso), nyDow: t.dow[ny.dw], nyN: ny.n,
+        nyShare: pct1(ny.n, wk.dist[ny.dw]),
+        xmDate: DATE_ONE[t.lang](xm.iso), xmDow: t.dow[xm.dw], xmN: xm.n,
+        xmShare: pct1(xm.n, wk.dist[xm.dw]),
+    };
+
+    /* 요일 일곱 줄. 마지막 칸은 고른 분포 대비 배수다 — 이 페이지의 첫 수치다. */
+    const distRows = wk.dist.map((v, i) => [
+        dowSpan(t, i),
+        esc(String(v)),
+        esc(t.wkPct(pct1(v, wk.days))),
+        esc(t.wkTimes((Math.round(v / (wk.days / 7) * 100) / 100).toFixed(2))),
+    ]);
+
+    const wkndRows = wk.wknds.map((x) => [
+        /* 일요일을 뒤로 보내 적는다 — 번호순(0=일)으로 두면 "일·토" 가 되어 읽기 어색하다 */
+        x.days.slice().sort((p, q) => (p === 0 ? 7 : p) - (q === 0 ? 7 : q))
+            .map((i) => dowSpan(t, i)).join('·'),
+        esc(String(x.n)),
+        esc(t.wkPct(pct1(x.n, wk.total))),
+    ]);
+
+    const yearRows = wk.years.map((x) => [
+        esc(String(x.y)), esc(String(x.n)),
+        esc(t.wkRatio(x.we, x.n)), esc(t.wkPct(pct1(x.we, x.n))),
+    ]);
+
+    const nameRows = wk.names.slice(0, 14).map((x) => [
+        '<a href="' + t.dir + '/' + NAME_ROOT + '/' + x.slug + '/">'
+        + esc(t.lang === 'en' ? x.en : x.ko) + '</a>',
+        esc(String(x.n)), esc(t.wkDows(x.spans)), dowSpan(t, x.top),
+    ]);
+
+    const crumbs = {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+            { '@type': 'ListItem', position: 1, name: SITE, item: BASE + t.dir + '/' },
+            { '@type': 'ListItem', position: 2, name: t.rankCrumb, item: url(t.lang, 'rank/') },
+            { '@type': 'ListItem', position: 3, name: t.wkCrumb, item: url(t.lang, slug) },
+        ],
+    };
+
+    return head(t, {
+        title: t.wkTitle(main), desc: t.wkDesc(main, f), slug,
+        card: 'weekday', alt: t.wkCrumb + ' — ' + SITE,
+    }) + `
+<body data-list="weekday">
+
+${top(t, { slug, axis: 'rank', label: esc(t.pickerLabel) })}
+
+<main class="wrap">
+
+  <h1>${esc(t.wkH1)}</h1>
+  <p class="lede">${esc(t.wkLede)}</p>
+  <p class="sum">${esc(t.wkDesc(main, f))}</p>
+  <p class="note">${esc(t.wkNote(main, wk.total))}</p>
+
+  <section>
+    <span class="cap">${esc(t.wkDistCap(wk.total))}</span>
+    <h2>${esc(t.wkDistH2(main))}</h2>
+    <p class="note">${esc(t.wkDistNote(even))}</p>
+${wkTable([t.thWeekday, t.thCount, t.thShare, t.thVsEven], distRows)}
+  </section>
+
+  <section>
+    <h2>${esc(t.wkWhyH2)}</h2>
+    <p class="note">${esc(t.wkWhyNote(why))}</p>
+  </section>
+
+  <section>
+    <span class="cap">${esc(t.wkWkndCap(wk.wknds.length))}</span>
+    <h2>${esc(t.wkWkndH2)}</h2>
+    <p class="note">${esc(t.wkWkndNote)}</p>
+${wkTable([t.thWeekendDays, t.thCountries, t.thShare], wkndRows)}
+  </section>
+
+  <section>
+    <span class="cap">${esc(t.wkYearCap(wk.years.length))}</span>
+    <h2>${esc(t.wkYearH2)}</h2>
+    <p class="note">${esc(t.wkYearNote)}</p>
+${wkTable([t.thYear, t.thDayCount, t.thWeekendHit, t.thShare], yearRows)}
+  </section>
+
+  <section>
+    <span class="cap">${esc(t.wkNameCap(wk.names.length))}</span>
+    <h2>${esc(t.wkNameH2(main))}</h2>
+    <p class="note">${esc(t.wkNameNote)}</p>
+${wkTable([t.thWkName, t.thCount, t.thSpans, t.thTopDow], nameRows)}
+  </section>
+
+  <section>
+    <span class="cap">${esc(t.wkCleanCap(wk.clean.length))}</span>
+    <h2>${esc(t.wkCleanH2(main))}</h2>
+    <p class="note">${esc(t.wkCleanNote(WK_MIN))}</p>
+${rankTable(t, wk.clean, t.thWeekendHit, (c) => t.wkRatio(c.we, c.n))}
+  </section>
+
+  <section>
+    <span class="cap">${esc(t.wkWorstCap(wk.worst.length))}</span>
+    <h2>${esc(t.wkWorstH2(main))}</h2>
+${rankTable(t, wk.worst, t.thWeekendHit, (c) => t.wkRatio(c.we, c.n))}
+  </section>
+
+  <section>
+    <span class="cap">${esc(t.wkMonCap(wk.mondays.length))}</span>
+    <h2>${esc(t.wkMonH2(main))}</h2>
+    <p class="note">${esc(t.wkMonNote)}</p>
+${rankTable(t, wk.mondays, t.thCount, (c) => t.wkRatio(c.w[1], c.n))}
+  </section>
+
+  <section>
+    <p><a href="${t.dir}/rank/">${esc(t.rankLink)}</a></p>
+    <p><a href="${t.dir}/#countries">${esc(t.otherCountries)}</a></p>
+  </section>
+
+${foot(t, generated)}
+</main>
+
+<script type="application/ld+json">${JSON.stringify(crumbs)}</script>
+<script src="/shared/dday.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>
+`;
+}
+
 function rankPage(t, rank, main, generated) {
     const slug = 'rank/';
     const f = {
@@ -1549,6 +1934,7 @@ ${rankTable(t, rank.busiest, t.thBreakCount, (c) => t.rankTimes(c.breaks.length)
   </section>
 
   <section>
+    <p><a href="${t.dir}/weekday/">${esc(t.wkLink)}</a></p>
     <p><a href="${t.dir}/#countries">${esc(t.otherCountries)}</a></p>
   </section>
 
@@ -1715,6 +2101,9 @@ const byCode = new Map(index.map((c) => [c.code, c]));
 const names = nameIndex(all, coverYear);
 const together = togetherIndex(all, coverYear, names);
 const rank = rankIndex(all, coverYear);
+/* 요일 축. 자료를 하나도 더 만들지 않고 rank 와 같은 자료를 다르게 자른다 —
+   그래서 두 페이지의 수가 맞아야 하고, check-pages 가 그걸 본다. */
+const wk = weekdayIndex(all, coverYear, YEARS());
 
 for (const lang of ['ko', 'en']) {
     const t = L[lang];
@@ -1749,6 +2138,12 @@ for (const lang of ['ko', 'en']) {
     const rankDir = join(root, 'rank');
     mkdirSync(rankDir, { recursive: true });
     writeFileSync(join(rankDir, 'index.html'), rankPage(t, rank, coverYear, generated));
+    count++;
+
+    /* 같은 축의 둘째 장 — 요일로 다시 묶는다. 축 탭은 늘리지 않는다. */
+    const wkDir = join(root, 'weekday');
+    mkdirSync(wkDir, { recursive: true });
+    writeFileSync(join(wkDir, 'index.html'), weekdayPage(t, wk, coverYear, generated));
     count++;
 
     /* 하늘. 국가 축이 아니라 전 세계 공통 축이라 자료가 한 벌인데, 갈래가 셋이라

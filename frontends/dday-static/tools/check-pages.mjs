@@ -40,7 +40,7 @@ import { boot, pages, PUB, DATA } from './harness.mjs';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { BASE, EXTRA, YEARS, today, HERE, kindOf, NAME_PAGE } from './config.mjs';
-import { NAMES, MIN, NAME_ROOT } from './holiday-names.mjs';
+import { NORM, NAMES, MIN, NAME_ROOT } from './holiday-names.mjs';
 import { pngSize } from './png.mjs';
 import { FONT_DIR, FONT_CSS, LICENSE_FILE, codepoints, parseFaces, parseRanges, used, parseName, hash8 } from './fonts.mjs';
 import { SHOWERS } from './astro.mjs';
@@ -78,6 +78,8 @@ const NEED_IDS = {
     holiday: ['picker'],
     name: ['picker', 'now', 'next', 'prev'],
     rank: ['picker'],
+    /* 요일 축도 표만 이고 있다 — 순위와 같이 '다음' 이 하나로 정해지지 않는다 */
+    weekday: ['picker'],
 };
 
 /* 하늘 갈래. gen-pages 의 SKY_TOPICS 와 짝이지만 여기서 따로 적는다 —
@@ -183,6 +185,8 @@ check('favicon.svg', (file) => {
         [/\.ccs \.one::after\{/, '나라 칩 사이 구분점이 없다 — 이름들이 붙어 읽힌다'],
         [/td\.no\{/, '순위 칸 스타일이 없다'],
         [/td\.who\{/, '순위 표의 국가 칸 스타일이 없다 — 줄바꿈이 나 버린다'],
+        [/table\.wk\{/, '요일 축 표 스타일이 없다'],
+        [/table\.wk td\.num\{[^}]*tabular-nums/, '요일 축의 수 칸이 자리를 안 맞춘다 — 일곱 줄을 견주는 표다'],
         [/\.sum\{/, '요약 문장 스타일이 없다 — lede 와 붙어 한 문단으로 보인다'],
         /* .now .pair dd .dd 는 카드 안에만 걸린다. 첫 화면 목록에도 같은 모양이
            필요한데 그걸 빠뜨려서 "D-10다음 절기" 처럼 붙어 나온 적이 있다. */
@@ -506,6 +510,9 @@ const TOGETHER_REF = (() => {
 /* 순위 — 표지 연도의 "쉬는 날짜" 수와 연휴. 세는 단위를 gen-pages 와 같은 말로
    다시 적는다: 건수가 아니라 **날짜 수**다 (한 날짜에 공휴일이 둘 겹치는 나라가 있다). */
 const RANK_TOP_REF = 20;
+/* ISO 날짜의 요일. 0=일 … 6=토 — gen-pages 의 dow() 와 같은 규칙이다. */
+const dowRef = (iso) => new Date(iso + 'T00:00:00Z').getUTCDay();
+
 const RANK_REF = (() => {
     const rows = [];
     const spans = [];
@@ -530,6 +537,136 @@ const RANK_REF = (() => {
             || a.code.localeCompare(b.code)).slice(0, RANK_TOP_REF),
     };
 })();
+
+/* 요일 축의 기대값. **검사기가 자기 손으로 다시 센다** — 이름 축의 게이트 4번과
+   같은 자리다. gen-pages 의 weekdayIndex 를 import 하지 않는 것이 요점이고,
+   그래서 둘이 같이 틀릴 수가 없다.
+
+   ⚠ 세는 단위가 RANK_REF 와 같아야 한다(공휴일이 있는 **날짜**). 아래 불변식이
+   그것을 본다 — 요일 일곱 칸의 합이 순위 페이지의 날짜 수 합과 맞아야 한다. */
+const WK_MIN_REF = 8;
+
+/* 나라별 주말 요일. **Intl 이 유일한 출처다** — 우리 자료에는 없다.
+   생성기와 같은 규칙을 쓰지만 값을 나눠 받는 것이 아니라 여기서 다시 물어본다
+   (NORM 과 같은 취급이다 — 규칙은 나눠 써도 되고 기대값은 안 된다).
+   ⚠ ISO 요일(1=월 … 7=일)을 `d % 7` 로 옮긴다. 안 옮기면 하루씩 밀린다. */
+const weekendRef = (cc) => {
+    try {
+        const w = new Intl.Locale(`und-${cc}`).getWeekInfo();
+        if (w && Array.isArray(w.weekend) && w.weekend.length) {
+            return new Set(w.weekend.map((d) => d % 7));
+        }
+    } catch { /* 못 주는 런타임 */ }
+    return new Set([0, 6]);
+};
+const WK_REF = (() => {
+    const rows = [];
+    const dist = [0, 0, 0, 0, 0, 0, 0];
+    const byName = new Map();
+    const years = new Map();
+    let days = 0;
+    const onDate = new Map();
+
+    for (const f of countryFiles()) {
+        const d = JSON.parse(readFileSync(join(DATA, f), 'utf8'));
+        /* 해별 — 자료가 담은 세 해를 다 센다 */
+        for (const y of YEARS()) {
+            const s = String(y);
+            const set = new Set(d.days.filter((x) => x.d.startsWith(s)).map((x) => x.d));
+            if (!set.size) continue;
+            if (!years.has(y)) years.set(y, { y, n: 0, we: 0, dist: [0, 0, 0, 0, 0, 0, 0] });
+            const e = years.get(y);
+            const wknd = weekendRef(d.code);
+            for (const iso of set) {
+                const k = dowRef(iso);
+                e.n++; e.dist[k]++;
+                if (wknd.has(k)) e.we++;
+            }
+        }
+        /* 표지 연도 — 나라별 일곱 칸 */
+        const dates = [...new Set(d.days.filter((x) => x.d.startsWith(String(MID))).map((x) => x.d))];
+        if (!dates.length) continue;
+        const w = [0, 0, 0, 0, 0, 0, 0];
+        for (const iso of dates) { w[dowRef(iso)]++; dist[dowRef(iso)]++; }
+        days += dates.length;
+        const wknd = weekendRef(d.code);
+        rows.push({
+            code: d.code, w, n: dates.length,
+            wknd: [...wknd].sort((a, b) => a - b),
+            we: dates.filter((iso) => wknd.has(dowRef(iso))).length,
+        });
+        /* 이름별 — 이름 축의 정규화를 그대로 쓴다(그건 규칙이라 나눠 써도 된다) */
+        for (const x of d.days) {
+            if (!x.d.startsWith(String(MID))) continue;
+            const k = NORM(x.e ?? x.n);
+            if (!NAMES[k]) continue;
+            if (!byName.has(k)) byName.set(k, { w: [0, 0, 0, 0, 0, 0, 0], n: 0 });
+            const e = byName.get(k);
+            e.w[dowRef(x.d)]++; e.n++;
+        }
+        for (const iso of [`${MID}-01-01`, `${MID}-12-25`]) {
+            if (d.days.some((x) => x.d === iso)) onDate.set(iso, (onDate.get(iso) || 0) + 1);
+        }
+    }
+
+    const names = [...byName].map(([k, v]) => ({
+        ko: NAMES[k].ko, en: NAMES[k].en, slug: NAMES[k].slug, n: v.n,
+        spans: v.w.filter((x) => x > 0).length,
+        top: v.w.indexOf(Math.max(...v.w)),
+    })).sort((a, b) => b.n - a.n || a.slug.localeCompare(b.slug));
+
+    const desc = (f) => (a, b) => f(b) - f(a) || a.code.localeCompare(b.code);
+    const enough = rows.filter((c) => c.n >= WK_MIN_REF);
+    const ratio = (c) => c.we / c.n;
+    return {
+        total: rows.length, days, dist,
+        we: rows.reduce((a, c) => a + c.we, 0), rows, names,
+        wknds: (() => {
+            const m = new Map();
+            for (const c of rows) {
+                const k = c.wknd.join(',');
+                if (!m.has(k)) m.set(k, { days: c.wknd, n: 0 });
+                m.get(k).n++;
+            }
+            return [...m.values()].sort((a, b) => b.n - a.n || a.days[0] - b.days[0]);
+        })(),
+        years: [...years.values()].sort((a, b) => a.y - b.y),
+        fixed: [`${MID}-01-01`, `${MID}-12-25`].map((iso) => ({
+            iso, dw: dowRef(iso), n: onDate.get(iso) || 0,
+        })),
+        mondays: [...rows].sort(desc((c) => c.w[1])).slice(0, RANK_TOP_REF),
+        clean: [...enough].sort((a, b) => ratio(a) - ratio(b) || a.code.localeCompare(b.code)).slice(0, RANK_TOP_REF),
+        worst: [...enough].sort((a, b) => ratio(b) - ratio(a) || a.code.localeCompare(b.code)).slice(0, RANK_TOP_REF),
+    };
+})();
+
+/* 요일 축의 산수가 스스로 앞뒤가 맞나 — 페이지를 열기 전에 여기서 본다. */
+{
+    const sum = WK_REF.dist.reduce((a, b) => a + b, 0);
+    if (sum !== WK_REF.days) {
+        bad('/weekday/', `요일 일곱 칸의 합이 ${sum} 인데 날짜 수는 ${WK_REF.days} 다`);
+    }
+    /* **두 페이지가 같은 자료를 같은 단위로 말하나.** 순위 페이지가 검증하는 날짜 수의
+       합과 요일 칸의 합이 같아야 한다 — 건수로 세면 여기서 갈라진다. */
+    if (WK_REF.total !== RANK_REF.total) {
+        bad('/weekday/', `요일 축이 ${WK_REF.total}개국인데 순위 축은 ${RANK_REF.total}개국이다`);
+    }
+    /* ⚠ 예전에는 "주말 = 토·일" 로 봤다. 금·토인 나라가 8개국이라 그 가정으로는
+       조용히 틀린다 — README 가 이 지표를 한 번 뺐던 이유다. 지금은 나라별로
+       세므로 전 세계 합계가 토·일 칸의 합과 **달라야** 맞다. */
+    if (WK_REF.we === WK_REF.dist[0] + WK_REF.dist[6]) {
+        bad('/weekday/', '주말 겹침이 토·일 칸의 합과 같다 — 나라별 주말을 안 보고 있다');
+    }
+    if (WK_REF.wknds.length < 2) {
+        bad('/weekday/', `주말 종류가 ${WK_REF.wknds.length}가지다 — 금·토인 나라가 있어야 한다`);
+    }
+    for (const y of WK_REF.years) {
+        if (y.dist.reduce((a, b) => a + b, 0) !== y.n) bad('/weekday/', `${y.y}년 일곱 칸의 합이 날짜 수와 다르다`);
+    }
+    for (const c of WK_REF.rows) {
+        if (c.w.reduce((a, b) => a + b, 0) !== c.n) { bad('/weekday/', `${c.code} 의 일곱 칸 합이 다르다`); break; }
+    }
+}
 
 /* 이름 축 페이지의 이름 칸에서 나라 코드를 뽑는다. 칩은 `<span class="one">` 하나에
    국기와 <a> 하나씩이라 좁은 무늬로 충분하다. */
@@ -652,6 +789,8 @@ for (const { page, lang, slug, kind, label } of ALL) {
     {
         const wantAxis = {
             home: 'country', country: 'country', rank: 'rank',
+            /* 요일 축은 탭을 새로 만들지 않고 '나라끼리 견주기' 축의 둘째 장이다 */
+            weekday: 'rank',
             holiday: 'name', name: 'name',
             sky: 'sky', 'sky/term': 'sky', 'sky/moon': 'sky', 'sky/meteor': 'sky', 'sky/lunar': 'sky',
         }[kind];
@@ -1080,6 +1219,153 @@ for (const { page, lang, slug, kind, label } of ALL) {
         /* 허브 표에는 나라 칩이 없어야 한다 — 44일 × 최대 197개국이면 페이지가 죽는다 */
         for (const x of rows) {
             if (ccsIn(x.cell).length) { bad(label, `허브 표에 나라 칩이 있다 (${x.d})`); break; }
+        }
+        continue;
+    }
+
+    /* ------------------------------------------------------------ 요일 축 한 장
+       자료를 하나도 더 만들지 않는 축이라, 이름 축과 같이 **검사기가 자기 손으로
+       다시 세어**(WK_REF) HTML 과 견준다. 묶는 코드를 나눠 쓰지 않으므로 둘이
+       같이 틀릴 수 없다 — 이 축의 게이트 4번이 바로 이것이다. */
+    if (kind === 'weekday') {
+        if (r.dday.list !== 'weekday') bad(label, `dday.js 가 요일 축으로 못 알아봤다 (${r.dday.list})`);
+
+        /* table.wk 넷 — 요일 분포 · 주말 종류 · 해별 · 이름별. 국가 표는 table.rank 다.
+           ⚠ 순서가 곧 인덱스다. 주말 종류 표를 해별 앞에 끼우면서 한 칸씩 밀렸고,
+           그 순간 해별 검사가 엉뚱한 표를 읽어 터졌다 — 개수를 먼저 보는 이유다. */
+        const wkTables = [...html.matchAll(/<table class="wk">([\s\S]*?)<\/table>/g)].map((m) => m[1]);
+        if (wkTables.length !== 4) bad(label, `요일 표가 ${wkTables.length}개다 — 넷이어야 한다`);
+
+        /* 머리 줄(<thead>)을 함께 잡지 않도록 <tbody> 안만 본다. 처음에 <tr> 을
+           통째로 훑었더니 머리 줄이 칸 0개로 들어와 첫 검사에서 터졌다. */
+        const cellsOf = (body) => {
+            const tb = /<tbody>([\s\S]*?)<\/tbody>/.exec(body);
+            return [...(tb ? tb[1] : '').matchAll(/<tr>([\s\S]*?)<\/tr>/g)]
+                .map((m) => [...m[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)]
+                    .map((c) => c[1].replace(/<[^>]*>/g, '').trim()))
+                .filter((cells) => cells.length);
+        };
+
+        /* ① 요일 분포 일곱 줄 — 건수·비율·배수를 다 견준다 */
+        if (wkTables[0]) {
+            const rows = cellsOf(wkTables[0]);
+            if (rows.length !== 7) bad(label, `요일 분포가 ${rows.length}줄이다 — 일곱이어야 한다`);
+            rows.forEach((c, i) => {
+                const want = WK_REF.dist[i];
+                if (+c[1] !== want) bad(label, `${i}번 요일이 ${c[1]}건이다 (기대 ${want})`);
+                const wantPct = (Math.round(want / WK_REF.days * 1000) / 10).toFixed(1);
+                if (!c[2].startsWith(wantPct)) bad(label, `${i}번 요일 비율이 "${c[2]}" 다 (기대 ${wantPct}%)`);
+                const wantX = (Math.round(want / (WK_REF.days / 7) * 100) / 100).toFixed(2);
+                if (!c[3].startsWith(wantX) && !c[3].includes(wantX)) {
+                    bad(label, `${i}번 요일 배수가 "${c[3]}" 다 (기대 ${wantX})`);
+                }
+            });
+            /* 표의 합이 각주가 말하는 날짜 수와 같아야 한다 — 두 페이지가 같은 단위를 쓴다 */
+            const sum = rows.reduce((a, c) => a + (+c[1] || 0), 0);
+            if (sum !== WK_REF.days) bad(label, `요일 표의 합이 ${sum} 이다 (기대 ${WK_REF.days})`);
+        }
+
+        /* ② 주말 종류 — 이 지표의 전제다. 토·일 말고 다른 주말이 실제로 있어야 한다. */
+        if (wkTables[1]) {
+            const rows = cellsOf(wkTables[1]);
+            if (rows.length !== WK_REF.wknds.length) {
+                bad(label, `주말 종류가 ${rows.length}줄이다 (기대 ${WK_REF.wknds.length})`);
+            }
+            rows.forEach((c, i) => {
+                const w = WK_REF.wknds[i];
+                if (!w) return;
+                if (+c[1] !== w.n) bad(label, `주말 종류 ${i + 1}줄이 ${c[1]}개국이다 (기대 ${w.n})`);
+            });
+            const sum = rows.reduce((a, c) => a + (+c[1] || 0), 0);
+            if (sum !== WK_REF.total) bad(label, `주말 종류의 합이 ${sum}개국이다 (기대 ${WK_REF.total})`);
+        }
+
+        /* ③ 해별 표 — 주말 겹침이 해마다 흔들리는 것이 이 페이지의 축이다 */
+        if (wkTables[2]) {
+            const rows = cellsOf(wkTables[2]);
+            if (rows.length !== WK_REF.years.length) {
+                bad(label, `해별 표가 ${rows.length}줄이다 (기대 ${WK_REF.years.length})`);
+            }
+            rows.forEach((c, i) => {
+                const y = WK_REF.years[i];
+                if (!y) return;
+                if (+c[0] !== y.y) bad(label, `해별 ${i + 1}줄이 ${c[0]} 년이다 (기대 ${y.y})`);
+                if (+c[1] !== y.n) bad(label, `${y.y}년 날짜 수가 ${c[1]} 이다 (기대 ${y.n})`);
+                if (!c[2].startsWith(String(y.we))) bad(label, `${y.y}년 주말 겹침이 "${c[2]}" 다 (기대 ${y.we})`);
+                const wantPct = (Math.round(y.we / y.n * 1000) / 10).toFixed(1);
+                if (!c[3].startsWith(wantPct)) bad(label, `${y.y}년 비율이 "${c[3]}" 다 (기대 ${wantPct}%)`);
+            });
+        }
+
+        /* ④ 이름별 표 — 걸치는 요일 수가 1 이면 요일이 정의에 박힌 것이다 */
+        if (wkTables[3]) {
+            const rows = cellsOf(wkTables[3]);
+            rows.forEach((c, i) => {
+                const w = WK_REF.names[i];
+                if (!w) { bad(label, `이름 표 ${i + 1}줄이 기대 밖이다`); return; }
+                const shown = lang === 'en' ? w.en : w.ko;
+                if (c[0] !== esc(shown)) bad(label, `이름 표 ${i + 1}줄이 "${c[0]}" 다 (기대 "${esc(shown)}")`);
+                if (+c[1] !== w.n) bad(label, `"${shown}" 이 ${c[1]}건이다 (기대 ${w.n})`);
+                if (!c[2].startsWith(String(w.spans))) {
+                    bad(label, `"${shown}" 의 걸치는 요일이 "${c[2]}" 다 (기대 ${w.spans})`);
+                }
+            });
+            /* 이름 축으로 가는 링크가 실제로 있는 슬러그를 가리키나 */
+            for (const m of wkTables[3].matchAll(/href="([^"]*\/holiday\/([a-z0-9-]+)\/)"/g)) {
+                if (!NAME_INDEX.has(m[2])) bad(label, `이름 표의 링크가 없는 이름을 가리킨다: ${m[2]}`);
+                if (m[1].startsWith('/en/') !== (lang === 'en')) {
+                    bad(label, `이름 표의 링크가 다른 언어 칸으로 간다: ${m[1]}`);
+                }
+            }
+        }
+
+        /* ⑤ 국가 표 셋 — 주말 안 겹침 · 많이 겹침 · 월요일 많음 */
+        const plain = [...html.matchAll(/<table class="rank">([\s\S]*?)<\/table>/g)].map((m) => m[1]);
+        const want = [
+            ['주말 안 겹침', WK_REF.clean, (c) => `${c.we} / ${c.n}`],
+            ['주말 많이 겹침', WK_REF.worst, (c) => `${c.we} / ${c.n}`],
+            ['월요일 많음', WK_REF.mondays, (c) => `${c.w[1]} / ${c.n}`],
+        ];
+        if (plain.length !== want.length) {
+            bad(label, `국가 표가 ${plain.length}개다 — ${want.length}개여야 한다`);
+        }
+        plain.forEach((body, i) => {
+            const [what, rows, valueOf] = want[i] || [];
+            if (!rows) return;
+            const got2 = rankRowsOf(body);
+            if (got2.length !== rows.length) {
+                bad(label, `${what} 표가 ${got2.length}행이다 (기대 ${rows.length})`); return;
+            }
+            got2.forEach((g, j) => {
+                const w2 = rows[j];
+                if (g.no !== j + 1) bad(label, `${what} ${j + 1}번째 순위가 ${g.no} 다`);
+                if (g.cc !== w2.code) bad(label, `${what} ${j + 1}번째가 ${g.cc} 다 (기대 ${w2.code})`);
+                if (g.flagCc !== g.cc) bad(label, `${what} ${g.cc} 줄에 ${g.flagCc} 국기가 붙었다`);
+                if (g.cell.replace(/\s/g, '') !== valueOf(w2).replace(/\s/g, '')) {
+                    bad(label, `${what} ${g.cc} 의 값이 "${g.cell}" 다 (기대 "${valueOf(w2)}")`);
+                }
+                if (g.shown !== esc(shownName(w2.code, lang))) {
+                    bad(label, `${what} ${g.cc} 에 적힌 이름이 "${g.shown}" 다`);
+                }
+            });
+        });
+
+        /* ⑥ 요약과 각주가 나르는 수치 — 쏠림의 정체를 적어 둔 자리다 */
+        {
+            const plainText = html.replace(/<[^>]*>/g, ' ');
+            for (const [what, v] of [
+                ['날짜 수', WK_REF.days],
+                ['나라 수', WK_REF.total],
+                ['최다 요일 건수', Math.max(...WK_REF.dist)],
+                ['최소 요일 건수', Math.min(...WK_REF.dist)],
+                ['주말 겹침', WK_REF.we],
+                ['1월 1일 나라 수', WK_REF.fixed[0].n],
+                ['12월 25일 나라 수', WK_REF.fixed[1].n],
+            ]) {
+                if (!new RegExp(`\\b${v}\\b`).test(plainText)) {
+                    bad(label, `${what} ${v} 가 페이지에 없다 — 문안이 자료와 갈렸다`);
+                }
+            }
         }
         continue;
     }

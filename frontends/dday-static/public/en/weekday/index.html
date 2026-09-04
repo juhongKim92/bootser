@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <title>Public Holidays by Weekday 2026 — Why Friday Wins</title>
+  <meta name="description" content="Counting the 2500 days off of 204 countries in 2026 by weekday, Fri leads with 617 and Wed trails with 161. 544 of them (21.8%) land on a weekend.">
+  <link rel="canonical" href="https://this-is-the.day/en/weekday/">
+  <link rel="alternate" hreflang="ko" href="https://this-is-the.day/weekday/">
+  <link rel="alternate" hreflang="en" href="https://this-is-the.day/en/weekday/">
+  <link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/weekday/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="ko_KR">
+  <meta property="og:title" content="Public Holidays by Weekday 2026 — Why Friday Wins">
+  <meta property="og:description" content="Counting the 2500 days off of 204 countries in 2026 by weekday, Fri leads with 617 and Wed trails with 161. 544 of them (21.8%) land on a weekend.">
+  <meta property="og:url" content="https://this-is-the.day/en/weekday/">
+  <meta property="og:image" content="https://this-is-the.day/card/weekday.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="by weekday — this is the day">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/shared/base.css">
+  <link rel="stylesheet" href="/shared/dday.css">
+</head>
+<body data-list="weekday">
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← this is the day</a>
+    <nav class="tabs">
+      <a class="tab" href="/en/">Countries</a>
+      <a class="tab here" href="/en/rank/" aria-current="page">Rankings</a>
+      <a class="tab" href="/en/holiday/">By name</a>
+      <a class="tab" href="/en/sky/">The sky</a>
+    </nav>
+  <nav class="side">
+    <details class="picker" id="picker">
+      <summary>Country</summary>
+      <div class="panel">
+        <input type="search" placeholder="Search — name or code" aria-label="Search countries" autocomplete="off">
+        <ul></ul>
+        <div class="none" hidden>No country matches.</div>
+      </div>
+    </details>
+    <a class="btn" href="/weekday/" hreflang="ko" lang="ko">KO</a>
+  </nav>
+</div></div>
+
+<main class="wrap">
+
+  <h1>Which weekday do public holidays land on?</h1>
+  <p class="lede">There is no reason for weekdays to come out even. One first of January falls on the same weekday in two hundred countries at once.</p>
+  <p class="sum">Counting the 2500 days off of 204 countries in 2026 by weekday, Fri leads with 617 and Wed trails with 161. 544 of them (21.8%) land on a weekend.</p>
+  <p class="note">Counted over 2026 for all 204 countries in the data. The unit is the same as on the rankings page — “dates carrying a public holiday” — so the seven weekday cells add up to the date counts there.</p>
+
+  <section>
+    <span class="cap">204 countries</span>
+    <h2>Distribution by weekday, 2026</h2>
+    <p class="note">Spread evenly, each of the seven weekdays would hold 14.3%.</p>
+      <table class="wk">
+        <thead><tr><th>Weekday</th><th>Count</th><th>Share</th><th>vs even</th></tr></thead>
+        <tbody>
+        <tr><td><span class="dow sun">Sun</span></td><td class="num">252</td><td class="num">10.1%</td><td class="num">×0.71</td></tr>
+        <tr><td><span class="dow">Mon</span></td><td class="num">520</td><td class="num">20.8%</td><td class="num">×1.46</td></tr>
+        <tr><td><span class="dow">Tue</span></td><td class="num">211</td><td class="num">8.4%</td><td class="num">×0.59</td></tr>
+        <tr><td><span class="dow">Wed</span></td><td class="num">161</td><td class="num">6.4%</td><td class="num">×0.45</td></tr>
+        <tr><td><span class="dow">Thu</span></td><td class="num">451</td><td class="num">18.0%</td><td class="num">×1.26</td></tr>
+        <tr><td><span class="dow">Fri</span></td><td class="num">617</td><td class="num">24.7%</td><td class="num">×1.73</td></tr>
+        <tr><td><span class="dow sat">Sat</span></td><td class="num">288</td><td class="num">11.5%</td><td class="num">×0.81</td></tr>
+        </tbody>
+      </table>
+  </section>
+
+  <section>
+    <h2>A fixed date falls on the same weekday in two hundred countries</h2>
+    <p class="note">1 January is a Thu and that single day is a public holiday in 197 countries. 25 December is a Fri and covers 178. Those two dates alone fill 43.7% of Thu and 28.8% of Fri.</p>
+  </section>
+
+  <section>
+    <span class="cap">3 kinds</span>
+    <h2>Not every country has its weekend on Saturday and Sunday</h2>
+    <p class="note">So the weekend overlap is counted against each country’s own weekend rather than a fixed Saturday–Sunday. Those weekend days are not in the data — the internationalisation tables in the browser and in Node supply them.</p>
+      <table class="wk">
+        <thead><tr><th>Weekend</th><th>Countries</th><th>Share</th></tr></thead>
+        <tbody>
+        <tr><td><span class="dow sat">Sat</span>·<span class="dow sun">Sun</span></td><td class="num">195</td><td class="num">95.6%</td></tr>
+        <tr><td><span class="dow">Fri</span>·<span class="dow sat">Sat</span></td><td class="num">8</td><td class="num">3.9%</td></tr>
+        <tr><td><span class="dow sun">Sun</span></td><td class="num">1</td><td class="num">0.5%</td></tr>
+        </tbody>
+      </table>
+  </section>
+
+  <section>
+    <span class="cap">3 years</span>
+    <h2>The weekend overlap swings from year to year</h2>
+    <p class="note">A holiday landing on a Saturday or Sunday is a day off lost. Fixed dates shift one weekday each year, so the whole world takes that loss in the same year.</p>
+      <table class="wk">
+        <thead><tr><th>Year</th><th>Days off</th><th>On a weekend</th><th>Share</th></tr></thead>
+        <tbody>
+        <tr><td>2025</td><td class="num">2499</td><td class="num">415 / 2499</td><td class="num">16.6%</td></tr>
+        <tr><td>2026</td><td class="num">2500</td><td class="num">544 / 2500</td><td class="num">21.8%</td></tr>
+        <tr><td>2027</td><td class="num">2487</td><td class="num">783 / 2487</td><td class="num">31.5%</td></tr>
+        </tbody>
+      </table>
+  </section>
+
+  <section>
+    <span class="cap">60 names</span>
+    <h2>How many weekdays each name spans in 2026</h2>
+    <p class="note">A name spanning one weekday has that weekday written into its definition — Good Friday is always a Friday. Seven means every country picks its own date.</p>
+      <table class="wk">
+        <thead><tr><th>Name</th><th>Count</th><th>Weekdays spanned</th><th>Most on</th></tr></thead>
+        <tbody>
+        <tr><td><a href="/en/holiday/new-year/">New Year's Day</a></td><td class="num">206</td><td class="num">2</td><td class="num"><span class="dow">Thu</span></td></tr>
+        <tr><td><a href="/en/holiday/christmas/">Christmas Day</a></td><td class="num">180</td><td class="num">5</td><td class="num"><span class="dow">Fri</span></td></tr>
+        <tr><td><a href="/en/holiday/labour-day/">Labour Day</a></td><td class="num">136</td><td class="num">5</td><td class="num"><span class="dow">Fri</span></td></tr>
+        <tr><td><a href="/en/holiday/good-friday/">Good Friday</a></td><td class="num">128</td><td class="num">1</td><td class="num"><span class="dow">Fri</span></td></tr>
+        <tr><td><a href="/en/holiday/easter-monday/">Easter Monday</a></td><td class="num">127</td><td class="num">2</td><td class="num"><span class="dow">Mon</span></td></tr>
+        <tr><td><a href="/en/holiday/independence-day/">Independence Day</a></td><td class="num">106</td><td class="num">7</td><td class="num"><span class="dow">Mon</span></td></tr>
+        <tr><td><a href="/en/holiday/st-stephens-day/">St. Stephen's Day</a></td><td class="num">74</td><td class="num">2</td><td class="num"><span class="dow sat">Sat</span></td></tr>
+        <tr><td><a href="/en/holiday/easter-sunday/">Easter Sunday</a></td><td class="num">59</td><td class="num">1</td><td class="num"><span class="dow sun">Sun</span></td></tr>
+        <tr><td><a href="/en/holiday/all-saints-day/">All Saints' Day</a></td><td class="num">51</td><td class="num">3</td><td class="num"><span class="dow sun">Sun</span></td></tr>
+        <tr><td><a href="/en/holiday/ascension-day/">Ascension Day</a></td><td class="num">51</td><td class="num">2</td><td class="num"><span class="dow">Thu</span></td></tr>
+        <tr><td><a href="/en/holiday/whit-monday/">Whit Monday</a></td><td class="num">51</td><td class="num">1</td><td class="num"><span class="dow">Mon</span></td></tr>
+        <tr><td><a href="/en/holiday/assumption-day/">Assumption Day</a></td><td class="num">40</td><td class="num">1</td><td class="num"><span class="dow sat">Sat</span></td></tr>
+        <tr><td><a href="/en/holiday/constitution-day/">Constitution Day</a></td><td class="num">34</td><td class="num">7</td><td class="num"><span class="dow sun">Sun</span></td></tr>
+        <tr><td><a href="/en/holiday/pentecost/">Pentecost</a></td><td class="num">26</td><td class="num">1</td><td class="num"><span class="dow sun">Sun</span></td></tr>
+        </tbody>
+      </table>
+  </section>
+
+  <section>
+    <span class="cap">Top 20</span>
+    <h2>Countries with no weekend overlap in 2026</h2>
+    <p class="note">Only countries with 8 holidays or more — with two or three, zero happens by luck.</p>
+      <table class="rank">
+        <thead><tr><th>#</th><th>Country</th><th>On a weekend</th></tr></thead>
+        <tbody>
+        <tr>
+          <td class="no">1</td>
+          <td class="who"><img class="flag" src="/flags/ai.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/ai/">Anguilla</a></td>
+          <td class="len">0 / 14</td>
+        </tr>
+        <tr>
+          <td class="no">2</td>
+          <td class="who"><img class="flag" src="/flags/bm.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/bm/">Bermuda</a></td>
+          <td class="len">0 / 10</td>
+        </tr>
+        <tr>
+          <td class="no">3</td>
+          <td class="who"><img class="flag" src="/flags/co.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/co/">Colombia</a></td>
+          <td class="len">0 / 19</td>
+        </tr>
+        <tr>
+          <td class="no">4</td>
+          <td class="who"><img class="flag" src="/flags/gb.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/gb/">United Kingdom</a></td>
+          <td class="len">0 / 14</td>
+        </tr>
+        <tr>
+          <td class="no">5</td>
+          <td class="who"><img class="flag" src="/flags/im.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/im/">Isle of Man</a></td>
+          <td class="len">0 / 10</td>
+        </tr>
+        <tr>
+          <td class="no">6</td>
+          <td class="who"><img class="flag" src="/flags/jp.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/jp/">Japan</a></td>
+          <td class="len">0 / 16</td>
+        </tr>
+        <tr>
+          <td class="no">7</td>
+          <td class="who"><img class="flag" src="/flags/mw.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/mw/">Malawi</a></td>
+          <td class="len">0 / 11</td>
+        </tr>
+        <tr>
+          <td class="no">8</td>
+          <td class="who"><img class="flag" src="/flags/nz.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/nz/">New Zealand</a></td>
+          <td class="len">0 / 22</td>
+        </tr>
+        <tr>
+          <td class="no">9</td>
+          <td class="who"><img class="flag" src="/flags/us.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/us/">United States</a></td>
+          <td class="len">0 / 12</td>
+        </tr>
+        <tr>
+          <td class="no">10</td>
+          <td class="who"><img class="flag" src="/flags/vg.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/vg/">British Virgin Islands</a></td>
+          <td class="len">0 / 14</td>
+        </tr>
+        <tr>
+          <td class="no">11</td>
+          <td class="who"><img class="flag" src="/flags/vi.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/vi/">United States Virgin Islands</a></td>
+          <td class="len">1 / 17</td>
+        </tr>
+        <tr>
+          <td class="no">12</td>
+          <td class="who"><img class="flag" src="/flags/ar.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/ar/">Argentina</a></td>
+          <td class="len">1 / 16</td>
+        </tr>
+        <tr>
+          <td class="no">13</td>
+          <td class="who"><img class="flag" src="/flags/mp.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/mp/">Northern Mariana Islands</a></td>
+          <td class="len">1 / 15</td>
+        </tr>
+        <tr>
+          <td class="no">14</td>
+          <td class="who"><img class="flag" src="/flags/ml.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/ml/">Mali</a></td>
+          <td class="len">1 / 14</td>
+        </tr>
+        <tr>
+          <td class="no">15</td>
+          <td class="who"><img class="flag" src="/flags/do.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/do/">Dominican Republic</a></td>
+          <td class="len">1 / 13</td>
+        </tr>
+        <tr>
+          <td class="no">16</td>
+          <td class="who"><img class="flag" src="/flags/pa.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/pa/">Panama</a></td>
+          <td class="len">1 / 13</td>
+        </tr>
+        <tr>
+          <td class="no">17</td>
+          <td class="who"><img class="flag" src="/flags/ag.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/ag/">Antigua and Barbuda</a></td>
+          <td class="len">1 / 12</td>
+        </tr>
+        <tr>
+          <td class="no">18</td>
+          <td class="who"><img class="flag" src="/flags/dm.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/dm/">Dominica</a></td>
+          <td class="len">1 / 12</td>
+        </tr>
+        <tr>
+          <td class="no">19</td>
+          <td class="who"><img class="flag" src="/flags/gi.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/gi/">Gibraltar</a></td>
+          <td class="len">1 / 12</td>
+        </tr>
+        <tr>
+          <td class="no">20</td>
+          <td class="who"><img class="flag" src="/flags/mc.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/mc/">Monaco</a></td>
+          <td class="len">1 / 12</td>
+        </tr>
+        </tbody>
+      </table>
+  </section>
+
+  <section>
+    <span class="cap">Top 20</span>
+    <h2>Countries losing most to weekends in 2026</h2>
+      <table class="rank">
+        <thead><tr><th>#</th><th>Country</th><th>On a weekend</th></tr></thead>
+        <tbody>
+        <tr>
+          <td class="no">1</td>
+          <td class="who"><img class="flag" src="/flags/si.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/si/">Slovenia</a></td>
+          <td class="len">8 / 15</td>
+        </tr>
+        <tr>
+          <td class="no">2</td>
+          <td class="who"><img class="flag" src="/flags/de.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/de/">Germany</a></td>
+          <td class="len">9 / 19</td>
+        </tr>
+        <tr>
+          <td class="no">3</td>
+          <td class="who"><img class="flag" src="/flags/kz.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/kz/">Kazakhstan</a></td>
+          <td class="len">6 / 13</td>
+        </tr>
+        <tr>
+          <td class="no">4</td>
+          <td class="who"><img class="flag" src="/flags/cd.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/cd/">DR Congo</a></td>
+          <td class="len">5 / 11</td>
+        </tr>
+        <tr>
+          <td class="no">5</td>
+          <td class="who"><img class="flag" src="/flags/sy.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/sy/">Syria</a></td>
+          <td class="len">4 / 9</td>
+        </tr>
+        <tr>
+          <td class="no">6</td>
+          <td class="who"><img class="flag" src="/flags/bj.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/bj/">Benin</a></td>
+          <td class="len">6 / 14</td>
+        </tr>
+        <tr>
+          <td class="no">7</td>
+          <td class="who"><img class="flag" src="/flags/it.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/it/">Italy</a></td>
+          <td class="len">6 / 14</td>
+        </tr>
+        <tr>
+          <td class="no">8</td>
+          <td class="who"><img class="flag" src="/flags/pl.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/pl/">Poland</a></td>
+          <td class="len">6 / 14</td>
+        </tr>
+        <tr>
+          <td class="no">9</td>
+          <td class="who"><img class="flag" src="/flags/cl.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/cl/">Chile</a></td>
+          <td class="len">7 / 17</td>
+        </tr>
+        <tr>
+          <td class="no">10</td>
+          <td class="who"><img class="flag" src="/flags/er.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/er/">Eritrea</a></td>
+          <td class="len">4 / 10</td>
+        </tr>
+        <tr>
+          <td class="no">11</td>
+          <td class="who"><img class="flag" src="/flags/fi.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/fi/">Finland</a></td>
+          <td class="len">6 / 15</td>
+        </tr>
+        <tr>
+          <td class="no">12</td>
+          <td class="who"><img class="flag" src="/flags/bf.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/bf/">Burkina Faso</a></td>
+          <td class="len">5 / 13</td>
+        </tr>
+        <tr>
+          <td class="no">13</td>
+          <td class="who"><img class="flag" src="/flags/hu.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/hu/">Hungary</a></td>
+          <td class="len">5 / 13</td>
+        </tr>
+        <tr>
+          <td class="no">14</td>
+          <td class="who"><img class="flag" src="/flags/es.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/es/">Spain</a></td>
+          <td class="len">11 / 29</td>
+        </tr>
+        <tr>
+          <td class="no">15</td>
+          <td class="who"><img class="flag" src="/flags/ax.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/ax/">Åland Islands</a></td>
+          <td class="len">6 / 16</td>
+        </tr>
+        <tr>
+          <td class="no">16</td>
+          <td class="who"><img class="flag" src="/flags/cc.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/cc/">Cocos (Keeling) Islands</a></td>
+          <td class="len">3 / 8</td>
+        </tr>
+        <tr>
+          <td class="no">17</td>
+          <td class="who"><img class="flag" src="/flags/se.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/se/">Sweden</a></td>
+          <td class="len">6 / 16</td>
+        </tr>
+        <tr>
+          <td class="no">18</td>
+          <td class="who"><img class="flag" src="/flags/cg.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/cg/">Congo</a></td>
+          <td class="len">4 / 11</td>
+        </tr>
+        <tr>
+          <td class="no">19</td>
+          <td class="who"><img class="flag" src="/flags/cr.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/cr/">Costa Rica</a></td>
+          <td class="len">4 / 11</td>
+        </tr>
+        <tr>
+          <td class="no">20</td>
+          <td class="who"><img class="flag" src="/flags/lu.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/lu/">Luxembourg</a></td>
+          <td class="len">4 / 11</td>
+        </tr>
+        </tbody>
+      </table>
+  </section>
+
+  <section>
+    <span class="cap">Top 20</span>
+    <h2>Most Monday holidays in 2026</h2>
+    <p class="note">These are the countries that move a holiday to Monday when it lands on a weekend.</p>
+      <table class="rank">
+        <thead><tr><th>#</th><th>Country</th><th>Count</th></tr></thead>
+        <tbody>
+        <tr>
+          <td class="no">1</td>
+          <td class="who"><img class="flag" src="/flags/nz.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/nz/">New Zealand</a></td>
+          <td class="len">13 / 22</td>
+        </tr>
+        <tr>
+          <td class="no">2</td>
+          <td class="who"><img class="flag" src="/flags/au.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/au/">Australia</a></td>
+          <td class="len">12 / 20</td>
+        </tr>
+        <tr>
+          <td class="no">3</td>
+          <td class="who"><img class="flag" src="/flags/co.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/co/">Colombia</a></td>
+          <td class="len">12 / 19</td>
+        </tr>
+        <tr>
+          <td class="no">4</td>
+          <td class="who"><img class="flag" src="/flags/gb.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/gb/">United Kingdom</a></td>
+          <td class="len">9 / 14</td>
+        </tr>
+        <tr>
+          <td class="no">5</td>
+          <td class="who"><img class="flag" src="/flags/pr.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/pr/">Puerto Rico</a></td>
+          <td class="len">9 / 21</td>
+        </tr>
+        <tr>
+          <td class="no">6</td>
+          <td class="who"><img class="flag" src="/flags/ai.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/ai/">Anguilla</a></td>
+          <td class="len">8 / 14</td>
+        </tr>
+        <tr>
+          <td class="no">7</td>
+          <td class="who"><img class="flag" src="/flags/ca.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/ca/">Canada</a></td>
+          <td class="len">7 / 19</td>
+        </tr>
+        <tr>
+          <td class="no">8</td>
+          <td class="who"><img class="flag" src="/flags/jp.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/jp/">Japan</a></td>
+          <td class="len">7 / 16</td>
+        </tr>
+        <tr>
+          <td class="no">9</td>
+          <td class="who"><img class="flag" src="/flags/vg.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/vg/">British Virgin Islands</a></td>
+          <td class="len">7 / 14</td>
+        </tr>
+        <tr>
+          <td class="no">10</td>
+          <td class="who"><img class="flag" src="/flags/zm.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/zm/">Zambia</a></td>
+          <td class="len">7 / 16</td>
+        </tr>
+        <tr>
+          <td class="no">11</td>
+          <td class="who"><img class="flag" src="/flags/al.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/al/">Albania</a></td>
+          <td class="len">6 / 13</td>
+        </tr>
+        <tr>
+          <td class="no">12</td>
+          <td class="who"><img class="flag" src="/flags/ar.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/ar/">Argentina</a></td>
+          <td class="len">6 / 16</td>
+        </tr>
+        <tr>
+          <td class="no">13</td>
+          <td class="who"><img class="flag" src="/flags/ie.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/ie/">Ireland</a></td>
+          <td class="len">6 / 10</td>
+        </tr>
+        <tr>
+          <td class="no">14</td>
+          <td class="who"><img class="flag" src="/flags/im.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/im/">Isle of Man</a></td>
+          <td class="len">6 / 10</td>
+        </tr>
+        <tr>
+          <td class="no">15</td>
+          <td class="who"><img class="flag" src="/flags/ky.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/ky/">Cayman Islands</a></td>
+          <td class="len">6 / 11</td>
+        </tr>
+        <tr>
+          <td class="no">16</td>
+          <td class="who"><img class="flag" src="/flags/vi.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/vi/">United States Virgin Islands</a></td>
+          <td class="len">6 / 17</td>
+        </tr>
+        <tr>
+          <td class="no">17</td>
+          <td class="who"><img class="flag" src="/flags/ag.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/ag/">Antigua and Barbuda</a></td>
+          <td class="len">5 / 12</td>
+        </tr>
+        <tr>
+          <td class="no">18</td>
+          <td class="who"><img class="flag" src="/flags/gi.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/gi/">Gibraltar</a></td>
+          <td class="len">5 / 12</td>
+        </tr>
+        <tr>
+          <td class="no">19</td>
+          <td class="who"><img class="flag" src="/flags/kr.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/kr/">South Korea</a></td>
+          <td class="len">5 / 18</td>
+        </tr>
+        <tr>
+          <td class="no">20</td>
+          <td class="who"><img class="flag" src="/flags/ms.svg" width="20" height="15" alt="" loading="lazy" decoding="async"><a href="/en/ms/">Montserrat</a></td>
+          <td class="len">5 / 11</td>
+        </tr>
+        </tbody>
+      </table>
+  </section>
+
+  <section>
+    <p><a href="/en/rank/">Countries compared →</a></p>
+    <p><a href="/en/#countries">Holidays in other countries →</a></p>
+  </section>
+
+  <div class="foot">
+    <p>Holiday data from <a href="https://date.nager.at/" rel="noopener">Nager.Date</a> · only entries whose <code>types</code> includes <code>Public</code>. Updated 2026-09-01.</p>
+    <p>The countdown uses this device’s date — it can be a day out when you view a country in another time zone.</p>
+    <p>Contact <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></p>
+  </div>
+</main>
+
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"this is the day","item":"https://this-is-the.day/en/"},{"@type":"ListItem","position":2,"name":"countries compared","item":"https://this-is-the.day/en/rank/"},{"@type":"ListItem","position":3,"name":"by weekday","item":"https://this-is-the.day/en/weekday/"}]}</script>
+<script src="/shared/dday.js"></script>
+<script src="/shared/contact.js"></script>
+</body>
+</html>

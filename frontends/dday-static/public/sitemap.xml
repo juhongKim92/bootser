@@ -3449,7 +3449,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/rank/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/rank/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/rank/"/>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -3457,7 +3457,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/rank/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/rank/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/rank/"/>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -3705,7 +3705,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/meteor/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/meteor/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/meteor/"/>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -3713,7 +3713,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/meteor/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/meteor/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/meteor/"/>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -3721,7 +3721,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/moon/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/moon/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/moon/"/>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -3729,7 +3729,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/moon/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/moon/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/moon/"/>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -3737,7 +3737,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/term/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/term/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/term/"/>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -3745,7 +3745,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/term/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/term/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/term/"/>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -4258,6 +4258,22 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/vu/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/vu/"/>
     <lastmod>2026-09-03</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/weekday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/weekday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/weekday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/weekday/"/>
+    <lastmod>2026-09-04</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/weekday/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/weekday/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/weekday/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/weekday/"/>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
