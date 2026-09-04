@@ -66,6 +66,7 @@
             /* 음력 페이지의 "아무것도 아닌 날". 갈래가 음력뿐인 페이지에서
                "절기도 삭망도 아닙니다" 라고 적으면 그건 거짓말이다. */
             lunarNone: '오늘은 초하루가 아닙니다',
+            calNone: '오늘은 어느 달력의 새해도 아닙니다',
             skyOff: ' — 오늘입니다',
             newMoon: '삭', fullMoon: '보름',
             showerName: function (n) { return n + ' 유성우'; },
@@ -108,6 +109,7 @@
             zone: 'utc',
             skyNone: 'No solar term or moon phase today',
             lunarNone: 'Not the first day of a lunar month',
+            calNone: 'Not a new year in any of these calendars',
             skyOff: ' — today',
             newMoon: 'New Moon', fullMoon: 'Full Moon',
             showerName: function (n) { return n; },
@@ -450,12 +452,17 @@
 
             var verdict = $('.verdict', card);
             if (verdict) {
-                /* 갈래가 음력 하나뿐인 페이지에는 음력 문안을 쓴다. 페이지에
+                /* 갈래가 하나뿐인 페이지에는 그 갈래의 문안을 쓴다 — "절기도 삭망도
+                   아닙니다" 를 음력·달력 페이지에 쓰면 엉뚱한 말이 된다. 페이지에
                    실제로 그려진 행에서 갈리므로 표시용 표를 따로 두지 않는다. */
-                var onlyLunar = !!got.lunar && !got.term && !got.moon && !got.shower;
+                var ONLY = { lunar: T.lunarNone, cal: T.calNone };
+                var kinds = ['term', 'moon', 'shower', 'lunar', 'cal'].filter(function (k) {
+                    return !!got[k];
+                });
+                var none = (kinds.length === 1 && ONLY[kinds[0]]) || T.skyNone;
                 verdict.textContent = got.todays.length
                     ? got.todays.map(function (m) { return nameText(m.item); }).join(' · ') + T.skyOff
-                    : (onlyLunar ? T.lunarNone : T.skyNone);
+                    : none;
                 verdict.className = 'verdict' + (got.todays.length ? ' rest' : '');
             }
         }
@@ -466,6 +473,7 @@
         fill($('#next-shower'), got.shower && got.shower.next, '-');
 
         fill($('#next-lunar'), got.lunar && got.lunar.next, '-');
+        fill($('#next-cal'), got.cal && got.cal.next, '-');
 
         var moons = (got.moon && got.moon.marked) || [];
         fill($('#next-new'), nextNamed(moons, T.newMoon), '-');

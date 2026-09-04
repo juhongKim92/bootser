@@ -27,6 +27,7 @@ import { CARD_W, CARD_H, CARD_DIR } from './card-art.mjs';
 import { NORM, NAMES, MIN, NAME_ROOT } from './holiday-names.mjs';
 import { flagImg } from './flags.mjs';
 import { skyIconOf, skyIconImg } from './sky-art.mjs';
+import { CALS, NY_CALS, ERA_CALS, CAL_BY_ID, yearOf, noonOf } from './calendars.mjs';
 
 const SITE = 'this is the day';
 const MID = YEARS()[1];                                   /* 표지로 삼을 해 = 올해 */
@@ -325,6 +326,17 @@ const L = {
                 note: '음력은 삭이 든 날로 달이 갈리므로 기준 시간대가 규칙의 일부입니다. 이 표는 한국 표준시(KST) 기준이고, 그래서 중국 농력(UTC+8)과는 삭이 두 자정 사이에 떨어지는 해에 하루 어긋납니다 — 2027년 설날이 그렇습니다.',
                 foot: '초하루는 삭이 든 날, 동지가 든 달은 11월, 윤달은 중기가 들지 않는 첫 달(무중치윤법)입니다. 삭은 Meeus 제49장, 중기는 VSOP87D 로 직접 계산합니다.',
             },
+            calendar: {
+                title: (y) => `${y}년 다른 달력의 새해 — 히즈라 · 히브리 · 노루즈`,
+                desc: (y) => `${y}년에 히즈라 새해와 로쉬 하샤나, 노루즈와 설날이 양력 며칟날인지. 그 달력으로 몇 년인지와 한 해가 며칠인지도 함께 봅니다.`,
+                h1: '다른 달력의 새해',
+                lede: '해가 바뀌는 날이 달력마다 다릅니다. 그리고 그 날짜를 정하는 것이 어떤 달력에서는 천문학이고, 어떤 달력에서는 연호뿐입니다.',
+                crumb: '다른 달력',
+                hub: '다른 달력',
+                hubNote: '히즈라 · 히브리 · 노루즈',
+                note: '이 표의 날짜는 그레고리력 날짜이고 시각이 없습니다 — 달력의 하루는 순간이 아니라 날짜이기 때문입니다. 그래서 음력 표처럼 ko·en 이 같은 표를 봅니다. 종교 달력의 하루는 해가 진 뒤 시작하지만, 여기 실은 것은 민간 달력으로 굳어진 표의 날짜입니다.',
+                foot: '날짜는 브라우저·Node 의 국제화 표(ICU)가 주고, 우리는 그것을 굳혀서 검산합니다. 해 길이가 그 달력의 규칙 안에 있는지, 노루즈가 우리가 계산한 춘분과 맞는지, 우리 음력 초하루가 같은 답인지를 봅니다.',
+            },
         },
         skyHomeCap: '하늘',
         skyHomeH2: '다가오는 절기와 삭망',
@@ -335,12 +347,35 @@ const L = {
         showersCap: (y, n) => `${y}년 · 유성우 ${n}개`,
         showersH2: (y) => `${y}년 유성우 극대기`,
         lunarCap: (y, n) => `${y}년 · ${n}개월`,
+        calCap: (y, n) => `${y}년 · 새해 ${n}번`,
+        calH2: (y) => `${y}년에 해가 바뀌는 날`,
+        calYearH2: (y) => `같은 해가 달력마다 다른 숫자다`,
+        calYearNote: (y) => `${y}년 1월 1일과 12월 31일에 각 달력이 몇 년인지입니다. 새해가 1월 1일인 달력만 두 칸이 같고, 그 달력만 서력과의 차이가 상수입니다.`,
+        calSpanH2: '한 해의 길이가 달력마다 다르다',
+        calSpanNote: '달로만 도는 달력은 354~355일이라 해마다 열하루씩 앞당겨지고, 윤달로 계절을 붙잡는 달력은 353일에서 385일까지 갈립니다. 태양력은 365~366일입니다. 아래 표는 담긴 3년치의 범위라 규칙의 양 끝까지는 가지 않습니다.',
+        calNowruzH2: '노루즈는 천문학이 정한다',
+        calNowruzBody: '페르시아력 새해는 테헤란 표준시로 춘분이 정오 이전이면 그날, 이후면 다음날입니다. 이 사이트는 춘분을 VSOP87D 로 계산하므로 그 규칙을 직접 되짚을 수 있습니다 — 31년을 훑어 국제화 표의 답과 하나도 어긋나지 않았고, 규칙의 두 갈래가 각각 열여섯 해와 열다섯 해씩 걸렸습니다.',
+        calCrossH2: '우리 음력과 국제화 표가 같은 답을 낸다',
+        calCrossBody: '이 사이트는 음력을 직접 계산합니다 — 삭은 Meeus 제49장, 중기는 VSOP87D 입니다. 국제화 표의 단기 달력은 전혀 다른 구현인데, 담긴 37개월의 초하루가 하나도 어긋나지 않습니다. 어느 쪽이 틀렸다면 여기서 갈렸을 것입니다.',
+        thCal: '달력',
+        thJan: '1월 1일',
+        thDec: '12월 31일',
+        thOffset: '서력과의 차이',
+        thNewYearDay: '새해',
+        thYearLen: '한 해',
+        calConst: (v) => `상수 ${v > 0 ? '+' : '−'}${Math.abs(v)}`,
+        calVaries: '해 안에서 바뀐다',
+        calNoNumber: '번호가 없다 (간지)',
+        calDays: (a, b) => (a === b ? `${a}일` : `${a}~${b}일`),
+        calRowAlt: (name, y, n) => `${name} ${y} · ${n}일`,
         lunarH2: (y) => `${y}년에 초하루가 드는 음력 달`,
         lunarName: (e) => `${e.y}년 ${e.leap ? '윤' : ''}${e.m}월`,
         lunarLen: (n) => `${n}일`,
         leapBadge: '윤달',
         dtLunar: '다음 초하루',
+        dtCal: '다음 새해',
         thTime: '날짜와 시각', thEvent: '천문 현상',
+        thDateOnly: '날짜',
         newMoon: '삭', fullMoon: '보름', han: { new: '朔', full: '望' },
         showerName: (n) => `${n} 유성우`,
         zhr: (n) => `조건이 좋으면 시간당 ${n}개`,
@@ -573,6 +608,17 @@ const L = {
                 note: 'A lunar month begins on the day the new moon falls, so the time zone is part of the rule rather than a way of showing it. This table is Korean Standard Time (UTC+9); the Chinese calendar (UTC+8) differs by a day whenever a new moon lands between the two midnights — as it does for the 2027 new year.',
                 foot: 'A month starts on the day of the new moon, the month containing the winter solstice is the 11th, and the leap month is the first month with no major solar term in it. New moons come from Meeus chapter 49 and solar terms from VSOP87D, computed here.',
             },
+            calendar: {
+                title: (y) => `New Year in Other Calendars ${y} — Hijri, Hebrew, Nowruz`,
+                desc: (y) => `The Gregorian dates of the Islamic new year, Rosh Hashanah, Nowruz and Korean New Year in ${y}, with each calendar's year number and year length.`,
+                h1: 'New year in other calendars',
+                lede: 'The day the year turns is not the same in every calendar. And what fixes that day is astronomy in some of them and nothing but an era count in others.',
+                crumb: 'other calendars',
+                hub: 'Other calendars',
+                hubNote: 'Hijri · Hebrew · Nowruz',
+                note: 'The dates in this table are Gregorian dates with no time of day — a calendar day is a date, not an instant. So, like the lunisolar table, the Korean and English pages show the same one. A religious day begins after sunset, but what is listed here are the dates of the civil tables these calendars settled into.',
+                foot: 'The dates come from the internationalisation tables (ICU) in the browser and in Node; we freeze them and check them. We test that each year length falls inside that calendar’s rule, that Nowruz agrees with the equinox computed here, and that our own lunisolar new moons give the same answer.',
+            },
         },
         skyHomeCap: 'The sky',
         skyHomeH2: 'Coming up in the sky',
@@ -583,12 +629,35 @@ const L = {
         showersCap: (y, n) => `${y} · ${n} showers`,
         showersH2: (y) => `Meteor shower peaks in ${y}`,
         lunarCap: (y, n) => `${y} · ${n} months`,
+        calCap: (y, n) => `${y} · ${n} new years`,
+        calH2: (y) => `The days the year turns in ${y}`,
+        calYearH2: (y) => `The same year is a different number in each calendar`,
+        calYearNote: (y) => `What year each calendar reads on 1 January and 31 December ${y}. Only the calendars whose year starts on 1 January show the same number twice — and only those have a constant offset from the Gregorian year.`,
+        calSpanH2: 'A year is not the same length in every calendar',
+        calSpanNote: 'A purely lunar calendar runs 354 to 355 days, so its new year arrives about eleven days earlier each Gregorian year. One that keeps step with the seasons through a leap month runs anywhere from 353 to 385. Solar calendars run 365 to 366. The table below shows the range within the three years in the data, which does not reach either end of those rules.',
+        calNowruzH2: 'Nowruz is fixed by astronomy',
+        calNowruzBody: 'The Solar Hijri new year is the day of the vernal equinox if that moment falls before noon in Tehran, and the next day otherwise. This site computes the equinox from VSOP87D, so it can retrace that rule directly — over thirty-one years it never disagreed with the internationalisation tables, and the two branches of the rule fired sixteen and fifteen times.',
+        calCrossH2: 'Our lunisolar calendar and the internationalisation tables agree',
+        calCrossBody: 'This site computes the lunisolar calendar itself — new moons from Meeus chapter 49, solar terms from VSOP87D. The Dangi calendar in the internationalisation tables is an entirely separate implementation, and across the 37 months in the data not one month-start differs. Had either been wrong, it would have shown here.',
+        thCal: 'Calendar',
+        thJan: '1 January',
+        thDec: '31 December',
+        thOffset: 'Offset from Gregorian',
+        thNewYearDay: 'New year',
+        thYearLen: 'Year length',
+        calConst: (v) => `constant ${v > 0 ? '+' : '−'}${Math.abs(v)}`,
+        calVaries: 'changes mid-year',
+        calNoNumber: 'no number (cyclic name)',
+        calDays: (a, b) => (a === b ? `${a} days` : `${a}–${b} days`),
+        calRowAlt: (name, y, n) => `${name} ${y} · ${n} days`,
         lunarH2: (y) => `Lunar months beginning in ${y}`,
         lunarName: (e) => `${e.leap ? 'Leap month' : 'Month'} ${e.m}, ${e.y}`,
         lunarLen: (n) => `${n} days`,
         leapBadge: 'leap month',
         dtLunar: 'Next new month',
+        dtCal: 'Next new year',
         thTime: 'Date and time', thEvent: 'Event',
+        thDateOnly: 'Date',
         newMoon: 'New Moon', fullMoon: 'Full Moon', han: { new: '朔', full: '望' },
         showerName: (n) => `${n}`,
         zhr: (n) => `up to ${n} an hour in good conditions`,
@@ -993,9 +1062,12 @@ function skyRow(t, e, kind, name, alt, badge) {
         </tr>`;
 }
 
-function skyTable(t, rows, ico) {
+/* `th` 는 갈래가 머리 글자를 갈아 끼울 자리다 — 달력 표에는 시각이 없고 천문 현상도
+   아니라서 "날짜와 시각 / 천문 현상" 이 그대로면 표가 거짓말을 한다. */
+function skyTable(t, rows, ico, th) {
+    const [a, b] = th || [t.thTime, t.thEvent];
     return `      <table class="sky">
-        <thead><tr><th>${esc(t.thTime)}</th>${ico ? '<th></th>' : ''}<th>${esc(t.thEvent)}</th><th></th></tr></thead>
+        <thead><tr><th>${esc(a)}</th>${ico ? '<th></th>' : ''}<th>${esc(b)}</th><th></th></tr></thead>
         <tbody>
 ${rows.join('\n')}
         </tbody>
@@ -1003,11 +1075,11 @@ ${rows.join('\n')}
 }
 
 /* 표지 연도는 펼치고 나머지 해는 접는다 — 공휴일·황금연휴와 같은 규칙이다. */
-function skyGroup(t, byYear, cap, h2, build, ico) {
+function skyGroup(t, byYear, cap, h2, build, ico, th) {
     const years = [...byYear.keys()].sort((a, b) => a - b);
     const head = byYear.has(MID) ? MID : years[0];
     return years.map((y) => {
-        const body = skyTable(t, byYear.get(y).map(build), ico);
+        const body = skyTable(t, byYear.get(y).map(build), ico, th);
         if (y === head) {
             return `  <section>
     <span class="cap">${esc(cap(y, byYear.get(y).length))}</span>
@@ -1045,6 +1117,11 @@ export const SKY_TOPICS = [
       card: [['dtShower', 'next-shower']] },
     { slug: 'lunar',  key: 'lunar',   kind: 'lunar',  cap: 'lunarCap',   h2: 'lunarH2',
       card: [['dtLunar', 'next-lunar']] },
+    /* 다른 달력. 표 말고도 절이 넷 더 붙는 유일한 갈래라 `extra` 를 둔다 —
+       "오늘이 몇 년인가" 와 "해 길이" 는 날짜 목록으로는 담을 수 없는 이야기다. */
+    { slug: 'calendar', key: 'cals',  kind: 'cal',    cap: 'calCap',     h2: 'calH2',
+      th: ['thDateOnly', 'thNewYearDay'],
+      card: [['dtCal', 'next-cal']], extra: calExtra },
 ];
 
 /* 갈래마다 행 모양이 다르다 — 절기는 분점·지점 배지가 붙고, 삭망은 이름이 자료가
@@ -1068,7 +1145,79 @@ function skyBuild(t, topic) {
             `${DATE_SPAN[t.lang](e.s, isoPlus(e.s, e.n - 1))} · ${t.lunarLen(e.n)}`,
             e.leap ? `<span class="leap">${esc(t.leapBadge)}</span>` : '');
     }
+    /* 다른 달력 — 이름은 그 달력의 새해 이름(설날 · 노루즈 …)이고, 곁줄에
+       달력 이름과 그 해와 길이가 붙는다. 자료의 y 는 번호이거나 간지다. */
+    if (topic.slug === 'calendar') {
+        return (e) => {
+            const c = CAL_BY_ID[e.c];
+            /* 번호가 없는 달력은 간지로 적는다 — 자료에 ko·en 두 표기가 담겨 있다 */
+            const yr = e.y ?? (t.lang === 'en' ? e.ne : e.nk);
+            return skyRow(t, e, 'cal', t.lang === 'en' ? c.nyEn : c.nyKo,
+                t.calRowAlt(t.lang === 'en' ? c.en : c.ko, yr, e.n));
+        };
+    }
     return (e) => skyRow(t, e, 'shower', t.showerName(t.lang === 'en' ? e.e : e.n), t.zhr(e.z));
+}
+
+/* 달력 갈래에만 붙는 절 넷. 표는 날짜 목록이고, 이쪽은 그 표로는 말할 수 없는 것이다.
+   ⚠ "오늘이 몇 년인가" 로 쓰지 않는다 — 정적 페이지라 하루만 지나도 거짓이 된다.
+   표지 연도의 1월 1일과 12월 31일에 못박으면 다음 갱신까지 참이다. */
+function calExtra(t, sky) {
+    const jan = noonOf(`${MID}-01-01`), dec = noonOf(`${MID}-12-31`);
+    const yearRows = CALS.map((c) => {
+        const a = yearOf(c.id, jan), b = yearOf(c.id, dec);
+        /* 차이가 상수인 것은 새해가 1월 1일인 달력뿐이다 — 원화의 갈래(`kind`)가
+           그렇게 말한다. 그 말과 ICU 의 실측이 갈리면 표가 거짓말을 하게 되므로
+           여기서 멈춘다: 상수라면 두 칸이 같아야 하고, 아니라면 달라야 한다. */
+        const era = c.kind === 'era';
+        if (era !== (a !== null && a === b)) {
+            throw new Error(`${c.id} 의 갈래가 '${c.kind}' 인데 ${MID}년 1/1 은 ${a}, 12/31 은 ${b} 다`);
+        }
+        const off = era ? MID - +a : null;
+        if (era && off !== c.offset) {
+            throw new Error(`${c.id} 의 offset 이 원화에는 ${c.offset} 인데 실측은 ${off} 다`);
+        }
+        return [
+            esc(t.lang === 'en' ? c.en : c.ko),
+            a === null ? esc(t.calNoNumber) : esc(a),
+            b === null ? esc(t.calNoNumber) : esc(b),
+            esc(era ? t.calConst(off) : t.calVaries),
+        ];
+    });
+
+    /* 해 길이 — 담긴 자료에서 그 달력의 최소·최대를 뽑는다. 손으로 적지 않는다. */
+    const spanRows = NY_CALS.map((c) => {
+        const mine = sky.cals.filter((r) => r.c === c.id);
+        const ns = mine.map((r) => r.n);
+        return [
+            esc(t.lang === 'en' ? c.en : c.ko),
+            esc(t.lang === 'en' ? c.nyEn : c.nyKo),
+            esc(t.calDays(Math.min(...ns), Math.max(...ns))),
+        ];
+    });
+
+    return `  <section>
+    <h2>${esc(t.calYearH2(MID))}</h2>
+    <p class="note">${esc(t.calYearNote(MID))}</p>
+${wkTable([t.thCal, t.thJan, t.thDec, t.thOffset], yearRows)}
+  </section>
+
+  <section>
+    <h2>${esc(t.calSpanH2)}</h2>
+    <p class="note">${esc(t.calSpanNote)}</p>
+${wkTable([t.thCal, t.thNewYearDay, t.thYearLen], spanRows)}
+  </section>
+
+  <section>
+    <h2>${esc(t.calNowruzH2)}</h2>
+    <p class="note">${esc(t.calNowruzBody)}</p>
+  </section>
+
+  <section>
+    <h2>${esc(t.calCrossH2)}</h2>
+    <p class="note">${esc(t.calCrossBody)}</p>
+  </section>
+`;
 }
 
 const skyCrumbs = (t, slug, name) => ({
@@ -1150,7 +1299,8 @@ function skyTopicPage(t, sky, topic) {
     /* 그림이 있는 갈래인지 자료에 물어본다. 여기 손으로 적어 두면 sky-art 가
        음력에 그림을 주는 날 표의 머리와 몸이 갈린다. */
     const ico = skyIconOf(topic.kind, sky[topic.key][0]) !== null;
-    const body = skyGroup(t, by, t[topic.cap], t[topic.h2], skyBuild(t, topic), ico);
+    const body = skyGroup(t, by, t[topic.cap], t[topic.h2], skyBuild(t, topic), ico,
+        topic.th && topic.th.map((k) => t[k]));
 
     const pairs = topic.card.map(([label, id]) =>
         `      <dt>${esc(t[label])}</dt><dd id="${id}"><em>${esc(t.computing)}</em></dd>`).join('\n');
@@ -1177,7 +1327,7 @@ ${pairs}
 
 ${body}
 
-  <section>
+${topic.extra ? topic.extra(t, sky) : ''}  <section>
     <p><a href="${t.dir}/sky/">${esc(t.skyBackHub)}</a></p>
     <p><a href="${t.dir}/#countries">${esc(t.otherCountries)}</a></p>
   </section>

@@ -46,6 +46,10 @@ import { FONT_DIR, FONT_CSS, LICENSE_FILE, codepoints, parseFaces, parseRanges, 
 import { SHOWERS } from './astro.mjs';
 import { EQUINOXES, TOLERANCE_MINUTES } from './sky-fixture.mjs';
 import { ICONS, ICON_DIR, ICON_PATH, skyIconOf, skyIconImg, validate as skyArtWrong } from './sky-art.mjs';
+/* 달력 목록과 라벨만 가져온다 — 날짜를 내는 함수(newYears)는 **가져오지 않는다**.
+   그걸 같이 쓰면 훑기가 틀렸을 때 검사도 똑같이 틀린다. 아래 검산점 칸은 ICU 에
+   다른 질문(그 날의 월·일이 1/1인가)을 던지고, 분점은 손으로 적은 고정값을 쓴다. */
+import { CALS, CAL_BY_ID, NY_CALS, ERA_CALS, noonOf, yearOf } from './calendars.mjs';
 
 const fail = [], warn = [];
 const bad = (p, m) => fail.push(`${p}: ${m}`);
@@ -73,6 +77,7 @@ const NEED_IDS = {
     'sky/moon': ['picker', 'now', 'next-new', 'next-full'],
     'sky/meteor': ['picker', 'now', 'next-shower'],
     'sky/lunar': ['picker', 'now', 'next-lunar'],
+    'sky/calendar': ['picker', 'now', 'next-cal'],
     /* 이름 축 허브와 순위 페이지에는 카드가 없다 — 표에 여러 이름·여러 나라가
        섞여 있어 "다음" 이 하나로 정해지지 않는다. 이름 한 장에만 카드가 있다. */
     holiday: ['picker'],
@@ -84,8 +89,10 @@ const NEED_IDS = {
 
 /* 하늘 갈래. gen-pages 의 SKY_TOPICS 와 짝이지만 여기서 따로 적는다 —
    거기서 가져오면 둘이 같이 틀려도 통과한다. */
-const SKY_KIND = { 'sky/term': 'term', 'sky/moon': 'moon', 'sky/meteor': 'shower', 'sky/lunar': 'lunar' };
-const SKY_DATA = { 'sky/term': 'terms', 'sky/moon': 'moons', 'sky/meteor': 'showers', 'sky/lunar': 'lunar' };
+const SKY_KIND = { 'sky/term': 'term', 'sky/moon': 'moon', 'sky/meteor': 'shower', 'sky/lunar': 'lunar',
+    'sky/calendar': 'cal' };
+const SKY_DATA = { 'sky/term': 'terms', 'sky/moon': 'moons', 'sky/meteor': 'showers', 'sky/lunar': 'lunar',
+    'sky/calendar': 'cals' };
 
 /* 슬러그를 언어와 갈래로 가른다.
      '' | 'en' | 'kr' | 'en/kr' | 'sky' | 'sky/moon' | 'holiday' | 'holiday/christmas' | 'rank'
@@ -364,8 +371,10 @@ const WORDS = {
           breakLen: (n) => `${n}일 연휴`, breakNow: '연휴 중', dtBreak: '다음 연휴',
           noBreak: '담긴 자료에 연휴가 없습니다',
           newMoon: '삭', fullMoon: '보름',
+          thTime: '날짜와 시각', thEvent: '천문 현상', thDateOnly: '날짜', thNewYearDay: '새해',
           skyNone: '오늘은 절기도 삭망도 아닙니다', skyOff: '오늘입니다',
           lunarNone: '오늘은 초하루가 아닙니다',
+          calNone: '오늘은 어느 달력의 새해도 아닙니다',
           dtTerm: '다음 절기', dtNew: '다음 삭', dtFull: '다음 보름', dtShower: '다음 유성우',
           asofYear: (y) => String(y) },
     en: { noHoliday: 'An ordinary day', off: ' — a day off today',
@@ -373,8 +382,10 @@ const WORDS = {
           breakLen: (n) => `${n}-day break`, breakNow: 'on now', dtBreak: 'Next break',
           noBreak: 'No long weekend in the data',
           newMoon: 'New Moon', fullMoon: 'Full Moon',
+          thTime: 'Date and time', thEvent: 'Event', thDateOnly: 'Date', thNewYearDay: 'New year',
           skyNone: 'No solar term or moon phase today', skyOff: 'today',
           lunarNone: 'Not the first day of a lunar month',
+          calNone: 'Not a new year in any of these calendars',
           dtTerm: 'Next term', dtNew: 'Next new moon', dtFull: 'Next full moon', dtShower: 'Next shower',
           asofYear: (y) => String(y) },
 };
@@ -793,6 +804,7 @@ for (const { page, lang, slug, kind, label } of ALL) {
             weekday: 'rank',
             holiday: 'name', name: 'name',
             sky: 'sky', 'sky/term': 'sky', 'sky/moon': 'sky', 'sky/meteor': 'sky', 'sky/lunar': 'sky',
+            'sky/calendar': 'sky',
         }[kind];
         const wantHref = { country: `${dir}/`, rank: `${dir}/rank/`, name: `${dir}/holiday/`, sky: `${dir}/sky/` };
 
@@ -980,11 +992,11 @@ for (const { page, lang, slug, kind, label } of ALL) {
             )].map((m) => `${m[1]}|${m[2]}`);
             const wantIcons = mine.map((e) => `${dateOf(e)}|${iconWant(e)}`);
 
-            if (only === 'lunar') {
-                /* 음력에는 그림이 없다(sky-art 의 머리말). 어느 날 하나 붙으면
+            if (only === 'lunar' || only === 'cal') {
+                /* 음력과 달력에는 그림이 없다(sky-art 의 머리말). 어느 날 하나 붙으면
                    같은 그림이 두 갈래에서 다른 뜻으로 읽히기 시작한다. */
-                if (drawn.length) bad(label, `음력 표에 하늘 아이콘이 ${drawn.length}개 있다`);
-                if (html.includes('class="ico"')) bad(label, '음력 표에 그림 칸이 있다 — 빈 칸만 남는다');
+                if (drawn.length) bad(label, `${only} 표에 하늘 아이콘이 ${drawn.length}개 있다`);
+                if (html.includes('class="ico"')) bad(label, `${only} 표에 그림 칸이 있다 — 빈 칸만 남는다`);
             } else if (drawn.length !== got.length) {
                 bad(label, `그림이 ${drawn.length}개다 (행은 ${got.length}개) — 검사 무늬가 마크업과 어긋났거나 칸이 빠졌다`);
             } else {
@@ -992,12 +1004,26 @@ for (const { page, lang, slug, kind, label } of ALL) {
                 const at = a.findIndex((x, i) => x !== b[i]);
                 if (at >= 0) bad(label, `그림이 자료와 어긋난다 — "${a[at]}" (기대 "${b[at]}")`);
             }
-            /* 표의 머리와 몸이 갈리면 열이 한 칸씩 밀린다 */
-            const heads = (html.match(/<thead><tr>([\s\S]*?)<\/tr><\/thead>/g) || []);
+            /* 표의 머리와 몸이 갈리면 열이 한 칸씩 밀린다.
+               ⚠ 하늘 표만 골라 센다 — 달력 갈래에는 아래에 다른 표(table.wk)가
+               둘 더 붙어 있어서, 페이지 전체의 <thead> 를 세면 그 칸수까지 섞인다. */
+            const heads = [...html.matchAll(/<table class="sky">[\s\S]*?(<thead><tr>[\s\S]*?<\/tr><\/thead>)/g)]
+                .map((m) => m[1]);
+            if (!heads.length) bad(label, '하늘 표의 머리를 못 찾았다 — 검사 무늬가 마크업과 어긋났다');
+            /* 머리 글자도 본다. 칸수만 세면 달력 표가 "날짜와 시각 / 천문 현상" 이라고
+               적혀 있어도 통과한다 — 시각이 없는 표이고 천문 현상도 아니다. 기대값을
+               여기 적어 두므로 갈래가 머리를 갈아 끼우는 것을 잊으면 걸린다. */
+            const wl = WORDS[lang];
+            const wantHead = only === 'cal' ? [wl.thDateOnly, wl.thNewYearDay] : [wl.thTime, wl.thEvent];
             for (const h of heads) {
                 const cols = (h.match(/<th>/g) || []).length;
-                const wantCols = only === 'lunar' ? 3 : 4;
+                const wantCols = (only === 'lunar' || only === 'cal') ? 3 : 4;
                 if (cols !== wantCols) { bad(label, `표 머리가 ${cols}칸이다 — ${wantCols}칸이어야 한다`); break; }
+                const texts = [...h.matchAll(/<th>([\s\S]*?)<\/th>/g)].map((m) => m[1]).filter(Boolean);
+                if (texts.join('|') !== wantHead.map(esc).join('|')) {
+                    bad(label, `표 머리가 "${texts.join(' / ')}" 다 (기대 "${wantHead.join(' / ')}")`);
+                    break;
+                }
             }
         }
 
@@ -1031,10 +1057,14 @@ for (const { page, lang, slug, kind, label } of ALL) {
             'sky/lunar': [['#next-lunar', SKY.lunar, (e) => (lang === 'en'
                 ? `${e.leap ? 'Leap month' : 'Month'} ${e.m}, ${e.y}`
                 : `${e.y}년 ${e.leap ? '윤' : ''}${e.m}월`)]],
+            /* 달력 카드에는 그 달력의 **새해 이름**(설날 · 노루즈 …)이 들어간다.
+               라벨은 원화의 값이라 여기서 가져다 쓴다 — 규칙이 아니라 이름이다. */
+            'sky/calendar': [['#next-cal', SKY.cals,
+                (e) => (lang === 'en' ? CAL_BY_ID[e.c].nyEn : CAL_BY_ID[e.c].nyKo)]],
         }[kind];
 
         /* 다른 갈래의 카드 줄이 남아 있으면 안 된다 — 그 줄은 영영 '-' 로 남는다 */
-        for (const id of ['next-term', 'next-new', 'next-full', 'next-shower', 'next-lunar']) {
+        for (const id of ['next-term', 'next-new', 'next-full', 'next-shower', 'next-lunar', 'next-cal']) {
             const mineIds = lines.map(([sel]) => sel.slice(1));
             if (!mineIds.includes(id) && html.includes(`id="${id}"`)) {
                 bad(label, `이 갈래에 없는 카드 줄이 있다: #${id}`);
@@ -1063,7 +1093,8 @@ for (const { page, lang, slug, kind, label } of ALL) {
            "절기도 삭망도 아닙니다" 라고 적으면 그 페이지에서는 거짓말이다. */
         const now = r.doc.cache.get('#now');
         const verdict = now.querySelector('.verdict').textContent;
-        const none = kind === 'sky/lunar' ? w.lunarNone : w.skyNone;
+        const none = kind === 'sky/lunar' ? w.lunarNone
+            : kind === 'sky/calendar' ? w.calNone : w.skyNone;
         const todays = mine.filter((e) => dateOf(e) === TODAY);
         if (!todays.length && verdict !== none) {
             bad(label, `오늘 아무것도 없는데 오늘 칸이 "${verdict}" 다`);
@@ -2252,6 +2283,125 @@ for (const [page, lang, langs, wantCc] of [
         bad('/data/sky.json', `검산점이 ${points}개뿐이다 — ${FLOOR}개 이상이어야 한다. 앵커 공휴일 이름을 확인할 것.`);
     } else {
         console.log(`천문 검산점 ${points}개 (일본 분점 · 음력 명절) 대조\n`);
+    }
+}
+
+/* ------------------------------------------------- 다른 달력의 검산점
+   `sky.json` 의 `cals` 는 ICU(CLDR 달력 표)에서 받아 굳힌 값이다. "받은 대로
+   찍혔나" 만 보면 훑기가 새해를 하루 놓쳐도 조용히 통과한다 — 두 번째 점이 필요하다.
+   네 가지를 서로 다른 곳에서 가져온다.
+
+     ① 그 날이 정말 그 달력의 1월 1일인가   ICU 에 **다른 질문**을 던진다. 훑기는
+        "표시가 바뀌는 날" 을 찾았고, 이건 "월·일이 1/1인가" 다. 하루 밀리면 갈린다
+     ② 노루즈가 분점과 맞나              `sky-fixture.mjs` 의 **손으로 적은 공표 시각**
+        에 테헤란 정오 규칙을 얹는다. 우리 VSOP87D 도, ICU 도 모르는 제3의 값이다
+     ③ 설날이 우리 음력과 맞나            우리가 직접 계산한 `lunar` 의 1월 초하루와
+        ICU 의 단기 새해가 같아야 한다 — 완전히 다른 두 구현이다
+     ④ 연호력의 차이가 상수인가           1월 1일 하루만 보면 상수인 척하기 쉽다.
+        3년치를 열흘 간격으로 훑는다 */
+{
+    const P = '/data/sky.json';
+    const cals = SKY.cals || [];
+    if (!cals.length) bad(P, 'cals 가 비어 있다');
+
+    /* 원화에 실린 달력이 모두 자료에 있나 — 하나가 조용히 빠지면 표만 짧아진다 */
+    for (const c of NY_CALS) {
+        const n = cals.filter((r) => r.c === c.id).length;
+        if (n < SKY.years.length) bad(P, `${c.id} 의 새해가 ${n}개 — ${SKY.years.length}개 이상이어야 한다`);
+    }
+    for (const r of cals) {
+        if (!CAL_BY_ID[r.c]) bad(P, `모르는 달력이 자료에 있다: ${r.c}`);
+        if (CAL_BY_ID[r.c] && CAL_BY_ID[r.c].janFirst) {
+            bad(P, `${r.c} 는 새해가 1월 1일인데 새해 표에 들어 있다`);
+        }
+        /* 번호가 있으면 번호, 없으면 간지 두 표기. 둘 다 없거나 둘 다 있으면 표가 흔들린다 */
+        const named = r.nk !== undefined || r.ne !== undefined;
+        if ((r.y === null) !== named) bad(P, `${r.c} ${r.s} 의 해 표기가 반쪽이다`);
+        if (named && !(r.nk && r.ne)) bad(P, `${r.c} ${r.s} 의 간지가 ko·en 한쪽만 있다`);
+    }
+
+    /* ── ① 그 날이 그 달력의 첫날인가 ──────────────────────────────
+       hebrew 만 ICU 가 월을 이름으로 준다(Tishri). 그 이름을 여기 적어 둔다 —
+       검사기가 아는 것이고, 만드는 쪽과 나눠 쓰지 않는다. */
+    const FIRST_MONTH = { hebrew: 'Tishri' };
+    let firsts = 0;
+    for (const r of cals) {
+        const parts = new Intl.DateTimeFormat(`en-u-ca-${r.c}`,
+            { timeZone: 'UTC', year: 'numeric', month: 'numeric', day: 'numeric' })
+            .formatToParts(noonOf(r.s));
+        const pick = (t) => (parts.find((x) => x.type === t) || {}).value;
+        const wantMonth = FIRST_MONTH[r.c] || '1';
+        if (pick('day') !== '1' || pick('month') !== wantMonth) {
+            bad(P, `${r.c} ${r.s} 가 그 달력으로 ${pick('month')}월 ${pick('day')}일이다 — ${wantMonth}월 1일이어야 한다`);
+        } else firsts++;
+        /* 하루 전은 첫날이 아니어야 한다 — 그래야 "첫날 아무 날" 이 아니라 경계다 */
+        const prevDay = new Intl.DateTimeFormat(`en-u-ca-${r.c}`, { timeZone: 'UTC', day: 'numeric' })
+            .formatToParts(noonOf(r.s) - 86400e3).find((x) => x.type === 'day').value;
+        if (prevDay === '1') bad(P, `${r.c} ${r.s} 의 하루 전도 1일이다 — 경계가 아니다`);
+        /* 자료에 적힌 해 길이가 다음 새해까지의 간격과 맞나 */
+        const nxt = cals.filter((x) => x.c === r.c && x.s > r.s).sort((a, b) => (a.s < b.s ? -1 : 1))[0];
+        if (nxt) {
+            const gap = Math.round((noonOf(nxt.s) - noonOf(r.s)) / 86400e3);
+            if (gap !== r.n) bad(P, `${r.c} ${r.s} 의 해가 ${r.n}일로 적혔는데 다음 새해까지 ${gap}일이다`);
+        }
+    }
+    if (firsts !== cals.length) bad(P, `첫날 검사가 ${firsts}/${cals.length} 만 됐다`);
+
+    /* ── ② 노루즈 ↔ 손으로 적은 분점 시각 ──────────────────────────
+       테헤란 표준시(UTC+3:30)로 춘분이 정오 이전이면 그날, 이후면 다음날. */
+    {
+        const TEHRAN = 3.5 * 3600e3;
+        let n = 0;
+        for (const r of cals.filter((x) => x.c === 'persian')) {
+            const y = +r.s.slice(0, 4);
+            const pub = (EQUINOXES[y] || {})[0];
+            if (!pub) { soft(P, `${y}년 분점 고정값이 없어 노루즈를 못 견줬다`); continue; }
+            const teh = new Date(Date.parse(pub) + TEHRAN);
+            const day = teh.toISOString().slice(0, 10);
+            const want = teh.getUTCHours() < 12 ? day
+                : new Date(Date.parse(`${day}T12:00:00Z`) + 86400e3).toISOString().slice(0, 10);
+            if (r.s !== want) bad(P, `노루즈가 ${r.s} 인데 공표 분점(${pub}) + 테헤란 규칙은 ${want} 다`);
+            else n++;
+        }
+        if (!n) bad(P, '노루즈를 한 해도 못 견줬다');
+        else console.log(`달력 검산점 — 노루즈 ${n}해가 공표 분점 시각과 일치`);
+    }
+
+    /* ── ③ 설날 ↔ 우리가 계산한 음력 ────────────────────────────── */
+    {
+        const ours = new Set(SKY.lunar.filter((m) => m.m === 1 && !m.leap).map((m) => m.s));
+        const theirs = cals.filter((r) => r.c === 'dangi').map((r) => r.s);
+        for (const s of theirs) {
+            if (!ours.has(s)) bad(P, `ICU 의 설날 ${s} 가 우리 음력의 1월 초하루가 아니다`);
+        }
+        /* 반대 방향도 본다 — 우리 쪽에만 있는 설날이 있으면 훑기가 놓친 것이다 */
+        const lo = theirs[0], hi = theirs[theirs.length - 1];
+        for (const s of ours) {
+            if (s >= lo && s <= hi && !theirs.includes(s)) {
+                bad(P, `우리 음력의 설날 ${s} 가 ICU 자료에 없다`);
+            }
+        }
+        if (!theirs.length) bad(P, '설날을 한 해도 못 견줬다');
+        else console.log(`달력 검산점 — 설날 ${theirs.length}해가 우리 음력 1월 초하루와 일치`);
+    }
+
+    /* ── ④ 연호력의 차이가 상수인가 ────────────────────────────── */
+    {
+        let days = 0;
+        const from = noonOf(`${SKY.years[0]}-01-01`);
+        const to = noonOf(`${SKY.years[SKY.years.length - 1]}-12-31`);
+        for (let at = from; at <= to; at += 10 * 86400e3) {
+            const gy = +new Date(at).toISOString().slice(0, 4);
+            for (const c of ERA_CALS) {
+                const y = +yearOf(c.id, at);
+                if (gy - y !== c.offset) {
+                    bad(P, `${c.id} 의 차이가 ${new Date(at).toISOString().slice(0, 10)} 에 ${gy - y} 다 (원화 ${c.offset})`);
+                }
+            }
+            days++;
+        }
+        if (days < 100) bad(P, `연호 검사가 ${days}일만 됐다 — 3년치를 열흘 간격으로 훑어야 한다`);
+        else console.log(`달력 검산점 — 연호력 ${ERA_CALS.length}개의 차이가 ${days}일 내내 상수\n`);
     }
 }
 

@@ -45,7 +45,7 @@ export const YEARS = (now = new Date()) => {
                            축 탭은 새로 늘리지 않고 'rank' 를 잡는다 —
                            /sky/term/ 이나 /holiday/{이름}/ 이 쓰는 그 관례다 */
 export const EXTRA = ['sky', 'sky/term', 'sky/moon', 'sky/meteor', 'sky/lunar',
-    'holiday', 'rank', 'weekday'];
+    'sky/calendar', 'holiday', 'rank', 'weekday'];
 
 /* 이름 축의 낱장. **EXTRA 에 손으로 적지 않는다** — 몇 장이 될지는 자료가 정하고
    (문턱을 넘는 이름의 수) 달마다 늘거나 줄 수 있다. 손으로 적어 두면 자료가

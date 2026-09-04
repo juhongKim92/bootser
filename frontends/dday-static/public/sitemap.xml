@@ -3673,7 +3673,7 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/"/>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>
@@ -3681,7 +3681,23 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/"/>
-    <lastmod>2026-09-03</lastmod>
+    <lastmod>2026-09-04</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/sky/calendar/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/calendar/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/calendar/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/calendar/"/>
+    <lastmod>2026-09-04</lastmod>
+  </url>
+
+  <url>
+    <loc>https://this-is-the.day/en/sky/calendar/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://this-is-the.day/sky/calendar/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://this-is-the.day/en/sky/calendar/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://this-is-the.day/en/sky/calendar/"/>
+    <lastmod>2026-09-04</lastmod>
   </url>
 
   <url>

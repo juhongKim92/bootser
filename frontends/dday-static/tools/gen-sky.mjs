@@ -16,7 +16,8 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DATA, YEARS, today } from './config.mjs';
-import { solarTerms, moonPhases, showers, lunarMonths, TERM_NAMES } from './astro.mjs';
+import { solarTerms, solarTermAt, moonPhases, showers, lunarMonths, TERM_NAMES } from './astro.mjs';
+import { NY_CALS, newYears, noonOf } from './calendars.mjs';
 
 const years = YEARS();
 
@@ -57,6 +58,9 @@ const marginOf = (hhmm) => {
 const LUNAR_TZ = ZONES.kst;
 
 const terms = [], moons = [], rain = [], lunar = [];
+/* 교차검증 결과. 아래에서 채우고 마지막에 인쇄한다 — 몇 점이 걸렸는지 보여야
+   "검사가 조용히 죽어 있는" 것을 알아챌 수 있다. */
+let crossLunar = 0, crossNowruz = { before: 0, after: 0 };
 for (const year of years) {
     for (const t of solarTerms(year)) {
         const nm = TERM_NAMES[t.k];
@@ -114,6 +118,121 @@ for (let i = 1; i < moons.length; i++) {
         if (leaps !== (n === 13 ? 1 : 0)) fail.push(`음력 ${ly}년(${n}개월)에 윤달이 ${leaps}개다`);
     }
 }
+/* ---------------------------------------------------------------- 다른 달력
+   히즈라력 · 히브리력 · 페르시아력 … 의 **새해가 그레고리력 언제인가**.
+   `tools/calendars.mjs` 가 어느 달력을 실을지 정하고, 날짜는 런타임의 ICU 가 준다 —
+   우리가 계산하는 것이 아니라 **굳혀서 검산하는** 자료다.
+
+   절기·삭망과 달리 시각이 없다. 달력의 하루는 순간이 아니라 날짜이고, 그 대응은
+   ICU 의 표에 박혀 있다 — 음력(lunar)과 같은 모양이라 `s` 한 칸만 쓴다.
+   ⚠ 그래서 ko·en 이 같은 날짜를 본다. 각주로 밝힌다. */
+const calRows = [];
+{
+    const first = `${years[0]}-01-01`;
+    const last = `${years[years.length - 1]}-12-31`;
+    /* 창 밖으로 한 해씩 더 훑는다 — 해 길이는 다음 새해까지의 간격이라
+       표의 마지막 줄도 길이를 가져야 한다(음력의 n 과 같은 이유). */
+    const from = `${years[0] - 1}-01-01`;
+    const to = `${years[years.length - 1] + 1}-12-31`;
+    const ep = (s) => Math.round(noonOf(s) / 86400000);
+
+    for (const c of NY_CALS) {
+        const all = newYears(c.id, from, to);
+        for (let i = 0; i < all.length; i++) {
+            const x = all[i];
+            if (x.s < first || x.s > last) continue;
+            const nxt = all[i + 1];
+            if (!nxt) { fail.push(`${c.id} 의 ${x.s} 다음 새해가 창 밖이다`); continue; }
+            /* 번호가 있으면 번호 한 칸, 없으면 간지 두 표기(ko·en) — 유성우 이름과 같은 규칙이다.
+               섞어서 한 칸에 담으면 페이지가 `en` 에도 한자음을 쓰거나 그 반대가 된다. */
+            const span = ep(nxt.s) - ep(x.s);
+            calRows.push(x.y
+                ? { s: x.s, c: c.id, y: x.y, n: span }
+                : { s: x.s, c: c.id, y: null, nk: x.nk, ne: x.ne, n: span });
+        }
+    }
+    calRows.sort((a, b) => (a.s < b.s ? -1 : a.s > b.s ? 1 : a.c.localeCompare(b.c)));
+
+    /* 해 길이가 그 달력의 규칙 안인가. 규칙에서 연역되는 성질이라 검산점이 된다 —
+       달로만 도는 달력은 354~355일, 윤달로 계절을 붙잡는 달력은 353~385일,
+       태양력은 365~366일이다. 범위를 벗어나면 훑기가 새해를 놓친 것이다. */
+    const SPAN = {
+        'islamic-umalqura': [354, 355],
+        hebrew: [353, 385],
+        dangi: [353, 385],
+        persian: [365, 366],
+        indian: [365, 366],
+        ethiopic: [365, 366],
+        coptic: [365, 366],
+    };
+    for (const r of calRows) {
+        const [lo, hi] = SPAN[r.c] || [];
+        if (lo === undefined) { fail.push(`${r.c} 의 해 길이 범위가 안 적혀 있다`); continue; }
+        if (r.n < lo || r.n > hi) fail.push(`${r.c} ${r.s} 의 해가 ${r.n}일 — ${lo}~${hi}일이어야 한다`);
+    }
+    /* 달력마다 새해가 해마다 하나씩 있어야 한다 */
+    for (const c of NY_CALS) {
+        const mine = calRows.filter((r) => r.c === c.id);
+        if (mine.length < years.length) {
+            fail.push(`${c.id} 의 새해가 ${mine.length}개 — ${years.length}개 이상이어야 한다`);
+        }
+    }
+
+    /* ── 교차검증 ① 우리 음력 ↔ ICU 의 단기 ─────────────────────────
+       이 저장소는 음력을 직접 계산한다(Meeus 49장 + VSOP87D). ICU 는 완전히 다른
+       구현이다. **두 답이 갈리면 한쪽이 틀렸다.** 설날(음력 1월 1일)만 보는 게 아니라
+       초하루 전부를 견준다 — 37개월이면 우연히 맞을 수가 없다. */
+    {
+        let checked = 0;
+        for (const mo of lunar) {
+            const day = new Intl.DateTimeFormat('en-u-ca-dangi', { timeZone: 'UTC', day: 'numeric' })
+                .formatToParts(noonOf(mo.s));
+            const d = +(day.find((p) => p.type === 'day') || {}).value;
+            if (d !== 1) fail.push(`우리 음력 초하루 ${mo.s} 가 ICU 단기력으로는 ${d}일이다`);
+            else checked++;
+        }
+        if (checked !== lunar.length) fail.push(`음력 교차검증이 ${checked}/${lunar.length} 만 됐다`);
+        crossLunar = checked;
+    }
+
+    /* ── 교차검증 ② 우리 춘분 ↔ ICU 의 노루즈 ───────────────────────
+       페르시아력 새해 규칙: **테헤란 표준시(UTC+3:30)로 춘분이 정오 이전이면 그날,
+       이후면 다음날.** 우리가 VSOP87D 로 계산한 춘분에 그 규칙을 얹으면 ICU 의 답이
+       나와야 한다 — 전혀 다른 두 구현이 만나는 자리다.
+
+       ⚠ **자료 창(3년)으로는 검사가 반쪽이다.** 2025~2027 은 셋 다 테헤란 정오
+       *이후*라, 규칙의 다른 갈래가 한 번도 안 걸린다. 그래서 **자료는 3년이지만
+       검사는 30년을 훑는다** — 계산은 순수 함수라 공짜고, 그래야 두 갈래가 다 걸린다.
+       (아래 인쇄에 두 갈래의 횟수가 찍힌다. 한쪽이 0 이면 그 자체가 신호다.) */
+    {
+        const TEHRAN = 3.5 * 3600e3;
+        const SPAN = 15;                 /* 표지 연도 앞뒤로 훑을 해 */
+        let before = 0, after = 0;
+        const mid = years[1];
+        for (let gy = mid - SPAN; gy <= mid + SPAN; gy++) {
+            /* 자료 창 안이면 담아 둔 절기를, 밖이면 그 자리에서 계산한다 —
+               같은 함수라 답이 갈릴 자리가 없다. */
+            const inWindow = terms.find((x) => x.k === 0 && x.t.startsWith(String(gy)));
+            const eq = inWindow ? Date.parse(inWindow.t) : solarTermAt(gy, 0).getTime();
+            const teh = new Date(eq + TEHRAN);
+            const noonBefore = teh.getUTCHours() < 12;
+            const eqDay = teh.toISOString().slice(0, 10);
+            const want = noonBefore ? eqDay
+                : new Date(Date.parse(`${eqDay}T12:00:00Z`) + 86400e3).toISOString().slice(0, 10);
+            /* ICU 에 그 해의 페르시아력 새해를 묻는다 (3월 중에 하나뿐이다) */
+            const got = (newYears('persian', `${gy}-03-01`, `${gy}-04-10`)[0] || {}).s;
+            if (!got) { fail.push(`${gy}년 노루즈를 ICU 에서 못 찾았다`); continue; }
+            if (got !== want) {
+                fail.push(`${gy}년 노루즈가 ICU 로 ${got} 인데 우리 춘분 + 테헤란 규칙은 ${want} 다`);
+            } else if (noonBefore) before++; else after++;
+        }
+        if (before === 0 || after === 0) {
+            fail.push(`노루즈 규칙의 한 갈래가 안 걸렸다 — 정오 이전 ${before}해 · 이후 ${after}해`);
+        }
+        crossNowruz = { before, after };
+    }
+}
+
 if (fail.length) {
     console.error('천문 자료가 앞뒤가 맞지 않는다:');
     for (const f of fail.slice(0, 10)) console.error('  ✗', f);
@@ -125,13 +244,20 @@ const sky = {
     years,
     zones: ZONES,
     lunarZone: LUNAR_TZ,
-    terms, moons, showers: rain, lunar,
+    terms, moons, showers: rain, lunar, cals: calRows,
 };
 writeFileSync(join(DATA, 'sky.json'), JSON.stringify(sky) + '\n');
 
+/* 교차검증이 몇 점 걸렸는지 인쇄한다. 0 이 찍히면 검사가 조용히 죽은 것이다 —
+   이 저장소가 음력 중기 검사에서 실제로 겪은 고장이다. */
+console.log(`  교차검증 — 우리 음력 초하루 ${crossLunar}개월이 ICU 단기력과 일치`);
+console.log(`  교차검증 — 노루즈 ${crossNowruz.before + crossNowruz.after}해가 우리 춘분과 일치`
+    + ` (테헤란 정오 이전 ${crossNowruz.before}해 · 이후 ${crossNowruz.after}해)`);
+
 const size = (JSON.stringify(sky).length / 1024).toFixed(1);
 console.log(`sky.json — 절기 ${terms.length} · 삭망 ${moons.length} · 유성우 ${rain.length}`
-    + ` · 음력 ${lunar.length}개월(윤달 ${lunar.filter((m) => m.leap).length}) (${size}KB)`);
+    + ` · 음력 ${lunar.length}개월(윤달 ${lunar.filter((m) => m.leap).length})`
+    + ` · 다른 달력 새해 ${calRows.length} (${size}KB)`);
 
 /* 얇은 자리를 알려 준다. 막지는 않는다 — 계산은 맞고, 그저 여유가 적을 뿐이다. */
 for (const [zone, key] of [['KST', 'kh'], ['UTC', 'uh']]) {

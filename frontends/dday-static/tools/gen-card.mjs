@@ -208,11 +208,12 @@ const countries = JSON.parse(readFileSync(join(DATA, 'countries.json'), 'utf8'))
    (gen-pages 는 생성기라 import 하는 순간 412개 HTML 이 다시 쓰인다).
    짝이 어긋나면 check-pages 가 "페이지가 가리키는데 파일이 없다" 로 문다. */
 const SKY_CARDS = [
-    ['sky',        'SKY',    'SOLAR TERMS, MOONS, METEORS AND LUNAR MONTHS'],
+    ['sky',        'SKY',    'SOLAR TERMS, MOONS, METEORS AND CALENDARS'],
     ['sky-term',   'TERM',   'THE 24 SOLAR TERMS'],
     ['sky-moon',   'MOON',   'NEW AND FULL MOONS'],
     ['sky-meteor', 'METEOR', 'METEOR SHOWER PEAKS'],
     ['sky-lunar',  'LUNAR',  'THE LUNISOLAR CALENDAR'],
+    ['sky-calendar', 'CALENDAR', 'NEW YEAR IN OTHER CALENDARS'],
 ];
 
 /* 국가 축도 하늘도 아닌 축 둘. /holiday/ 아래의 낱장은 아래에서 원화(NAMES)로 만든다. */
