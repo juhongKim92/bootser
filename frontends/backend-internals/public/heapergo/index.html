@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>컨테이너 메모리를 두 배로 줬는데 힙은 그대로다 — JVM 인체공학의 평지</title>
+<meta name="description" content="컨테이너를 250MB 에서 500MB 로 늘려도 힙은 126MB 에서 한 바이트도 안 움직입니다. 249MB부터 504MB까지가 평지고, 그 평지를 만드는 것은 컨테이너와 아무 상관없는 96MB 짜리 기본값입니다. JDK 25 로 62점 실측했습니다.">
+<link rel="canonical" href="https://lab.vermilion19.com/heapergo/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/heapergo/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/heapergo/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/heapergo/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="컨테이너 메모리를 두 배로 줬는데 힙은 그대로다">
+<meta property="og:description" content="250MB → 500MB. 힙은 126MB 그대로입니다. 평지를 만드는 것은 20년 된 96MB 기본값입니다.">
+<meta property="og:url" content="https://lab.vermilion19.com/heapergo/">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="컨테이너 메모리를 두 배로 줬는데 힙은 그대로다">
+<meta name="twitter:description" content="OOMKilled 은 자바 흔적을 안 남깁니다. 로그가 깨끗한데 파드가 재시작합니다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/heapergo-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/">← Backend Internals</a>
+  <nav><a class="btn" href="/en/heapergo/" hreflang="en" lang="en">EN</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>컨테이너 메모리를 두 배로 줬는데 힙은 그대로다</h1>
+  <p class="lede">OOMKilled 이 나서 컨테이너를 <strong>250MB 에서 500MB 로</strong> 늘렸습니다. 그런데 힙 상한은 <strong>126MB 에서 한 바이트도 안 움직입니다.</strong> 249MB부터 504MB까지가 평지고, 그 구간을 만드는 것은 컨테이너와 아무 상관없는 <strong>20년 된 96MB 짜리 기본값</strong>입니다. JVM 에 62번 물어서 확인했습니다.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sR">컨테이너 메모리</label>
+          <span class="v" id="vR">128<small>MB</small></span>
+          <input type="range" id="sR" min="0" max="18" step="1" value="1" aria-label="cgroup 메모리 한계 (-XX:MaxRAM 과 같은 자리)">
+        </div>
+        <div class="dial">
+          <label>상한을 정하는 방식</label>
+          <div class="seg" id="segWay" role="group" aria-label="힙 상한을 인체공학에 맡길 것인가 직접 줄 것인가">
+            <button data-way="ergo" aria-pressed="true">인체공학</button>
+            <button data-way="xmx50">-Xmx 50%</button>
+            <button data-way="xmx75">-Xmx 75%</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>MaxRAMPercentage</label>
+          <div class="seg" id="segMax" role="group" aria-label="MaxRAMPercentage">
+            <button data-max="25" aria-pressed="true">25 (기본)</button>
+            <button data-max="50">50</button>
+            <button data-max="75">75</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>MinRAMPercentage</label>
+          <div class="seg" id="segMin" role="group" aria-label="MinRAMPercentage">
+            <button data-min="25">25</button>
+            <button data-min="50" aria-pressed="true">50 (기본)</button>
+            <button data-min="75">75</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sO">힙 밖 실사용</label>
+          <span class="v" id="vO">60<small>MB</small></span>
+          <input type="range" id="sO" min="10" max="900" step="10" value="60" aria-label="메타스페이스 · 코드캐시 · 스레드 스택 · 다이렉트 버퍼가 실제로 쓰는 양">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->컨테이너 128MB · Max 25% · Min 50% · 상한선 125MB<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">컨테이너를 키울 때 힙 비율이 걸어가는 길</span>
+      <div class="board">
+        <div class="curve" id="curve"><!--pr--><div class="cgrid"></div><div class="cband" style="left:28.000027600972583%;width:14.532542734740499%"></div><div class="cbandl" style="left:28.000027600972583%">평지 249~504MB — 힙이 안 늘어난다</div><div class="cdot" style="left:0%;top:37.5%"></div><div class="cdot on" style="left:14.285714285714285%;top:37.5%"></div><div class="cdot" style="left:22.64232143887366%;top:37.5%"></div><div class="cdot" style="left:27.917090148383927%;top:37.5%"></div><div class="cdot" style="left:28.000027600972583%;top:36.74698795180723%"></div><div class="cdot" style="left:28.57142857142857%;top:38.4765625%"></div><div class="cdot" style="left:33.17040135553374%;top:50.78125%"></div><div class="cdot" style="left:36.92803572458794%;top:58.984375%"></div><div class="cdot" style="left:40.10507031510863%;top:64.84375%"></div><div class="cdot" style="left:42.53257033571308%;top:68.75%"></div><div class="cdot" style="left:42.857142857142854%;top:68.75%"></div><div class="cdot" style="left:47.456115641248026%;top:68.75%"></div><div class="cdot" style="left:51.21375001030223%;top:68.75%"></div><div class="cdot" style="left:57.14285714285714%;top:68.75%"></div><div class="cdot" style="left:65.49946429601651%;top:68.75%"></div><div class="cdot" style="left:71.42857142857143%;top:68.75%"></div><div class="cdot" style="left:79.7851785817308%;top:68.75%"></div><div class="cdot" style="left:85.71428571428571%;top:68.75%"></div><div class="cdot" style="left:100%;top:68.75%"></div><div class="cline" style="top:68.75%"></div><div class="clinel" style="top:68.75%">25%</div><div class="cline" style="top:37.5%"></div><div class="clinel" style="top:37.5%">50%</div><!--/pr--></div>
+        <div class="curvex" id="curvex"><!--pr--><span>64MB</span><span>512MB</span><span>8,192MB</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="bandl"></i>평지 — 힙이 안 늘어나는 구간</span>
+          <span><i class="onl"></i>지금 설정</span>
+          <span><i class="dotl"></i>다른 컨테이너 크기</span>
+          <span><i class="linel"></i>Max · Min 기준선</span>
+        </div>
+
+        <div class="twice" id="twice"><!--pr--><div class="bar"><div class="fillh" style="width:25%"></div><div class="lab">128MB → 힙 64MB</div></div><div class="bar"><div class="fillh" style="width:49.21875%"></div><div class="lab">두 배 256MB → 힙 126MB</div></div><div class="gain">두 배로 주면 힙이 62MB 늘어난다</div><!--/pr--></div>
+        <table class="four" id="four"><!--pr--><tr><th>설정</th><th>힙 상한</th><th>비율</th><th>두 배 주면</th><th>여유</th></tr><tr><td>인체공학 (기본 25/50)</td><td>64MB</td><td class="good">50%</td><td class="good">+62MB</td><td class="good">4MB</td></tr><tr><td>Max 75%</td><td>64MB</td><td class="good">50%</td><td class="good">+128MB</td><td class="good">4MB</td></tr><tr><td>-Xmx 50%</td><td>64MB</td><td class="good">50%</td><td class="good">+64MB</td><td class="good">4MB</td></tr><tr><td>-Xmx 75%</td><td>96MB</td><td class="good">75%</td><td class="good">+96MB</td><td class="bad">-28MB</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m "><span class="k">힙 상한</span><span class="n">64MB</span></div><div class="m good"><span class="k">컨테이너 대비</span><span class="n">50%</span></div><div class="m good"><span class="k">두 배 주면</span><span class="n">+62MB</span></div><div class="m "><span class="k">초기 힙</span><span class="n">2MB</span></div><div class="m "><span class="k">힙 밖 실사용</span><span class="n">60MB</span></div><div class="m good"><span class="k">여유</span><span class="n">4MB</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>작은 메모리 분기 — Min 50% 를 쓴다.</b> 힙 64MB<br><span class="at">249MB 부터는 평지가 시작되어 힙이 멈춘다</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">이전 단계</button>
+        <button id="btnStep">다음 단계</button>
+        <button id="btnReset">초기화</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>직접 조작하기</h2>
+
+  <table class="keytable">
+    <tr><th>손잡이</th><th>무엇이 바뀌나</th></tr>
+    <tr><td>컨테이너 메모리</td><td>cgroup 한계입니다. JVM 은 이걸 물리 메모리로 봅니다 — <code>-XX:MaxRAM</code> 이 그 값을 대신 넣는 자리예요. <strong>249~504MB 를 지나가 보세요.</strong></td></tr>
+    <tr><td>상한을 정하는 방식</td><td><strong>인체공학</strong>은 JVM 이 알아서 정하는 것(기본), 나머지는 <code>-Xmx</code> 를 컨테이너 비율로 직접 주는 것입니다. <strong>직접 주면 아래 산수가 통째로 사라집니다.</strong></td></tr>
+    <tr><td>MaxRAMPercentage</td><td>큰 메모리에서 쓰는 비율. <strong>기본 25</strong>입니다 — 1GB 컨테이너에 힙 256MB 라는 뜻이에요.</td></tr>
+    <tr><td>MinRAMPercentage</td><td><strong>작은</strong> 메모리에서 쓰는 비율. 기본 50 이고, 이 값이 평지의 <em>왼쪽 끝</em>을 정합니다.</td></tr>
+    <tr><td>힙 밖 실사용</td><td>메타스페이스 · 코드캐시 · 스레드 스택 · 다이렉트 버퍼가 실제로 쓰는 양. <strong>이 값은 명세가 아니라 우리가 넣은 입력입니다</strong> — 여러분 환경에서 재야 하는 값이에요. 올려서 여유를 음수로 만들면 OOMKilled 자리가 나옵니다.</td></tr>
+  </table>
+
+  <p>모든 값이 결정됩니다 — 난수도 표본도 없어요. 힙 상한은 <strong>JVM 이 실제로 인쇄한 값과 62점에서 일치</strong>합니다(Temurin 25.0.4.1+1).</p>
+
+  <h2>이렇게 해보세요</h2>
+
+  <div class="recipe">
+    <h4>1. 128MB — 절반을 힙으로 준다</h4>
+    <div class="seq">컨테이너 <em>128MB</em> · 인체공학 · Max 25% · Min 50%
+힙 <em>64.0MB</em> (<em>50.0%</em>) · 초기 힙 2.0MB · 여유 <em>4.0MB</em></div>
+    <p class="why">작은 메모리에서는 <code>MinRAMPercentage</code> 인 <strong>50%</strong>를 씁니다 — 소스의 주석이 <em>"Small physical memory, so use a minimum fraction of it for the heap"</em> 라고 적어둔 그 분기예요. 여유가 4MB 뿐이라는 게 이미 경고인데, 그건 아래 7단계에서 다시 봅니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 249MB — 여기서 평지가 시작된다</h4>
+    <div class="seq">컨테이너 128 → <em>249MB</em>
+힙 <em>126.0MB</em> (50.6%) · <strong>두 배(498MB) 줘도 늘어나는 힙 <em>0MB</em></strong></div>
+    <p class="why">힙이 126MB 가 됐는데, <strong>여기서 컨테이너를 두 배로 늘려도 126MB 입니다.</strong> 249MB 의 절반은 124.5MB 인데 상한선이 124.8MB 라 거의 붙었고, 2 MiB 정렬로 올려서 126MB 가 됐어요. 이 위쪽은 전부 그 상한선에 걸립니다. <strong>이 미터 하나가 이 페이지 전체입니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 504MB — 두 배를 지나도 여전히 126MB</h4>
+    <div class="seq">컨테이너 249 → <em>504MB</em> (두 배 넘게)
+힙 <em>126.0MB</em> · 비율 50.6 → <em>25.0%</em> · 여유 <em>318.0MB</em></div>
+    <p class="why">메모리를 두 배 넘게 줬습니다. <strong>힙은 한 바이트도 안 늘었고, 비율만 절반으로 떨어졌습니다.</strong> 곡선의 점이 세로로 흘러내리는 게 그거예요 — 힙은 가로로 붙어 있는데 비율은 계속 내려갑니다. 그리고 <strong>318MB 가 아무도 안 쓰는 채로 남습니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. 512MB — 8MB 더 줬더니 드디어 움직인다</h4>
+    <div class="seq">컨테이너 504 → <em>512MB</em> (8MB 만 더)
+힙 126.0 → <em>128.0MB</em> · 두 배 주면 <em>+128MB</em></div>
+    <p class="why">512MB 의 25%가 128MB 라 드디어 상한선(124.8MB)을 넘습니다. <strong>평지를 벗어나는 순간부터 비율이 약속대로 일합니다</strong> — 여기서부터는 컨테이너를 두 배 주면 힙도 두 배예요. <strong>평지의 오른쪽 끝은 <code>126 ÷ 25% = 504MB</code> 입니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 1024MB — 기본값의 진짜 모습</h4>
+    <div class="seq">컨테이너 512 → <em>1,024MB</em>
+힙 <em>256MB</em> (25.0%) · 여유 <em>708MB</em></div>
+    <p class="why">1GB 컨테이너에 힙 256MB 입니다. <strong>남은 768MB 를 메타스페이스와 코드캐시와 스레드 스택이 다 쓰지 않아요</strong> — 이 실험대의 기본값(60MB)으로는 708MB 가 남습니다. <strong>25% 는 아주 보수적인 값이고, 대부분의 컨테이너가 그래서 메모리를 놀립니다.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. MaxRAMPercentage 를 75로 — 놀던 메모리를 쓴다</h4>
+    <div class="seq">Max 25 → <em>75%</em> (컨테이너 1,024MB 그대로)
+힙 256 → <em>768MB</em> · 여유 708 → <em>196MB</em></div>
+    <p class="why">놀던 메모리가 힙으로 갑니다. <strong>그리고 평지가 사라집니다</strong> — 상한선(124.8MB)을 75%로 넘는 지점이 167MB 라 평지가 들어갈 자리가 없어요. <strong>비율을 올리는 것은 힙을 키우는 것만이 아니라 평지를 없애는 것입니다.</strong> 다만 196MB 로 힙 밖을 다 감당할 수 있는지는 재 봐야 합니다.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. 힙 밖을 800MB 로 — OOMKilled</h4>
+    <div class="seq">Max 를 25% 로 되돌리고 힙 밖 실사용 60 → <em>800MB</em>
+힙 256MB + 힙 밖 800MB = 1,056MB · 여유 <em>−32MB</em></div>
+    <p class="why">힙은 상한을 안 넘었습니다. <code>OutOfMemoryError</code> 도 안 납니다. <strong>cgroup 이 프로세스를 죽입니다</strong> — 힙 덤프도, 스택도, 자바 쪽 흔적이 하나도 안 남아요. 로그는 깨끗한데 파드가 재시작합니다. <strong>그리고 이때 컨테이너를 늘리는 것이 흔한 처방인데, 2~3단계 구간에 있으면 그게 안 듣습니다.</strong></p>
+  </div>
+
+  <h2>식이 한 줄이다</h2>
+
+  <p>OpenJDK 의 <code>arguments.cpp</code> 에 있는 <code>Arguments::set_heap_size()</code> 가 전부입니다.</p>
+
+  <div class="callout"><pre><code>if (FLAG_IS_DEFAULT(MaxHeapSize)) {
+  julong reasonable_max = phys_mem * MaxRAMPercentage / 100;
+  const julong reasonable_min = phys_mem * MinRAMPercentage / 100;
+  if (reasonable_min &lt; MaxHeapSize) {
+    <em>// Small physical memory, so use a minimum fraction of it for the heap</em>
+    reasonable_max = reasonable_min;
+  } else {
+    <em>// Not-small physical memory, so require a heap at least as large as MaxHeapSize</em>
+    reasonable_max = MAX2(reasonable_max, (julong)MaxHeapSize);
+  }</code></pre></div>
+
+  <p>정리하면 이렇습니다.</p>
+
+  <div class="callout"><strong>힙 = align_up( max(RAM × Max%, min(RAM × Min%, 124.8MB)), 2 MiB )</strong></div>
+
+  <p>가운데 <code>min</code> 이 평지를 만듭니다. 그리고 <strong>124.8MB 가 어디서 왔는지가 이 페이지에서 가장 이상한 부분입니다.</strong></p>
+
+  <h2>평지의 정체는 96MB 짜리 기본값이다</h2>
+
+  <p><code>gc_globals.hpp</code> 의 네 줄이 이 편의 상수 전부입니다.</p>
+
+  <table class="keytable">
+    <tr><th>플래그</th><th>기본값</th></tr>
+    <tr><td>MaxRAMPercentage</td><td><code>25.0</code></td></tr>
+    <tr><td>MinRAMPercentage</td><td><code>50.0</code></td></tr>
+    <tr><td>InitialRAMPercentage</td><td><code>1.5625</code></td></tr>
+    <tr><td>MaxHeapSize</td><td><code>ScaleForWordSize(96*M)</code> = <strong>124.8 MiB</strong></td></tr>
+  </table>
+
+  <p>마지막 줄이 상한선입니다. <code>MaxHeapSize</code> 의 기본값 — <strong>비율도 아니고 컨테이너와도 무관한, 그냥 96MB 에 1.3배를 한 상수</strong>입니다. 코드의 주석이 <em>"require a heap at least as large as MaxHeapSize"</em> 라고 적어둔 그 의도는 <em>"큰 기계에서 힙이 너무 작아지지 않게"</em> 였는데, 컨테이너 시대에는 그게 <strong>힙이 너무 커지지 않게</strong> 하는 쪽으로 작동합니다.</p>
+
+  <div class="callout">그래서 <strong>평지의 양 끝이 이 상수에서 나옵니다.</strong> 왼쪽은 <code>124.8 ÷ 50%</code> 언저리, 오른쪽은 <code>126 ÷ 25% = 504MB</code>. 손잡이 둘(Min · Max)을 돌리면 평지가 넓어지고 좁아지고 <strong>아예 없어지기도</strong> 합니다 — 6단계가 그것입니다.</div>
+
+  <h2>249MB 에서 126MB 가 나오는 이유</h2>
+
+  <p>249MB 의 절반은 124.5MB 입니다. 상한선 124.8MB 보다 작으니 <em>"작은 메모리"</em> 분기를 타고 124.5MB 가 됩니다. 그런데 화면에는 <strong>126MB</strong> 가 나와요.</p>
+
+  <p><strong>힙 정렬 때문입니다 — 2 MiB 단위로 올립니다.</strong> 실측으로 확인한 것이고, 짝수 MB 만 넣어 보면 안 보입니다. 홀수를 넣어야 보여요.</p>
+
+  <table class="keytable">
+    <tr><th>컨테이너</th><th>절반</th><th>실측 힙</th></tr>
+    <tr><td>65MB</td><td>32.5MB</td><td><strong>34.0MB</strong></td></tr>
+    <tr><td>101MB</td><td>50.5MB</td><td><strong>52.0MB</strong></td></tr>
+    <tr><td>249MB</td><td>124.5MB</td><td><strong>126.0MB</strong></td></tr>
+    <tr><td>1,001MB</td><td>(25%) 250.25MB</td><td><strong>252.0MB</strong></td></tr>
+  </table>
+
+  <p>언제나 올림입니다. <strong>이 실험대의 평지 구간도 식으로 풀지 않고 훑어서 구합니다</strong> — 처음에 <code>124.8 ÷ 비율</code> 로 풀었더니 250~499MB 가 나왔는데 실측은 <strong>249~504MB</strong> 였어요. 정렬이 양 끝을 한 칸씩 밀어 놓습니다.</p>
+
+  <h2>검산점이 표가 아니라 생성기다</h2>
+
+  <p>이 사이트의 다른 편들은 문서가 준 <em>표</em>와 맞춰 봤습니다 — <a href="/slowstart/">26번</a>은 RFC 6928 의 왕복 수 표, <a href="/backlog/">27번</a>은 man page 의 "약 127초" 였죠. 이 편은 다릅니다.</p>
+
+  <div class="callout"><strong>JVM 이 임의 입력에 답을 인쇄합니다.</strong><br>
+  <code>java -XX:MaxRAM=249m -XX:+PrintFlagsFinal -version | grep MaxHeapSize</code><br>
+  그래서 유한한 표를 맞추는 것이 아니라 <strong>생성기와 겨룰 수</strong> 있습니다 — 손잡이 전 구간을 훑어서요.</div>
+
+  <p>그 출력을 <strong>62점 떠서 저장소에 굳혀 뒀습니다</strong>(<code>tools/heap-fixture.mjs</code>). 검사는 그 자료와 견주므로 JDK 없이 돌아갑니다. Temurin 25.0.4.1+1 과 Zulu 17 에서 각각 떠 보고 <strong>모든 점이 일치</strong>하는 것을 확인했어요.</p>
+
+  <h2>이 모델이 가정하는 것</h2>
+
+  <table class="keytable">
+    <tr><th>가정</th><th>깨지면 어떻게 되나</th></tr>
+    <tr><td>상한선과 정렬은 명세가 아니다</td><td><code>ScaleForWordSize(96*M)</code> 와 2 MiB 정렬은 <strong>구현</strong>입니다. 명세 문서에 없어요. JDK 판이 바뀌면 값이 바뀔 수 있고, 그러면 <strong>고정자료를 다시 떠야 합니다</strong> — 그 절차를 <code>tools/gen-heap-fixture.mjs</code> 로 남겨 뒀습니다</td></tr>
+    <tr><td><code>MaxRAM</code> 이 cgroup 한계와 같다</td><td>실제 컨테이너에서는 <code>os::physical_memory()</code> 가 cgroup 한계를 돌려주고 <strong>같은 식에 들어갑니다</strong>. 다만 <code>MaxRAM</code> 을 명시하면 압축 오옵 상한을 건너뛰는 분기가 켜지므로, <strong>32GB 근처에서는 실제 컨테이너와 갈릴 수 있습니다</strong>. 이 실험대의 범위(64MB~8GB)에서는 무관합니다</td></tr>
+    <tr><td>힙 밖 실사용은 우리가 넣은 값</td><td>메타스페이스 · 코드캐시 · 스레드 스택 · 다이렉트 버퍼 · JVM 자체가 쓰는 양은 애플리케이션마다 다릅니다. <strong>이 숫자만은 명세에 있을 수 없어요</strong> — 손잡이로 두고 여러분이 재라고 적어 두었습니다</td></tr>
+    <tr><td>수집기를 안 가린다</td><td>정렬은 수집기의 영향을 받을 수 있습니다. 실측은 기본 수집기(G1)로 떴고, ZGC 로 재면 값이 다를 수 있습니다 — <a href="/gc/">2번</a>이 그 둘의 차이를 다룹니다</td></tr>
+  </table>
+
+  <h2>현장에서</h2>
+
+  <table class="keytable">
+    <tr><th>자리</th><th>확인할 것</th></tr>
+    <tr><td>제일 먼저 볼 것</td><td><strong>컨테이너 한계와 힙 상한을 같이 적어 보세요.</strong> <code>java -XX:+PrintFlagsFinal -version | grep MaxHeapSize</code> 를 그 컨테이너 안에서 돌리면 끝입니다 — 추측할 것이 없어요. 비율이 25% 근처가 아니면 평지에 있습니다</td></tr>
+    <tr><td>OOMKilled 이 났을 때</td><td>자바 쪽 흔적을 찾지 마세요. <strong>없습니다.</strong> <code>kubectl describe pod</code> 의 <code>Reason: OOMKilled</code> 와 종료 코드 137 이 유일한 증거입니다. 힙 덤프가 없다는 것 자체가 <em>"힙이 아니라 힙 밖이 넘쳤다"</em> 는 신호예요</td></tr>
+    <tr><td>고칠 순서</td><td>① <strong><code>-XX:MaxRAMPercentage</code> 를 명시</strong>합니다(75 근처). 그러면 평지도 사라지고 놀던 메모리도 쓰게 됩니다 ② 힙 밖을 실제로 재서 남길 양을 정합니다 ③ <strong>컨테이너를 키우는 것은 마지막</strong>입니다 — 평지 안에서는 안 듣습니다</td></tr>
+    <tr><td><code>-Xmx</code> 와 어느 쪽이 나은가</td><td><code>-Xmx</code> 를 주면 이 산수가 통째로 사라집니다(<code>FLAG_IS_DEFAULT(MaxHeapSize)</code> 가 거짓이 되니까요). 대신 <strong>컨테이너 크기를 바꿀 때마다 같이 고쳐야 합니다.</strong> 비율로 주면 따라오고요 — 그래서 컨테이너에서는 비율 쪽이 낫습니다</td></tr>
+    <tr><td>작은 컨테이너가 더 위험하다</td><td>256MB 짜리 사이드카나 배치 잡이 평지의 한가운데입니다. <strong>그 크기에서는 컨테이너를 두 배로 줘도 힙이 그대로</strong>라, "메모리를 늘려도 안 낫는다" 는 보고가 여기서 나옵니다</td></tr>
+    <tr><td>초기 힙도 보세요</td><td><code>InitialRAMPercentage</code> 가 <strong>1.5625%</strong> 입니다 — 1GB 컨테이너에 16MB 로 시작해요. 웜업 동안 힙을 계속 늘리느라 <a href="/gc/">GC</a> 가 자주 돕니다. <code>-XX:InitialRAMPercentage</code> 를 Max 와 같게 두면 그 구간이 없어집니다</td></tr>
+  </table>
+
+  <p><a href="/gc/">2번</a>이 <em>힙 안에서 무슨 일이 벌어지나</em> 였다면, 이 페이지는 그 힙이 <strong>얼마로 정해지나</strong>입니다. 그리고 그 답이 컨테이너 크기에 비례하지 않는 구간이 있다는 것 — 그게 이 편의 전부입니다.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">이어서 볼 것</h2>
+    <ul>
+      <li><a href="/gc/"><span class="no">02</span><span><span class="t">G1과 ZGC는 왜 다르게 멈추는가</span><span class="why">힙 크기가 정해진 다음의 이야기 — 그 안에서 무슨 일이 벌어지나.</span></span></a></li>
+      <li><a href="/healthfan/"><span class="no">33</span><span><span class="t">DB 가 깜빡했더니 전 인스턴스가 동시에 빠졌다</span><span class="why">OOMKilled 로 파드가 빠지면 로드밸런서가 그것을 언제 알아차리나.</span></span></a></li>
+      <li><a href="/usl/"><span class="no">30</span><span><span class="t">스레드를 늘렸더니 느려졌다</span><span class="why">스레드마다 스택이 붙는다 — 힙 밖이 늘어나는 가장 흔한 이유다.</span></span></a></li>
+      <li><a href="/omission/"><span class="no">25</span><span><span class="t">멈춰 있던 30초를 부하 테스트가 세지 않았다</span><span class="why">힙 덤프가 없다는 것 자체가 신호다 — 측정에 안 잡히는 것이 가장 나쁘다.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/">목록</a> · <a href="/en/heapergo/" hreflang="en" lang="en">English</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uMB:'MB', uPct:'%',
+  hint:'컨테이너 $1MB · Max $2% · Min $3% · 상한선 $4',
+  cPlateau:'평지 $1~$2MB — 힙이 안 늘어난다',
+  tNow:'$1MB → 힙 $2', tTwice:'두 배 $1MB → 힙 $2',
+  tNoGain:'두 배로 줬는데 늘어난 힙이 없다', tGain:'두 배로 주면 힙이 $1 늘어난다',
+  fWhat:'설정', fHeap:'힙 상한', fRatio:'비율', fTwice:'두 배 주면', fSpare:'여유', fSame:'그대로',
+  fErgo:'인체공학 (기본 25/50)', fMax75:'Max 75%', fXmx50:'-Xmx 50%', fXmx75:'-Xmx 75%',
+  mHeap:'힙 상한', mRatio:'컨테이너 대비', mTwice:'두 배 주면', mNoGain:'안 늘어남',
+  mInit:'초기 힙', mOff:'힙 밖 실사용', mSpare:'여유',
+  vOom:'<b>여유가 $1 모자란다 — cgroup 이 죽인다.</b> 힙 $2 + 힙 밖 $3 &gt; 컨테이너 $4MB<br><span class="at">OutOfMemoryError 도 힙 덤프도 안 남는다 — 로그가 깨끗한데 파드가 재시작한다</span>',
+  vXmx:'<b>-Xmx 로 직접 정했다 — 힙 $1 ($2).</b><br>인체공학 산수가 통째로 사라진다 <span class="at">— 대신 컨테이너를 바꿀 때 같이 고쳐야 한다</span>',
+  vPlateau:'<b>평지 안이다 — 힙 $1 에서 안 움직인다.</b> $2~$3MB 가 그 구간<br>비율은 $4 까지 떨어졌다 <span class="at">— 컨테이너를 키워도 힙이 안 늘어난다</span>',
+  vFloor:'<b>작은 메모리 분기 — Min $1% 를 쓴다.</b> 힙 $2<br><span class="at">$3MB 부터는 평지가 시작되어 힙이 멈춘다</span>',
+  vCeil:'<b>Max $1% 가 일한다 — 힙 $2.</b><br>$3MB 를 넘어서 평지를 벗어났다 <span class="at">— 여기서부터는 컨테이너에 비례한다</span>',
+  vNoFlat:'<b>Max $1% 가 일한다 — 힙 $2.</b><br>이 비율에서는 평지가 아예 없다 <span class="at">— 상한선을 넘는 지점이 너무 낮아서 들어갈 자리가 없다</span>',
+  scene:[
+    '컨테이너 128MB 입니다. 힙 상한이 64MB, 정확히 절반이에요. 작은 메모리에서는 MinRAMPercentage 인 50%를 쓰는데, 소스의 주석이 "작은 물리 메모리라서 최소 비율을 쓴다" 고 적어둔 그 분기입니다. 여유가 4MB 뿐인 것도 눈에 걸어 두세요 — 마지막 단계에서 그 이야기를 합니다.',
+    '컨테이너를 249MB 로 올렸습니다. 힙이 126MB 가 됐는데, 여기서부터 이상해집니다. 두 배 미터를 보세요 — 컨테이너를 498MB 로 두 배 늘려도 힙은 126MB 그대로입니다. 늘어나는 힙이 0이에요. 249의 절반은 124.5MB 인데 상한선이 124.8MB 라 거의 붙었고, 그 위쪽은 전부 그 상한선에 걸립니다.',
+    '504MB 로 올렸습니다. 두 배가 넘게 줬는데 힙은 126MB 그대로예요. 대신 비율이 50.6%에서 25%로 떨어졌습니다. 곡선의 점이 세로로 흘러내리는 게 그겁니다 — 힙은 가로로 붙어 있는데 비율만 내려가요. 그리고 318MB 가 아무도 안 쓰는 채로 남습니다.',
+    '8MB 만 더 줘서 512MB 로 했습니다. 드디어 힙이 128MB 로 움직였어요. 512의 25%가 128MB 라 상한선 124.8MB 를 넘었기 때문입니다. 평지의 오른쪽 끝은 126 나누기 25%, 즉 504MB 였고 여기서부터는 비율이 약속대로 일합니다.',
+    '1GB 컨테이너입니다. 힙 256MB, 비율 25% — 기본값의 진짜 모습이에요. 남은 768MB 를 메타스페이스와 코드캐시와 스레드 스택이 다 쓰지 않습니다. 이 실험대의 기본값으로는 708MB 가 남아요. 25%는 아주 보수적인 값이고, 대부분의 컨테이너가 그래서 메모리를 놀립니다.',
+    'MaxRAMPercentage 를 75로 올렸습니다. 힙이 768MB 가 되어 놀던 메모리가 힙으로 갑니다. 그리고 평지가 사라졌어요 — 상한선을 75%로 넘는 지점이 167MB 라 평지가 들어갈 자리가 없습니다. 비율을 올리는 것은 힙을 키우는 것만이 아니라 평지를 없애는 일입니다.',
+    '마지막은 OOMKilled 입니다. 비율을 25%로 되돌리고 힙 밖 실사용을 800MB 로 올렸습니다. 힙 256에 힙 밖 800이면 1,056MB 라 1GB 컨테이너를 32MB 넘깁니다. 힙은 상한을 안 넘었으니 OutOfMemoryError 도 안 나고, cgroup 이 프로세스를 죽입니다. 힙 덤프도 스택도 없어요. 그리고 이때 컨테이너를 늘리는 것이 흔한 처방인데, 2단계나 3단계 구간에 있으면 그게 안 듣습니다.'
+  ],
+};
+</script>
+<script src="/shared/heapergo-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "컨테이너 메모리를 두 배로 줬는데 힙은 그대로다",
+  "description": "컨테이너를 250MB 에서 500MB 로 늘려도 힙은 126MB 에서 한 바이트도 안 움직입니다. 249MB부터 504MB까지가 평지고, 그 평지를 만드는 것은 컨테이너와 아무 상관없는 96MB 짜리 기본값입니다. JDK 25 로 62점 실측했습니다.",
+  "url": "https://lab.vermilion19.com/heapergo/",
+  "inLanguage": "ko",
+  "datePublished": "2026-09-04",
+  "dateModified": "2026-09-04",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "컨테이너 메모리를 두 배로 줬는데 힙은 그대로다"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

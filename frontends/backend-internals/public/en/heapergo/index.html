@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>You doubled the container memory and the heap did not move — the plateau in JVM ergonomics</title>
+<meta name="description" content="Take the container from 250MB to 500MB and the heap stays at 126MB, not one byte more. The plateau runs from 249MB to 504MB, and what creates it is a 96MB default that has nothing to do with containers. Measured at 62 points on JDK 25.">
+<link rel="canonical" href="https://lab.vermilion19.com/en/heapergo/">
+<link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/heapergo/">
+<link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/heapergo/">
+<link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/heapergo/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Backend Internals">
+<meta property="og:title" content="You doubled the container memory and the heap did not move">
+<meta property="og:description" content="250MB → 500MB. The heap stays at 126MB. What makes the plateau is a twenty-year-old 96MB default.">
+<meta property="og:url" content="https://lab.vermilion19.com/en/heapergo/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="ko_KR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="You doubled the container memory and the heap did not move">
+<meta name="twitter:description" content="OOMKilled leaves no Java trace. The logs are clean and the pod restarts anyway.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
+<link rel="stylesheet" href="/shared/base.css">
+<link rel="stylesheet" href="/shared/heapergo-lab.css">
+</head>
+<body>
+
+<div class="top"><div class="wrap">
+  <a class="brand" href="/en/">← Backend Internals</a>
+  <nav><a class="btn" href="/heapergo/" hreflang="ko" lang="ko">KO</a></nav>
+</div></div>
+
+<main class="wrap prose">
+
+  <h1>You doubled the container memory and the heap did not move</h1>
+  <p class="lede">You got OOMKilled, so you took the container from <strong>250MB to 500MB</strong>. And the maximum heap <strong>stays at 126MB — not one byte more.</strong> The plateau runs from 249MB to 504MB, and what creates it is a <strong>twenty-year-old 96MB default</strong> that has nothing to do with containers. Confirmed by asking the JVM 62 times.</p>
+
+  <div class="lab">
+
+    <section>
+      <div class="dials">
+        <div class="dial">
+          <label for="sR">Container memory</label>
+          <span class="v" id="vR">128<small>MB</small></span>
+          <input type="range" id="sR" min="0" max="18" step="1" value="1" aria-label="The cgroup memory limit, which is where -XX:MaxRAM stands in">
+        </div>
+        <div class="dial">
+          <label>How the maximum is set</label>
+          <div class="seg" id="segWay" role="group" aria-label="Leave the maximum heap to ergonomics or set it yourself">
+            <button data-way="ergo" aria-pressed="true">ergonomics</button>
+            <button data-way="xmx50">-Xmx 50%</button>
+            <button data-way="xmx75">-Xmx 75%</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>MaxRAMPercentage</label>
+          <div class="seg" id="segMax" role="group" aria-label="MaxRAMPercentage">
+            <button data-max="25" aria-pressed="true">25 (default)</button>
+            <button data-max="50">50</button>
+            <button data-max="75">75</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label>MinRAMPercentage</label>
+          <div class="seg" id="segMin" role="group" aria-label="MinRAMPercentage">
+            <button data-min="25">25</button>
+            <button data-min="50" aria-pressed="true">50 (default)</button>
+            <button data-min="75">75</button>
+          </div>
+        </div>
+        <div class="dial">
+          <label for="sO">Off-heap actually used</label>
+          <span class="v" id="vO">60<small>MB</small></span>
+          <input type="range" id="sO" min="10" max="900" step="10" value="60" aria-label="What metaspace, code cache, thread stacks and direct buffers really use">
+        </div>
+      </div>
+      <div class="hint" id="hint"><!--pr-->container 128MB · Max 25% · Min 50% · ceiling 125MB<!--/pr--></div>
+    </section>
+
+    <section>
+      <span class="cap">The path the heap ratio walks as the container grows</span>
+      <div class="board">
+        <div class="curve" id="curve"><!--pr--><div class="cgrid"></div><div class="cband" style="left:28.000027600972583%;width:14.532542734740499%"></div><div class="cbandl" style="left:28.000027600972583%">plateau 249–504MB — the heap stops growing</div><div class="cdot" style="left:0%;top:37.5%"></div><div class="cdot on" style="left:14.285714285714285%;top:37.5%"></div><div class="cdot" style="left:22.64232143887366%;top:37.5%"></div><div class="cdot" style="left:27.917090148383927%;top:37.5%"></div><div class="cdot" style="left:28.000027600972583%;top:36.74698795180723%"></div><div class="cdot" style="left:28.57142857142857%;top:38.4765625%"></div><div class="cdot" style="left:33.17040135553374%;top:50.78125%"></div><div class="cdot" style="left:36.92803572458794%;top:58.984375%"></div><div class="cdot" style="left:40.10507031510863%;top:64.84375%"></div><div class="cdot" style="left:42.53257033571308%;top:68.75%"></div><div class="cdot" style="left:42.857142857142854%;top:68.75%"></div><div class="cdot" style="left:47.456115641248026%;top:68.75%"></div><div class="cdot" style="left:51.21375001030223%;top:68.75%"></div><div class="cdot" style="left:57.14285714285714%;top:68.75%"></div><div class="cdot" style="left:65.49946429601651%;top:68.75%"></div><div class="cdot" style="left:71.42857142857143%;top:68.75%"></div><div class="cdot" style="left:79.7851785817308%;top:68.75%"></div><div class="cdot" style="left:85.71428571428571%;top:68.75%"></div><div class="cdot" style="left:100%;top:68.75%"></div><div class="cline" style="top:68.75%"></div><div class="clinel" style="top:68.75%">25%</div><div class="cline" style="top:37.5%"></div><div class="clinel" style="top:37.5%">50%</div><!--/pr--></div>
+        <div class="curvex" id="curvex"><!--pr--><span>64MB</span><span>512MB</span><span>8,192MB</span><!--/pr--></div>
+
+        <div class="legend">
+          <span><i class="bandl"></i>plateau — where the heap stops growing</span>
+          <span><i class="onl"></i>current setting</span>
+          <span><i class="dotl"></i>other container sizes</span>
+          <span><i class="linel"></i>Max · Min reference lines</span>
+        </div>
+
+        <div class="twice" id="twice"><!--pr--><div class="bar"><div class="fillh" style="width:25%"></div><div class="lab">128MB → heap 64MB</div></div><div class="bar"><div class="fillh" style="width:49.21875%"></div><div class="lab">double, 256MB → heap 126MB</div></div><div class="gain">doubling gains 62MB of heap</div><!--/pr--></div>
+        <table class="four" id="four"><!--pr--><tr><th>Setting</th><th>Max heap</th><th>Ratio</th><th>If doubled</th><th>Spare</th></tr><tr><td>ergonomics (default 25/50)</td><td>64MB</td><td class="good">50%</td><td class="good">+62MB</td><td class="good">4MB</td></tr><tr><td>Max 75%</td><td>64MB</td><td class="good">50%</td><td class="good">+128MB</td><td class="good">4MB</td></tr><tr><td>-Xmx 50%</td><td>64MB</td><td class="good">50%</td><td class="good">+64MB</td><td class="good">4MB</td></tr><tr><td>-Xmx 75%</td><td>96MB</td><td class="good">75%</td><td class="good">+96MB</td><td class="bad">-28MB</td></tr><!--/pr--></table>
+        <div class="meters" id="meters"><!--pr--><div class="m "><span class="k">Max heap</span><span class="n">64MB</span></div><div class="m good"><span class="k">Of container</span><span class="n">50%</span></div><div class="m good"><span class="k">If doubled</span><span class="n">+62MB</span></div><div class="m "><span class="k">Initial heap</span><span class="n">2MB</span></div><div class="m "><span class="k">Off-heap used</span><span class="n">60MB</span></div><div class="m good"><span class="k">Spare</span><span class="n">4MB</span></div><!--/pr--></div>
+        <div class="verdict" id="verdict"><!--pr--><b>Small-memory branch — it uses Min 50%.</b> Heap 64MB<br><span class="at">from 249MB the plateau begins and the heap stops</span><!--/pr--></div>
+      </div>
+    </section>
+
+    <section class="transport">
+      <div class="keys">
+        <button id="btnPrev">Previous</button>
+        <button id="btnStep">Next step</button>
+        <button id="btnReset">Reset</button>
+      </div>
+      <div class="narration">
+        <span class="n" id="nStep">01 / 07</span>
+        <span id="nText"></span>
+      </div>
+    </section>
+
+  </div>
+
+  <h2>The dials</h2>
+
+  <table class="keytable">
+    <tr><th>Dial</th><th>What it changes</th></tr>
+    <tr><td>Container memory</td><td>The cgroup limit. The JVM treats it as physical memory — <code>-XX:MaxRAM</code> is where that value stands in. <strong>Walk it through 249–504MB.</strong></td></tr>
+    <tr><td>How the maximum is set</td><td><strong>Ergonomics</strong> is the JVM deciding for you (the default); the others set <code>-Xmx</code> to a share of the container. <strong>Set it yourself and all the arithmetic below disappears.</strong></td></tr>
+    <tr><td>MaxRAMPercentage</td><td>The share used on large memory. <strong>Default 25</strong> — which means a 1GB container gets a 256MB heap.</td></tr>
+    <tr><td>MinRAMPercentage</td><td>The share used on <strong>small</strong> memory. Default 50, and this value sets the <em>left edge</em> of the plateau.</td></tr>
+    <tr><td>Off-heap actually used</td><td>What metaspace, code cache, thread stacks and direct buffers really consume. <strong>This number is not specified anywhere — it is an input we supplied</strong>, and one you have to measure in your own environment. Raise it until the spare goes negative and you land on OOMKilled.</td></tr>
+  </table>
+
+  <p>Every value is determined — no randomness, no sampling. The maximum heap <strong>agrees with what the JVM actually printed at 62 points</strong> (Temurin 25.0.4.1+1).</p>
+
+  <h2>Things to try</h2>
+
+  <div class="recipe">
+    <h4>1. 128MB — half of it goes to the heap</h4>
+    <div class="seq">container <em>128MB</em> · ergonomics · Max 25% · Min 50%
+heap <em>64.0MB</em> (<em>50.0%</em>) · initial heap 2.0MB · spare <em>4.0MB</em></div>
+    <p class="why">On small memory it uses <code>MinRAMPercentage</code>, <strong>50%</strong> — the branch whose source comment reads <em>"Small physical memory, so use a minimum fraction of it for the heap"</em>. That the spare is only 4MB is already a warning, and step 7 comes back to it.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>2. 249MB — the plateau begins here</h4>
+    <div class="seq">container 128 → <em>249MB</em>
+heap <em>126.0MB</em> (50.6%) · <strong>double it (498MB) and the heap gains <em>0MB</em></strong></div>
+    <p class="why">The heap reached 126MB — and <strong>from here, doubling the container still gives you 126MB.</strong> Half of 249MB is 124.5MB, the ceiling sits at 124.8MB, so they have nearly met; the 2 MiB alignment rounds it up to 126MB. Everything above this hits that same ceiling. <strong>This one meter is the whole page.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>3. 504MB — past double, and still 126MB</h4>
+    <div class="seq">container 249 → <em>504MB</em> (more than double)
+heap <em>126.0MB</em> · ratio 50.6 → <em>25.0%</em> · spare <em>318.0MB</em></div>
+    <p class="why">More than twice the memory. <strong>The heap did not gain a byte; only the ratio halved.</strong> That is the dots sliding down the chart — the heap holds a horizontal line while the ratio keeps falling. And <strong>318MB sits there with nobody using it.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>4. 512MB — eight more megabytes and it finally moves</h4>
+    <div class="seq">container 504 → <em>512MB</em> (just 8MB more)
+heap 126.0 → <em>128.0MB</em> · doubling now gains <em>+128MB</em></div>
+    <p class="why">25% of 512MB is 128MB, which finally clears the 124.8MB ceiling. <strong>Past the plateau the percentage does what it promised</strong> — from here, double the container and the heap doubles. <strong>The plateau's right edge is <code>126 ÷ 25% = 504MB</code>.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>5. 1024MB — what the default really looks like</h4>
+    <div class="seq">container 512 → <em>1,024MB</em>
+heap <em>256MB</em> (25.0%) · spare <em>708MB</em></div>
+    <p class="why">A 1GB container gets a 256MB heap. <strong>Metaspace, code cache and thread stacks will not use the remaining 768MB</strong> — with this lab's default of 60MB, 708MB is left over. <strong>25% is a very conservative number, and it is why most containers waste memory.</strong></p>
+  </div>
+
+  <div class="recipe">
+    <h4>6. MaxRAMPercentage to 75 — spend the idle memory</h4>
+    <div class="seq">Max 25 → <em>75%</em> (container still 1,024MB)
+heap 256 → <em>768MB</em> · spare 708 → <em>196MB</em></div>
+    <p class="why">The idle memory goes to the heap. <strong>And the plateau disappears</strong> — at 75% the ceiling is cleared by 167MB, so there is no room for a plateau at all. <strong>Raising the percentage is not only about a bigger heap; it removes the plateau.</strong> Whether 196MB covers your off-heap needs is something you have to measure.</p>
+  </div>
+
+  <div class="recipe">
+    <h4>7. Off-heap to 800MB — OOMKilled</h4>
+    <div class="seq">Max back to 25% and off-heap 60 → <em>800MB</em>
+heap 256MB + off-heap 800MB = 1,056MB · spare <em>−32MB</em></div>
+    <p class="why">The heap never exceeded its maximum. There is no <code>OutOfMemoryError</code>. <strong>The cgroup kills the process</strong> — no heap dump, no stack, not one trace on the Java side. The logs are clean and the pod restarts. <strong>And the usual response is to grow the container, which does nothing if you are sitting in the range from steps 2 and 3.</strong></p>
+  </div>
+
+  <h2>The formula is one line</h2>
+
+  <p>All of it lives in <code>Arguments::set_heap_size()</code> in OpenJDK's <code>arguments.cpp</code>.</p>
+
+  <div class="callout"><pre><code>if (FLAG_IS_DEFAULT(MaxHeapSize)) {
+  julong reasonable_max = phys_mem * MaxRAMPercentage / 100;
+  const julong reasonable_min = phys_mem * MinRAMPercentage / 100;
+  if (reasonable_min &lt; MaxHeapSize) {
+    <em>// Small physical memory, so use a minimum fraction of it for the heap</em>
+    reasonable_max = reasonable_min;
+  } else {
+    <em>// Not-small physical memory, so require a heap at least as large as MaxHeapSize</em>
+    reasonable_max = MAX2(reasonable_max, (julong)MaxHeapSize);
+  }</code></pre></div>
+
+  <p>Which comes to this.</p>
+
+  <div class="callout"><strong>heap = align_up( max(RAM × Max%, min(RAM × Min%, 124.8MB)), 2 MiB )</strong></div>
+
+  <p>The <code>min</code> in the middle is what makes the plateau. And <strong>where that 124.8MB comes from is the strangest part of this page.</strong></p>
+
+  <h2>The plateau is a 96MB default</h2>
+
+  <p>Four lines in <code>gc_globals.hpp</code> are all the constants this episode has.</p>
+
+  <table class="keytable">
+    <tr><th>Flag</th><th>Default</th></tr>
+    <tr><td>MaxRAMPercentage</td><td><code>25.0</code></td></tr>
+    <tr><td>MinRAMPercentage</td><td><code>50.0</code></td></tr>
+    <tr><td>InitialRAMPercentage</td><td><code>1.5625</code></td></tr>
+    <tr><td>MaxHeapSize</td><td><code>ScaleForWordSize(96*M)</code> = <strong>124.8 MiB</strong></td></tr>
+  </table>
+
+  <p>The last line is the ceiling. It is the default value of <code>MaxHeapSize</code> — <strong>not a percentage, nothing to do with containers, just 96MB scaled by 1.3.</strong> The intent behind the comment <em>"require a heap at least as large as MaxHeapSize"</em> was <em>keep the heap from being too small on a big machine</em>; in the container era it works in the other direction and <strong>keeps the heap from getting large.</strong></p>
+
+  <div class="callout">So <strong>both edges of the plateau come out of that constant.</strong> The left is around <code>124.8 ÷ 50%</code>, the right is <code>126 ÷ 25% = 504MB</code>. Turn the two dials (Min and Max) and the plateau widens, narrows, and <strong>can vanish entirely</strong> — which is step 6.</div>
+
+  <h2>Why 249MB yields 126MB</h2>
+
+  <p>Half of 249MB is 124.5MB. That is below the 124.8MB ceiling, so it takes the <em>"small physical memory"</em> branch and comes out as 124.5MB. Yet the screen says <strong>126MB</strong>.</p>
+
+  <p><strong>Heap alignment — it rounds up in 2 MiB steps.</strong> Confirmed by measurement, and invisible if you only feed it even megabytes. You have to try odd ones.</p>
+
+  <table class="keytable">
+    <tr><th>Container</th><th>Half</th><th>Measured heap</th></tr>
+    <tr><td>65MB</td><td>32.5MB</td><td><strong>34.0MB</strong></td></tr>
+    <tr><td>101MB</td><td>50.5MB</td><td><strong>52.0MB</strong></td></tr>
+    <tr><td>249MB</td><td>124.5MB</td><td><strong>126.0MB</strong></td></tr>
+    <tr><td>1,001MB</td><td>(25%) 250.25MB</td><td><strong>252.0MB</strong></td></tr>
+  </table>
+
+  <p>Always upward. <strong>Which is why this lab finds the plateau's edges by scanning rather than solving</strong> — solving <code>124.8 ÷ percentage</code> gave 250–499MB, while the measurement says <strong>249–504MB</strong>. The alignment nudges both edges by a step.</p>
+
+  <h2>The checkpoint is a generator, not a table</h2>
+
+  <p>Other episodes on this site check against a <em>table</em> the documentation handed over — <a href="/en/slowstart/">no. 26</a> used RFC 6928's round-trip counts, <a href="/en/backlog/">no. 27</a> the man page's "about 127 seconds". This one is different.</p>
+
+  <div class="callout"><strong>The JVM prints the answer for any input.</strong><br>
+  <code>java -XX:MaxRAM=249m -XX:+PrintFlagsFinal -version | grep MaxHeapSize</code><br>
+  So instead of matching a finite table you can <strong>compete with the generator</strong> — across the whole range of the dial.</div>
+
+  <p>That output is <strong>captured at 62 points and committed</strong> (<code>tools/heap-fixture.mjs</code>). The checks compare against that fixture, so they run without a JDK. It was captured on both Temurin 25.0.4.1+1 and Zulu 17, and <strong>every point agreed</strong>.</p>
+
+  <h2>What this model assumes</h2>
+
+  <table class="keytable">
+    <tr><th>Assumption</th><th>What breaks if it fails</th></tr>
+    <tr><td>the ceiling and the alignment are not specified</td><td><code>ScaleForWordSize(96*M)</code> and the 2 MiB alignment are <strong>implementation</strong>, not specification — they appear in no document. A new JDK could change them, and then <strong>the fixture has to be re-captured</strong>; that procedure is kept as <code>tools/gen-heap-fixture.mjs</code></td></tr>
+    <tr><td><code>MaxRAM</code> equals the cgroup limit</td><td>In a real container <code>os::physical_memory()</code> returns the cgroup limit and it feeds <strong>the same formula</strong>. But setting <code>MaxRAM</code> explicitly enables a branch that skips the compressed-oops cap, so <strong>near 32GB it can diverge from a real container</strong>. Within this lab's range (64MB–8GB) it does not matter</td></tr>
+    <tr><td>off-heap usage is a number we supplied</td><td>Metaspace, code cache, thread stacks, direct buffers and the JVM's own footprint differ per application. <strong>This is the one number that could not be in any specification</strong> — it is a dial, and the page says to go measure it</td></tr>
+    <tr><td>the collector is not distinguished</td><td>Alignment can depend on the collector. The measurements were taken with the default (G1); ZGC may differ — <a href="/en/gc/">no. 2</a> covers how those two differ</td></tr>
+  </table>
+
+  <h2>In the field</h2>
+
+  <table class="keytable">
+    <tr><th>Where</th><th>What to check</th></tr>
+    <tr><td>First thing to look at</td><td><strong>Write down the container limit and the maximum heap side by side.</strong> Run <code>java -XX:+PrintFlagsFinal -version | grep MaxHeapSize</code> inside that container and you are done — nothing to guess. If the ratio is not near 25%, you are on the plateau</td></tr>
+    <tr><td>When you get OOMKilled</td><td>Do not go looking for a Java trace. <strong>There is none.</strong> <code>Reason: OOMKilled</code> in <code>kubectl describe pod</code> and exit code 137 are the only evidence. The absence of a heap dump is itself the signal that <em>it was off-heap, not the heap, that overflowed</em></td></tr>
+    <tr><td>Order of fixes</td><td>① <strong>set <code>-XX:MaxRAMPercentage</code> explicitly</strong> (somewhere near 75) — that removes the plateau and spends the idle memory ② measure off-heap and decide how much to leave ③ <strong>growing the container comes last</strong>, because inside the plateau it does nothing</td></tr>
+    <tr><td><code>-Xmx</code> or the percentage?</td><td><code>-Xmx</code> makes all this arithmetic vanish (<code>FLAG_IS_DEFAULT(MaxHeapSize)</code> becomes false). But then <strong>you have to change it every time the container size changes.</strong> A percentage follows along — which is why the percentage wins in containers</td></tr>
+    <tr><td>Small containers are the dangerous ones</td><td>A 256MB sidecar or batch job sits in the middle of the plateau. <strong>At that size doubling the container leaves the heap unchanged</strong>, which is where "we gave it more memory and it did not help" reports come from</td></tr>
+    <tr><td>Look at the initial heap too</td><td><code>InitialRAMPercentage</code> is <strong>1.5625%</strong> — a 1GB container starts at 16MB. Growing the heap all through warm-up means frequent <a href="/en/gc/">GC</a>. Setting <code>-XX:InitialRAMPercentage</code> equal to Max removes that stretch</td></tr>
+  </table>
+
+  <p>Where <a href="/en/gc/">no. 2</a> was about <em>what happens inside the heap</em>, this page is about <strong>how that heap's size gets decided</strong> — and that there is a range where the answer is not proportional to the container. That is the whole episode.</p>
+
+  <!-- onward:start · tools/gen-related.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <nav class="onward" aria-labelledby="onward-h">
+    <h2 id="onward-h">Where to go next</h2>
+    <ul>
+      <li><a href="/en/gc/"><span class="no">02</span><span><span class="t">Why G1 and ZGC stop differently</span><span class="why">What happens after the heap size is fixed — what goes on inside it.</span></span></a></li>
+      <li><a href="/en/healthfan/"><span class="no">33</span><span><span class="t">The database blinked and every instance dropped out at once</span><span class="why">When a pod goes OOMKilled, how long until the load balancer notices?</span></span></a></li>
+      <li><a href="/en/usl/"><span class="no">30</span><span><span class="t">Adding threads made it slower</span><span class="why">Every thread brings a stack — the commonest reason off-heap grows.</span></span></a></li>
+      <li><a href="/en/omission/"><span class="no">25</span><span><span class="t">The load test never counted the 30 seconds it was frozen</span><span class="why">The absence of a heap dump is itself the signal — what the measurement misses is the worst of it.</span></span></a></li>
+    </ul>
+  </nav>
+  <!-- onward:end -->
+
+</main>
+
+<footer class="wrap">Backend Internals · <a href="/en/">Index</a> · <a href="/heapergo/" hreflang="ko" lang="ko">한국어</a> · <span data-contact data-u="tcatnoc" data-d="moc.91noilimrev"><noscript>contact (at) vermilion19 (dot) com</noscript></span></footer>
+
+<script>
+window.LAB_I18N = {
+  uMB:'MB', uPct:'%',
+  hint:'container $1MB · Max $2% · Min $3% · ceiling $4',
+  cPlateau:'plateau $1–$2MB — the heap stops growing',
+  tNow:'$1MB → heap $2', tTwice:'double, $1MB → heap $2',
+  tNoGain:'doubled the memory and gained no heap', tGain:'doubling gains $1 of heap',
+  fWhat:'Setting', fHeap:'Max heap', fRatio:'Ratio', fTwice:'If doubled', fSpare:'Spare', fSame:'unchanged',
+  fErgo:'ergonomics (default 25/50)', fMax75:'Max 75%', fXmx50:'-Xmx 50%', fXmx75:'-Xmx 75%',
+  mHeap:'Max heap', mRatio:'Of container', mTwice:'If doubled', mNoGain:'no gain',
+  mInit:'Initial heap', mOff:'Off-heap used', mSpare:'Spare',
+  vOom:'<b>Short by $1 — the cgroup kills it.</b> heap $2 + off-heap $3 &gt; container $4MB<br><span class="at">no OutOfMemoryError, no heap dump — the logs are clean and the pod restarts</span>',
+  vXmx:'<b>Set directly with -Xmx — heap $1 ($2).</b><br>The ergonomics arithmetic disappears entirely <span class="at">— but now you change it whenever the container changes</span>',
+  vPlateau:'<b>On the plateau — the heap holds at $1.</b> That range is $2–$3MB<br>The ratio has fallen to $4 <span class="at">— growing the container does not grow the heap</span>',
+  vFloor:'<b>Small-memory branch — it uses Min $1%.</b> Heap $2<br><span class="at">from $3MB the plateau begins and the heap stops</span>',
+  vCeil:'<b>Max $1% is doing the work — heap $2.</b><br>Past $3MB, so off the plateau <span class="at">— from here it is proportional to the container</span>',
+  vNoFlat:'<b>Max $1% is doing the work — heap $2.</b><br>At this percentage there is no plateau at all <span class="at">— the ceiling is cleared too low for one to fit</span>',
+  scene:[
+    'A 128MB container. The maximum heap is 64MB, exactly half. On small memory it uses MinRAMPercentage, 50% — the branch whose source comment says it uses a minimum fraction because the physical memory is small. Note that the spare is only 4MB; the last step comes back to that.',
+    'Container up to 249MB. The heap became 126MB, and this is where it gets strange. Look at the doubling meter — take the container to 498MB and the heap is still 126MB. The gain is zero. Half of 249 is 124.5MB against a ceiling of 124.8MB, so they have nearly met, and everything above hits that same ceiling.',
+    'Up to 504MB. More than twice the memory, and the heap is still 126MB. What changed is the ratio, from 50.6% down to 25%. That is the dots sliding down the chart — the heap holds a horizontal line while the ratio falls. And 318MB sits there with nobody using it.',
+    'Eight more megabytes, to 512MB, and the heap finally moves to 128MB. 25% of 512 is 128MB, which clears the 124.8MB ceiling. The plateau ended at 126 divided by 25%, which is 504MB, and from here the percentage does what it promised.',
+    'A 1GB container: heap 256MB, ratio 25% — what the default really looks like. Metaspace, code cache and thread stacks will not use the remaining 768MB. With this lab default, 708MB is left over. Twenty-five percent is a very conservative number, and it is why most containers waste memory.',
+    'MaxRAMPercentage up to 75. The heap becomes 768MB and the idle memory goes to work. And the plateau is gone — at 75% the ceiling is cleared by 167MB, so there is no room for one. Raising the percentage is not only about a bigger heap; it removes the plateau.',
+    'The last step is OOMKilled. Percentage back to 25 and off-heap up to 800MB. Heap 256 plus off-heap 800 is 1,056MB, which overruns the 1GB container by 32. The heap never exceeded its maximum, so there is no OutOfMemoryError — the cgroup kills the process. No heap dump, no stack. And the usual response is to grow the container, which does nothing if you are in the range from step 2 or 3.'
+  ],
+};
+</script>
+<script src="/shared/heapergo-lab.js"></script>
+<script src="/shared/contact.js"></script>
+
+<!-- jsonld:start · tools/gen-jsonld.mjs 가 만듭니다. 손으로 고치지 마세요 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "You doubled the container memory and the heap did not move",
+  "description": "Take the container from 250MB to 500MB and the heap stays at 126MB, not one byte more. The plateau runs from 249MB to 504MB, and what creates it is a 96MB default that has nothing to do with containers. Measured at 62 points on JDK 25.",
+  "url": "https://lab.vermilion19.com/en/heapergo/",
+  "inLanguage": "en",
+  "datePublished": "2026-09-04",
+  "dateModified": "2026-09-04",
+  "author": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "Backend Internals",
+    "url": "https://lab.vermilion19.com/"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Backend Internals",
+      "item": "https://lab.vermilion19.com/en/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "You doubled the container memory and the heap did not move"
+    }
+  ]
+}
+  </script>
+  <!-- jsonld:end -->
+
+</body>
+</html>

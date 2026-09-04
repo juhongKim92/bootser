@@ -35,12 +35,15 @@ node tools/verify-usl.mjs          # 30편
 node tools/verify-quorum.mjs       # 31편
 node tools/verify-logdrop.mjs      # 32편
 node tools/verify-healthfan.mjs    # 33편
+node tools/verify-heapergo.mjs     # 34편 (tools/heap-fixture.mjs 와 대조)
 node tools/verify-favicon.mjs      # 파비콘 네 파일이 원화와 같은지
 
 node tools/gen-related.mjs         # "이어서 볼 것" 블록을 박는다
 node tools/gen-jsonld.mjs          # JSON-LD(Article + BreadcrumbList)를 박는다
 node tools/gen-related.mjs --check # 고치지 않고 최신인지만 본다 (두 생성기 모두 지원)
 node tools/gen-favicon.mjs         # 파비콘 네 파일을 원화에서 다시 만든다
+
+node tools/gen-heap-fixture.mjs <java>   # 34편 검산 자료를 JDK 로 다시 뜬다
 ```
 
 전부 실패하면 종료 코드 1 이다. 페이지를 고친 뒤와 배포 전에 돌린다.
@@ -116,6 +119,12 @@ TCP 에서 성립하지 않는데(FIN 은 시퀀스 번호를 차지해 스트�
 | 33편 — 얕은 검사도 이탈하게 함 | 904건 (불변식①) |
 | 33편 — 신규 투입을 복귀와 같게 함 | 9,607건 (불변식⑦) |
 | 33편 — 감지 시각에 응답 시간 5초를 섞음 | 1,987건 (간격의 정수배) |
+| 34편 — 상한선을 96MB 로 (정렬 전 값과 혼동) | 44건 (JVM 실측 대조) |
+| 34편 — 정렬을 내림으로 | 67건 |
+| 34편 — 정렬을 1 MiB 로 | 46건 |
+| 34편 — `min` 을 `max` 로 (평지가 사라진다) | 62건 |
+| 34편 — Max·Min 을 뒤바꿈 | 105건 |
+| 34편 — 초기 힙 비율을 Max 와 같게 | 2건 |
 
 > 변이 테스트를 짤 때 주의 — perl 정규식 안의 `@type` 은 **배열로 보간되어** 치환이
 > 조용히 안 먹는다. 처음 이걸로 "검사가 통과했다" 는 잘못된 결론을 냈다.
@@ -210,6 +219,32 @@ prose 규칙이 없는 페이지에만 `<main class="wrap prose">` 를 붙인다
 > `gen-related.mjs --check` 와 `gen-prerender.mjs --check` 가 멀쩡한 페이지를
 > "최신이 아니다" 로 잡는다. `git diff` 는 정규화해서 비교하므로 아무것도 안 보여준다.
 > 되돌렸으면 그 파일들을 LF 로 다시 정규화한다.
+
+## JDK 고정자료 (34편)
+
+34편의 검산점은 표가 아니라 **생성기**다 — `java -XX:MaxRAM=N -XX:+PrintFlagsFinal` 이
+임의 입력에 힙 상한을 인쇄한다. 그래서 유한한 표를 맞추는 것이 아니라 손잡이 전
+구간을 훑어 겨룰 수 있다(26편이 RFC 6928 의 표로 검산한 것보다 센 자리다).
+
+그런데 그 생성기를 검사 때마다 부르면 **검사가 JDK 판과 PATH 에 매인다.** 그래서
+`gen-heap-fixture.mjs` 가 한 번 떠서 `heap-fixture.mjs` 로 굳히고, `verify-heapergo.mjs`
+는 그 자료와 견준다 — `gen-vsop87.mjs` 가 VSOP87 계수를 굳혀 둔 것과 같은 자리이고,
+그래서 `check-pages.mjs` 는 JDK 없이 돈다.
+
+```bash
+node tools/gen-heap-fixture.mjs "/path/to/jdk-25/bin/java.exe"
+```
+
+- 62점을 뜬다 — 50% 구간 · 평지 · 25% 구간과 두 경계를 다 덮고, **홀수 MB 를 섞는다**
+  (짝수만 넣으면 2 MiB 올림이 그림자처럼 숨는다)
+- 어느 JVM 이 인쇄했는지 파일에 함께 적는다. 판이 바뀌면 사람이 알아볼 수 있게
+- **상한선(`ScaleForWordSize(96*M)`)과 2 MiB 정렬은 명세가 아니라 구현이다.**
+  JDK 판을 올리면 다시 떠야 하고, 그때 어긋난 자리를 `verify-heapergo` 가 짚어 준다
+- 2026-09-04 에 Temurin 25.0.4.1+1 과 Zulu 17 에서 각각 떠 62점이 전부 일치하는
+  것을 확인했다
+
+> `-version` 과 `-XshowSettings` 는 **stderr** 로 쓴다. 처음에 stdout 만 읽어서
+> 고정자료의 JVM 칸이 비었다 — 어느 판이 떴는지가 안 남으면 이 자료의 값이 반이다.
 
 ## 파비콘 생성기
 

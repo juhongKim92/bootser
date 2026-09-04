@@ -308,6 +308,7 @@ LIMIT 20;</code></pre>
       <li><a href="/mvcc/"><span class="no">01</span><span><span class="t">DELETE 했는데 테이블이 줄지 않는 이유</span><span class="why">트랜잭션을 오래 열어두는 또 다른 대가.</span></span></a></li>
       <li><a href="/slowstart/"><span class="no">26</span><span><span class="t">파일이 1바이트 커졌는데 왕복이 한 번 더 든다</span><span class="why">풀이 커넥션을 살려두는 진짜 이득 — 대역폭이 아니라 왕복 계단을 건너뜁니다.</span></span></a></li>
       <li><a href="/logdrop/"><span class="no">32</span><span><span class="t">AsyncAppender 를 붙였더니 로그가 사라진다</span><span class="why">같은 리틀의 법칙이 로그 큐에서도 돕니다 — 큐를 키우면 대기가 그만큼 늘어납니다.</span></span></a></li>
+      <li><a href="/heapergo/"><span class="no">34</span><span><span class="t">컨테이너 메모리를 두 배로 줬는데 힙은 그대로다</span><span class="why">커넥션마다 스레드가 붙고 스레드마다 스택이 붙습니다 — 힙 밖이 그렇게 자랍니다.</span></span></a></li>
       <li><a href="/usl/"><span class="no">30</span><span><span class="t">스레드를 늘렸더니 느려졌다</span><span class="why">작은 풀이 더 빠른 그 최적점을 식으로 계산해 봅니다.</span></span></a></li>
     </ul>
   </nav>

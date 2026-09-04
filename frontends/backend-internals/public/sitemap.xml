@@ -197,6 +197,22 @@
   </url>
 
   <url>
+    <loc>https://lab.vermilion19.com/heapergo/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/heapergo/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/heapergo/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/heapergo/"/>
+    <lastmod>2026-09-04</lastmod>
+  </url>
+
+  <url>
+    <loc>https://lab.vermilion19.com/en/heapergo/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/heapergo/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/heapergo/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lab.vermilion19.com/en/heapergo/"/>
+    <lastmod>2026-09-04</lastmod>
+  </url>
+
+  <url>
     <loc>https://lab.vermilion19.com/jobclaim/</loc>
     <xhtml:link rel="alternate" hreflang="ko" href="https://lab.vermilion19.com/jobclaim/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://lab.vermilion19.com/en/jobclaim/"/>

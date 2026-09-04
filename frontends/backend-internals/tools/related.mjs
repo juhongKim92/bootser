@@ -19,7 +19,7 @@ export const NO = {
   timeout: '17', lockttl: '18', throughput: '19', rebalance: '20', tcpclose: '21',
   aggregate: '22', alignment: '23', fanout: '24', omission: '25', slowstart: '26',
   backlog: '27', nagle: '28', pagesplit: '29', usl: '30',
-  quorum: '31', logdrop: '32', healthfan: '33'
+  quorum: '31', logdrop: '32', healthfan: '33', heapergo: '34'
 };
 
 /* slug → [{ to, ko, en }] */
@@ -34,7 +34,8 @@ export const RELATED = {
     { to: 'lockttl', ko: '그 정지가 분산 락의 TTL 을 넘으면 락을 잃습니다. 본인은 모릅니다.', en: 'When that pause outlasts a distributed lock’s TTL the lock is gone — and the process cannot tell.' },
     { to: 'keepalive', ko: '정지 중에는 하트비트도 못 나갑니다. 살아 있는데 죽은 것으로 처리됩니다.', en: 'During a pause the heartbeat cannot go out either — alive, and treated as dead.' },
     { to: 'connpool', ko: '정지한 시간도 커넥션을 잡고 있는 시간에 들어갑니다.', en: 'Time spent paused still counts as time holding the connection.' },
-    { to: 'healthfan', ko: '그 정지가 헬스체크 두 번에 걸치면 로드밸런서가 인스턴스를 빼 버립니다.', en: 'Let that pause span two health checks and the load balancer takes the instance out.' }
+    { to: 'healthfan', ko: '그 정지가 헬스체크 두 번에 걸치면 로드밸런서가 인스턴스를 빼 버립니다.', en: 'Let that pause span two health checks and the load balancer takes the instance out.' },
+    { to: 'heapergo', ko: '그 힙이 애초에 얼마로 정해지는가 — 컨테이너 크기에 비례하지 않는 구간이 있습니다.', en: 'How that heap size gets decided in the first place — there is a range where it is not proportional to the container.' }
   ],
   hashring: [
     { to: 'stampede', ko: '노드가 빠져서 캐시가 무너지는 것이 이 페이지라면, 아무도 빠지지 않았는데 무너지는 것이 16번입니다.', en: 'Here a node leaves and the cache collapses; in no. 16 nobody leaves and it collapses anyway.' },
@@ -74,6 +75,7 @@ export const RELATED = {
     { to: 'mvcc', ko: '트랜잭션을 오래 열어두는 또 다른 대가.', en: 'The other price of holding a transaction open.' },
     { to: 'slowstart', ko: '풀이 커넥션을 살려두는 진짜 이득 — 대역폭이 아니라 왕복 계단을 건너뜁니다.', en: 'What keeping a connection alive really buys — not bandwidth but skipping the round-trip staircase.' },
     { to: 'logdrop', ko: '같은 리틀의 법칙이 로그 큐에서도 돕니다 — 큐를 키우면 대기가 그만큼 늘어납니다.', en: 'The same Little’s law runs in the log queue — grow it and the wait grows with it.' },
+    { to: 'heapergo', ko: '커넥션마다 스레드가 붙고 스레드마다 스택이 붙습니다 — 힙 밖이 그렇게 자랍니다.', en: 'Each connection brings a thread and each thread a stack — that is how off-heap grows.' },
     { to: 'usl', ko: '작은 풀이 더 빠른 그 최적점을 식으로 계산해 봅니다.', en: 'Computing the optimum behind “a smaller pool is faster”.' }
   ],
   jobclaim: [
@@ -180,7 +182,8 @@ export const RELATED = {
     { to: 'connpool', ko: '큐와 풀에서 기다린 시간이 응답시간에서 사라지는 자리.', en: 'Where time spent waiting in the queue and the pool drops out of the latency number.' },
     { to: 'backlog', ko: '측정이 시작되기 전의 시간 — 서버의 시계는 accept() 부터 돕니다.', en: 'The time before the measurement starts — the server’s clock begins at accept().' },
     { to: 'usl', ko: '정점을 넘긴 상태를 폐루프로 재면 아예 안 보일 수 있습니다.', en: 'Measure a past-the-peak system with a closed loop and you may not see it at all.' },
-    { to: 'logdrop', ko: '측정이 아니라 증거 쪽이 사라지는 경우 — 로그가 조용히 버려집니다.', en: 'When it is the evidence that goes missing rather than the measurement — logs, dropped silently.' }
+    { to: 'logdrop', ko: '측정이 아니라 증거 쪽이 사라지는 경우 — 로그가 조용히 버려집니다.', en: 'When it is the evidence that goes missing rather than the measurement — logs, dropped silently.' },
+    { to: 'heapergo', ko: 'OOMKilled 은 힙 덤프도 스택도 안 남깁니다 — 없다는 것이 유일한 증거입니다.', en: 'OOMKilled leaves no heap dump and no stack — the absence is the only evidence.' }
   ],
   slowstart: [
     { to: 'throughput', ko: '정상 상태로 넘어가면 이번엔 손실률이 처리량을 정합니다 — 거기도 대역폭은 식에 없습니다.', en: 'Once the steady state arrives, loss rate sets the throughput — and bandwidth is not in that formula either.' },
@@ -207,6 +210,12 @@ export const RELATED = {
     { to: 'connpool', ko: '같은 곡선을 커넥션 풀 크기로 — 리틀의 법칙이 세 번째로 나옵니다.', en: 'The same curve as pool size — Little’s law for the third time.' },
     { to: 'omission', ko: '정점을 넘겼는지 재려면 측정이 먼저 정직해야 합니다.', en: 'To measure whether you are past the peak, the measurement has to be honest first.' },
     { to: 'backpressure', ko: '정점 위에서 들어오는 요청을 어떻게 할 것인가.', en: 'What to do with the requests that arrive past the peak.' }
+  ],
+  heapergo: [
+    { to: 'gc', ko: '힙 크기가 정해진 다음의 이야기 — 그 안에서 무슨 일이 벌어지나.', en: 'What happens after the heap size is fixed — what goes on inside it.' },
+    { to: 'healthfan', ko: 'OOMKilled 로 파드가 빠지면 로드밸런서가 그것을 언제 알아차리나.', en: 'When a pod goes OOMKilled, how long until the load balancer notices?' },
+    { to: 'usl', ko: '스레드마다 스택이 붙는다 — 힙 밖이 늘어나는 가장 흔한 이유다.', en: 'Every thread brings a stack — the commonest reason off-heap grows.' },
+    { to: 'omission', ko: '힙 덤프가 없다는 것 자체가 신호다 — 측정에 안 잡히는 것이 가장 나쁘다.', en: 'The absence of a heap dump is itself the signal — what the measurement misses is the worst of it.' }
   ],
   healthfan: [
     { to: 'raft', ko: '같은 저울의 반대쪽 — 죽었다고 판단하는 데 걸리는 시간은 선거 타임아웃이 정합니다.', en: 'The other side of the same dial — how long it takes to decide a node is dead is set by the election timeout.' },

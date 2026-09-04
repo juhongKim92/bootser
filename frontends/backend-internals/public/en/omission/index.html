@@ -281,6 +281,7 @@ for (long missingValue = value - expectedIntervalBetweenValueSamples;
       <li><a href="/en/backlog/"><span class="no">27</span><span><span class="t">The kernel drops connections and the application log stays clean</span><span class="why">The time before the measurement starts — the server’s clock begins at accept().</span></span></a></li>
       <li><a href="/en/usl/"><span class="no">30</span><span><span class="t">Adding threads made it slower</span><span class="why">Measure a past-the-peak system with a closed loop and you may not see it at all.</span></span></a></li>
       <li><a href="/en/logdrop/"><span class="no">32</span><span><span class="t">You added AsyncAppender and the logs went missing</span><span class="why">When it is the evidence that goes missing rather than the measurement — logs, dropped silently.</span></span></a></li>
+      <li><a href="/en/heapergo/"><span class="no">34</span><span><span class="t">You doubled the container memory and the heap did not move</span><span class="why">OOMKilled leaves no heap dump and no stack — the absence is the only evidence.</span></span></a></li>
     </ul>
   </nav>
   <!-- onward:end -->

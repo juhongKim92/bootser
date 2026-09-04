@@ -308,6 +308,7 @@ LIMIT 20;</code></pre>
       <li><a href="/en/mvcc/"><span class="no">01</span><span><span class="t">Why your table never shrinks after DELETE</span><span class="why">The other price of holding a transaction open.</span></span></a></li>
       <li><a href="/en/slowstart/"><span class="no">26</span><span><span class="t">One byte bigger and it costs another round trip</span><span class="why">What keeping a connection alive really buys — not bandwidth but skipping the round-trip staircase.</span></span></a></li>
       <li><a href="/en/logdrop/"><span class="no">32</span><span><span class="t">You added AsyncAppender and the logs went missing</span><span class="why">The same Little’s law runs in the log queue — grow it and the wait grows with it.</span></span></a></li>
+      <li><a href="/en/heapergo/"><span class="no">34</span><span><span class="t">You doubled the container memory and the heap did not move</span><span class="why">Each connection brings a thread and each thread a stack — that is how off-heap grows.</span></span></a></li>
       <li><a href="/en/usl/"><span class="no">30</span><span><span class="t">Adding threads made it slower</span><span class="why">Computing the optimum behind “a smaller pool is faster”.</span></span></a></li>
     </ul>
   </nav>
