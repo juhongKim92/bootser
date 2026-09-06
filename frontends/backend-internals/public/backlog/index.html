@@ -278,7 +278,9 @@
 
 <script>
 window.LAB_I18N = {
-  uSec:'초', uPerSec:'/초', uCount:'개', uNone:'없음', uNever:'안 참',
+  /* \u002F 는 슬래시다. 슬래시로 시작하는 문자열을 소스에 그대로 두면
+     구글봇이 루트 상대 주소로 보고 크롤해 404 를 만든다. 런타임 값은 그대로다. */
+  uSec:'초', uPerSec:'\u002F초', uCount:'개', uNone:'없음', uNever:'안 참',
   hint:'도착 $1/초 · accept $2/초 · backlog $3 · $4초 동안 — 큐가 차기까지 $5',
   hintNever:'도착 $1/초 · accept $2/초 · backlog $3 · $4초 동안 — 받는 속도가 더 빨라서 큐가 안 찬다',
   zFill:'큐가 차는 중 $1', zOver:'넘치는 중 $1',

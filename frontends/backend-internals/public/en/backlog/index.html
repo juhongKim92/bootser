@@ -278,7 +278,9 @@ Client <em>ETIMEDOUT after 127s</em></div>
 
 <script>
 window.LAB_I18N = {
-  uSec:'s', uPerSec:'/s', uCount:' slots', uNone:'none', uNever:'never',
+  /* \u002F 는 슬래시다. 슬래시로 시작하는 문자열을 소스에 그대로 두면
+     구글봇이 루트 상대 주소로 보고 크롤해 404 를 만든다. 런타임 값은 그대로다. */
+  uSec:'s', uPerSec:'\u002Fs', uCount:' slots', uNone:'none', uNever:'never',
   hint:'arriving $1/s · accept $2/s · backlog $3 · for $4s — queue fills in $5',
   hintNever:'arriving $1/s · accept $2/s · backlog $3 · for $4s — intake is faster, so the queue never fills',
   zFill:'filling $1', zOver:'overflowing $1',

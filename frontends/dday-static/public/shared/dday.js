@@ -25,7 +25,9 @@
        두 언어가 같은 파일을 쓰기 때문이다 — 한쪽만 고쳐지는 일이 없다.
 
        dir 은 링크를 만들 때 붙는 언어 칸이다. gen-pages.mjs 의 L.*.dir 과
-       반드시 같아야 한다 — 경로 규칙을 바꿀 때 여기도 같이 고칠 것. */
+       반드시 같아야 한다 — 경로 규칙을 바꿀 때 여기도 같이 고칠 것.
+
+       맨 앞 / 는 \u002F 로 적는다 — 이유는 tools/check-pages.mjs 에 있다. */
     var LANG = (document.documentElement.getAttribute('lang') === 'en') ? 'en' : 'ko';
 
     var STR = {
@@ -118,7 +120,7 @@
             dtTerm: 'Next term', dtNew: 'Next new moon',
             dtFull: 'Next full moon', dtShower: 'Next shower',
             skyFail: 'Could not load the sky data.',
-            dir: '/en'
+            dir: '\u002Fen'
         }
     };
     var T = STR[LANG];
@@ -166,7 +168,7 @@
        그려진 국기가 HTML 에 박힌 것과 같은 모양인지 본다. */
     function flag(cc) {
         if (!/^[A-Z]{2}$/.test(cc)) return '';
-        return '<img class="flag" src="/flags/' + cc.toLowerCase() + '.svg"' +
+        return '<img class="flag" src="\u002Fflags/' + cc.toLowerCase() + '.svg"' +
             ' width="20" height="15" alt="" loading="lazy" decoding="async">';
     }
 
@@ -180,7 +182,7 @@
                 : kind === 'shower' ? 'meteor-' + (e.z >= 100 ? 5 : e.z >= 25 ? 3 : 2)
                     : '';
         if (!name) return '';
-        return '<img class="sky-icon" src="/sky-icons/' + name + '.svg"' +
+        return '<img class="sky-icon" src="\u002Fsky-icons/' + name + '.svg"' +
             ' width="16" height="16" alt="" loading="lazy" decoding="async">';
     }
 
@@ -679,7 +681,7 @@
         countries().then(function (all) {
             var cc = detect(all.map(function (c) { return c.code; }));
             if (!cc) return;                          /* 카드는 hidden 인 채로 둔다 */
-            return fetch('/data/' + cc + '.json').then(function (r) {
+            return fetch('\u002Fdata/' + cc + '.json').then(function (r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json();
             }).then(function (data) { renderHomeCard(home, data); });
@@ -746,7 +748,7 @@
 
         Promise.all([
             countries(),
-            fetch('/data/month/' + month + '.json').then(function (r) {
+            fetch('\u002Fdata/month/' + month + '.json').then(function (r) {
                 if (r.status === 404) return null;        /* 자료 범위 밖의 달 */
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json();

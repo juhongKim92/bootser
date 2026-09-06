@@ -15,8 +15,8 @@
    ============================================================ */
 import { boot, scan, pages, PUB } from './lab-harness.mjs';
 import { RELATED, NO } from './related.mjs';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { join, sep } from 'node:path';
 
 const fail = [], warn = [];
 const bad = (p, m) => fail.push(`${p}: ${m}`);
@@ -267,6 +267,51 @@ for (const page of ['', 'en']) {
         if (w !== h) throw new Error(`viewBox 가 정사각이 아니다 — ${w}x${h}`);
     });
     if (fail.length === before) console.log('파비콘 — ico(48 포함) · svg · png 192 · apple-touch 192');
+}
+
+/* 유령 주소 — 구글봇은 JS 소스를 실행만 하는 게 아니라 훑어서, 주소처럼 생긴
+   문자열을 꺼내 실제로 받아 간다. 화면에 쓸 값이나 조각 접두사를 슬래시로 시작하는
+   리터럴로 두면 그게 통째로 크롤 대상이 된다. 실제로 GSC 에 이렇게 쌓였다 —
+   backend-internals 는 단위 접미사가 404 로(세 건), dday-static 은 언어 칸이
+   307 리디렉션으로.
+
+   그래서 스크립트 안의 슬래시로 시작하는 리터럴은 전부 여기서 풀어 본다.
+   진짜 자산을 가리키면 통과, 아니면 실패다. 통과시킬 수 없는 값이라면 소스에서
+   맨 앞 슬래시를 \u002F 로 적으면 된다 — 런타임 값은 같고 이 검사에도 안 걸린다. */
+{
+    const GHOST = /['"`]\/[A-Za-z0-9가-힣][^'"`\s]{0,40}['"`]/g;
+    const INLINE = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+    const before = fail.length;
+    let seen = 0;
+
+    const sweep = (label, code) => {
+        for (const hit of code.matchAll(GHOST)) {
+            const url = hit[0].slice(1, -1);
+            seen++;
+            const target = join(PUB, url);
+            if (existsSync(target) && !statSync(target).isDirectory()) continue;   // 진짜 자산
+            const why = existsSync(join(target, 'index.html'))
+                ? '슬래시가 빠져 307 로 튕긴다'
+                : '404 다';
+            bad(label, `스크립트의 주소꼴 리터럴 ${hit[0]} — 구글봇이 이걸 크롤하는데 ${why}`);
+        }
+    };
+
+    const walk = (dir) => {
+        for (const name of readdirSync(dir)) {
+            const p = join(dir, name);
+            if (statSync(p).isDirectory()) { walk(p); continue; }
+            if (p.endsWith('.js')) { sweep(p.slice(PUB.length + 1).split(sep).join('/'), readFileSync(p, 'utf8')); continue; }
+            if (!p.endsWith('.html')) continue;
+            for (const m of readFileSync(p, 'utf8').matchAll(INLINE)) {
+                if (/application\/ld\+json/.test(m[0])) continue;      // JSON-LD 는 따로 본다
+                sweep(p.slice(PUB.length + 1).split(sep).join('/'), m[1]);
+            }
+        }
+    };
+    walk(PUB);
+
+    if (fail.length === before) console.log(`유령 주소 — 스크립트의 주소꼴 리터럴 ${seen}개 전부 실제 자산`);
 }
 
 console.log('');

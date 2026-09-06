@@ -358,7 +358,9 @@ void submit(Task task) throws InterruptedException {
 <script>
 window.LAB_I18N = {
   pause:'일시정지', resume:'다시 시작',
-  uPs:'/s', uThr:'개', uTask:'건', uSec:'초', noLimit:'없음',
+  /* \u002F 는 슬래시다. 슬래시로 시작하는 문자열을 소스에 그대로 두면
+     구글봇이 루트 상대 주소로 보고 크롤해 404 를 만든다. 런타임 값은 그대로다. */
+  uPs:'\u002Fs', uThr:'개', uTask:'건', uSec:'초', noLimit:'없음',
   p_abort:'유계 + Abort', p_callerRuns:'유계 + CallerRuns', p_unbounded:'무제한',
   qNow:'대기 $1건', qMax:'상한 $1', qOomAt:'OOM 임계 $1건 · 힙 $2MB',
   wCaller:'생산자 스레드가 직접 처리 중',

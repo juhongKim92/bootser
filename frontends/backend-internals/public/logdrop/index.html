@@ -299,7 +299,9 @@
 
 <script>
 window.LAB_I18N = {
-  uMs:'ms', uPerSec:'/초', uKPerSec:'천/초', uEv:'건', uUs:'μs', uPct:'%',
+  /* \u002F 는 슬래시다. 슬래시로 시작하는 문자열을 소스에 그대로 두면
+     구글봇이 루트 상대 주소로 보고 크롤해 404 를 만든다. 런타임 값은 그대로다. */
+  uMs:'ms', uPerSec:'\u002F초', uKPerSec:'천/초', uEv:'건', uUs:'μs', uPct:'%',
   hint:'도착 $1 · 소비 $2 · 큐 $3건 · 버림 문턱 $4건 · WARN·ERROR $5%',
   bClean:'큐가 자라지 않는다', bFill:'차오르는 중',
   bDiscAt:'$1 — INFO 버림 시작', bDisc:'INFO 를 버린다',
