@@ -2130,15 +2130,29 @@ for (const [page, lang, langs, wantCc] of [
             if (drawn.includes(smell)) bad(label, `요약 카드에 "${smell}" 가 있다`);
         }
         const wantName = lang === 'en' ? 'United States' : '대한민국';
-        for (const need of ['class="asof"', 'class="verdict"', wantName,
+        for (const need of ['class="asof"', wantName,
                             `${dir}/${wantCc.toLowerCase()}/`]) {
             if (!drawn.includes(need)) bad(label, `요약 카드에 빠짐: ${need}`);
+        }
+
+        /* 판정 칸은 쉬는 날이면 class 가 'verdict rest' 로 늘어난다. 그래서
+           'class="verdict"' 를 문자열로 찾으면 공휴일 당일에만 터진다 —
+           실제로 미국 노동절에 /en/ 이 터졌다. 어느 쪽이어야 하는지까지 본다.
+           rest 는 dday.js 의 verdictOf 와 같은 규칙이다: 오늘이 있고, 그게
+           전부 local(일부 지역만 쉼)은 아닐 때. */
+        const src = JSON.parse(readFileSync(join(DATA, `${wantCc}.json`), 'utf8'));
+        const todays = src.days.filter((x) => x.d === TODAY);
+        const wantRest = todays.length > 0 && !todays.every((x) => x.local);
+        const wantClass = `class="verdict${wantRest ? ' rest' : ''}"`;
+        if (!drawn.includes(wantClass)) {
+            const got = (drawn.match(/class="verdict[^"]*"/) || ['없음'])[0];
+            bad(label, `요약 카드의 판정 칸이 ${got} — ${wantClass} 여야 한다`
+                     + ` (${TODAY} 의 ${wantCc} 공휴일 ${todays.length}건)`);
         }
         if (!/D[-+]\d+/.test(drawn)) bad(label, '요약 카드에 D-day 숫자가 없다');
 
         /* 다음·지난 공휴일의 이름과 다른 언어 이름까지. 국가 페이지 카드와 같은
            내용을 그려야 하는데, 예전에 첫 화면만 조용히 빠뜨린 적이 있다. */
-        const src = JSON.parse(readFileSync(join(DATA, `${wantCc}.json`), 'utf8'));
         const got2 = expectRef(src.days.map((d) => d.d), TODAY);
         for (const e of [got2.next, got2.prev]) {
             if (!e) continue;
