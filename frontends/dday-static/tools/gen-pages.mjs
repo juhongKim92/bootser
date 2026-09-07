@@ -115,7 +115,7 @@ const L = {
         pickerLabel: '국가 선택',
         /* 머리말의 축 탭. 자리가 좁으므로 짧게 — 긴 이름은 좁은 화면에서 밀린다. */
         axes: { country: '국가', rank: '순위', weekday: '분포', name: '공휴일 이름', sky: '하늘' },
-        globeHint: '지구본을 돌려 나라를 고릅니다',
+        globeHint: '지구본을 돌려 나라를 고릅니다 · 휠로 확대, 두 번 눌러 처음으로',
         title: (c, y) => `${y}년 ${c.ko} 공휴일 — 날짜와 D-day`,
         /* 뒷문장이 204개 페이지에서 똑같으면 구글이 무시하고 본문에서 스니펫을
            자체 생성한다 — CTR 통제권을 잃는다. 나라마다 실제로 다른 사실을 넣는다. */
@@ -411,7 +411,7 @@ const L = {
         noCountry: 'No country matches.',
         pickerLabel: 'Country',
         axes: { country: 'Countries', rank: 'Rankings', weekday: 'By weekday', name: 'By name', sky: 'The sky' },
-        globeHint: 'Spin the globe to pick a country',
+        globeHint: 'Spin to pick a country · scroll to zoom, double-click to reset',
         title: (c, y) => `${c.name} Public Holidays ${y}`,
         /* fit 을 사슬로 건다 — 국가명이 44자인 곳(SH)이 있어서 한 벌로 쓰면 넘친다.
            덜 중요한 절이 먼저 빠지고, 나라가 하나 늘어도 다시 재지 않아도 된다. */

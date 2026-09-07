@@ -62,19 +62,27 @@
     }
 
     /**
-     * 화면 좌표 (sx, sy) 에서 가장 가까운 앞면 점의 자리번호. 없으면 -1.
-     * pts 는 [code, lon, lat] 배열, 좌표는 원 중심 기준 픽셀, grab 은 잡히는 반지름.
+     * 화면 좌표 (sx, sy) 의 grab 안에 드는 **앞면** 점 전부를 가까운 순으로.
+     * pts 는 [code, lon, lat] 배열, 좌표는 원 중심 기준 픽셀이다.
+     * r 은 확대가 반영된 반지름이다 — 확대는 이 값만 키우는 것이 전부다.
      */
-    function pick(sx, sy, pts, l0, p0, r, grab) {
-        var best = -1, bd = grab * grab;
+    function tied(sx, sy, pts, l0, p0, r, grab) {
+        var out = [], lim = grab * grab;
         for (var i = 0; i < pts.length; i++) {
             var v = project(pts[i][1], pts[i][2], l0, p0);
             if (v.z <= 0) continue;
             var dx = v.x * r - sx, dy = -v.y * r - sy;
             var d = dx * dx + dy * dy;
-            if (d < bd) { bd = d; best = i; }
+            if (d <= lim) out.push([i, d]);
         }
-        return best;
+        out.sort(function (a, b) { return a[1] - b[1]; });
+        return out.map(function (e) { return e[0]; });
+    }
+
+    /** 가장 가까운 앞면 점의 자리번호. 없으면 -1. */
+    function pick(sx, sy, pts, l0, p0, r, grab) {
+        var all = tied(sx, sy, pts, l0, p0, r, grab);
+        return all.length ? all[0] : -1;
     }
 
     /* 회전하려고 끌었는데 손을 떼는 순간 점이 눌린 것으로 판정되는 일이 있었다.
@@ -91,9 +99,21 @@
         return moved <= SLOP && from >= 0 && upAt === from;
     }
 
+    /* 확대 범위. ×1 에서 소앤틸리스 18개국이 한 번에 겹치는데 ×8 이면 4개로
+       줄고 그 뒤로는 평평해진다(AI·BL·MF·SX 는 서로 30km 안이라 어떤 배율로도
+       갈라지지 않는다). 그래서 8 에서 멈춘다 — 더 키워도 얻는 것이 없고 해안선만
+       거칠어진다. */
+    var MAX_ZOOM = 8;
+
+    /** 휠 한 번을 배율로. 범위를 벗어나지 않게 자른다. */
+    function rezoom(zoom, deltaY) {
+        var next = zoom * Math.exp(-deltaY * 0.0015);
+        return Math.max(1, Math.min(MAX_ZOOM, next));
+    }
+
     window.GLOBE = {
-        project: project, unproject: unproject, pick: pick,
-        clickable: clickable, SLOP: SLOP
+        project: project, unproject: unproject, pick: pick, tied: tied,
+        clickable: clickable, SLOP: SLOP, rezoom: rezoom, MAX_ZOOM: MAX_ZOOM
     };
 
     /* --------------------------------------------------------------- 화면 */
@@ -127,7 +147,11 @@
     var ctx = cv.getContext('2d');
     var pts = null, land = null, l0 = 127, p0 = 18, r = 0, cx = 0, cy = 0;
     var hot = -1, held = false, spinning = true, last = 0;
-    var moved = 0, downAt = -1;
+    var moved = 0, downAt = -1, zoom = 1;
+
+    /* 확대는 반지름만 키운다. 원판(구멍)은 r 로 그대로 두고 안쪽만 커지므로
+       배율을 올리면 창문 크기는 같은 채 내용이 확대된다. */
+    function R() { return r * zoom; }
 
     var root = document.documentElement;
     function ink(name) {
@@ -151,7 +175,7 @@
         for (var t = step[0]; t <= step[1]; t += step[2]) {
             var v = make(t);
             if (v.z <= 0) { on = false; continue; }
-            var X = cx + v.x * r, Y = cy - v.y * r;
+            var X = cx + v.x * R(), Y = cy - v.y * R();
             if (on) ctx.lineTo(X, Y); else { ctx.moveTo(X, Y); on = true; }
         }
         ctx.stroke();
@@ -164,7 +188,7 @@
         for (var i = 0; i < flat.length; i += 2) {
             var v = project(flat[i], flat[i + 1], l0, p0);
             if (v.z <= 0) { on = false; continue; }
-            var X = cx + v.x * r, Y = cy - v.y * r;
+            var X = cx + v.x * R(), Y = cy - v.y * R();
             if (on) ctx.lineTo(X, Y); else { ctx.moveTo(X, Y); on = true; }
         }
         ctx.stroke();
@@ -185,25 +209,27 @@
         ctx.strokeStyle = ink('--rule');
         ctx.lineWidth = 1;
         ctx.globalAlpha = 0.5;
-        var k;
-        for (k = -180; k < 180; k += 30) {
-            arc([-90, 90, 3], (function (m) {
+        /* 확대하면 30도 격자가 화면 밖으로 다 나간다. 간격과 걸음을 같이 줄인다. */
+        var gap = zoom >= 4 ? 10 : 30, step = zoom >= 4 ? 1 : 3, k;
+        for (k = -180; k < 180; k += gap) {
+            arc([-90, 90, step], (function (m) {
                 return function (t) { return project(m, t, l0, p0); };
             })(k));
         }
-        for (k = -60; k <= 60; k += 30) {
-            arc([-180, 180, 3], (function (m) {
+        for (k = -80; k <= 80; k += gap) {
+            arc([-180, 180, step], (function (m) {
                 return function (t) { return project(t, m, l0, p0); };
             })(k));
         }
         ctx.globalAlpha = 1;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.stroke();
     }
 
     function draw() {
         ctx.clearRect(0, 0, cv.width, cv.height);
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.clip();
         graticule();
         coast();
         if (!pts) return;
@@ -213,13 +239,20 @@
             if (v.z <= 0) continue;
             var big = i === hot;
             ctx.beginPath();
-            ctx.arc(cx + v.x * r, cy - v.y * r, big ? DOT + 2 : DOT, 0, Math.PI * 2);
+            ctx.arc(cx + v.x * R(), cy - v.y * R(), big ? DOT + 2 : DOT, 0, Math.PI * 2);
             ctx.fillStyle = big ? lit : dim;
             /* 지평선 가까이를 연하게 한다 — 구로 보이게 하는 것은 이 한 줄이다 */
             ctx.globalAlpha = big ? 1 : 0.35 + 0.65 * v.z;
             ctx.fill();
         }
         ctx.globalAlpha = 1;
+        ctx.restore();
+        /* 창틀은 자르기 밖에서 긋는다 — 안에서 그으면 확대할 때 같이 커진다 */
+        ctx.strokeStyle = ink('--rule');
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
     }
 
     function frame(t) {
@@ -249,7 +282,7 @@
         spinning = false;
         moved = 0;
         var p = at(e);
-        downAt = pts ? pick(p[0], p[1], pts, l0, p0, r, GRAB) : -1;
+        downAt = pts ? pick(p[0], p[1], pts, l0, p0, R(), GRAB) : -1;
         if (cv.setPointerCapture) cv.setPointerCapture(e.pointerId);
     });
 
@@ -259,21 +292,34 @@
         downAt = -1;
         if (!pts) return;
         var p = at(e);
-        if (!clickable(moved, from, pick(p[0], p[1], pts, l0, p0, r, GRAB))) return;
+        if (!clickable(moved, from, pick(p[0], p[1], pts, l0, p0, R(), GRAB))) return;
         if (meta[pts[from][0]]) location.href = meta[pts[from][0]].href;
     });
 
     cv.addEventListener('pointermove', function (e) {
         if (held) {
             moved += Math.abs(e.movementX) + Math.abs(e.movementY);
-            l0 = (l0 - e.movementX * 0.4 + 540) % 360 - 180;
-            p0 = Math.max(-85, Math.min(85, p0 + e.movementY * 0.4));
+            /* 확대하면 같은 픽셀이 더 좁은 각도에 해당한다. 나누지 않으면
+               ×8 에서 손을 조금만 움직여도 지구가 달아난다. */
+            var deg = 0.4 / zoom;
+            l0 = (l0 - e.movementX * deg + 540) % 360 - 180;
+            p0 = Math.max(-85, Math.min(85, p0 + e.movementY * deg));
             say(-1);
             return;
         }
         var p = at(e);
-        say(pts ? pick(p[0], p[1], pts, l0, p0, r, GRAB) : -1);
+        say(pts ? pick(p[0], p[1], pts, l0, p0, R(), GRAB) : -1);
     });
+
+    cv.addEventListener('wheel', function (e) {
+        e.preventDefault();
+        spinning = false;
+        zoom = rezoom(zoom, e.deltaY);
+        say(-1);
+    }, { passive: false });
+
+    /* 되돌리기. 확대해 놓고 길을 잃으면 여기가 유일한 출구다. */
+    cv.addEventListener('dblclick', function () { zoom = 1; say(-1); });
 
     cv.addEventListener('pointerleave', function () { say(-1); });
     window.addEventListener('resize', size);

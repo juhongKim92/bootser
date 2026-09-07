@@ -2858,7 +2858,7 @@ for (const [file, lang, needle] of [
           window.GLOBE 는 그 게이트 **앞에서** 붙으므로 여기서 잡힌다.
           붙지 않는다면 globe.js 가 게이트 뒤로 밀린 것이고, 그러면 하니스가
           계산을 영원히 못 본다 — 그것부터 실패로 잡는다. */
-    let round = 0, landInfo = '윤곽 없음';
+    let round = 0, landInfo = '윤곽 없음', zoomInfo = '확대 없음';
     const G = boot('').win.GLOBE;
     if (!G || !G.project || !G.unproject || !G.pick) {
         bad(L, 'window.GLOBE 가 없다 — 계산이 화면 게이트 뒤로 밀렸다');
@@ -2963,7 +2963,7 @@ for (const [file, lang, needle] of [
 
         /* 두 자료 대조. 점과 윤곽이 같은 좌표계에 있지 않으면 이 수가 무너진다.
            섬나라·소국은 110m 육지에 표현되지 않아 바다로 떨어지는 것이 맞다. */
-        const ON_LAND = 142;
+        const ON_LAND = 147;
         const got = globe.p.filter(([, lon, lat]) => onLand(lon, lat)).length;
         if (got !== ON_LAND) {
             bad('data/globe.json', `나라 점 중 육지에 떨어지는 것이 ${got}개 — ${ON_LAND}개여야 한다`
@@ -2994,10 +2994,60 @@ for (const [file, lang, needle] of [
         }
     }
 
+
+    /* 8. 확대. 배율은 반지름만 키우므로 project 는 손댈 것이 없고, 검사할 것은
+          범위 자르기와 「겹친 점 전부」다. tied 가 pick 의 밑이라 이것이 틀리면
+          집기가 통째로 틀린다. */
+    if (!G || !G.tied || !G.rezoom) bad(L, 'window.GLOBE 에 tied · rezoom 이 없다');
+    else {
+        const MX = G.MAX_ZOOM;
+        if (!(MX >= 4 && MX <= 20)) bad(L, `MAX_ZOOM 이 ${MX} — 4~20 사이여야 한다`);
+
+        /* 범위를 벗어나지 않는다. 위로 새면 해안선이 거칠어지고 아래로 새면
+           지구본이 창보다 작아져 빈 테가 생긴다. */
+        if (G.rezoom(1, 500) !== 1) bad(L, '×1 에서 더 줄였는데 1 아래로 내려간다');
+        if (G.rezoom(MX, -5000) !== MX) bad(L, `최대 배율에서 더 키웠는데 ${MX} 를 넘는다`);
+        if (!(G.rezoom(1, -100) > 1)) bad(L, '휠을 올렸는데 배율이 안 커진다');
+        if (!(G.rezoom(4, 100) < 4)) bad(L, '휠을 내렸는데 배율이 안 작아진다');
+
+        /* tied — 겹친 점을 가까운 순으로 다 준다. 카리브의 뭉침이 이 검사의
+           까닭이다: ×1 에서 소앤틸리스가 한 자리에 18개까지 겹친다. */
+        const l0 = -61.5, p0 = 15.5;               /* 소앤틸리스 가운데 */
+        const r0 = 120, grab = 11;
+        const at1 = G.tied(0, 0, globe.p, l0, p0, r0, grab);
+        if (at1.length < 8) {
+            bad(L, `×1 에서 카리브 한가운데에 ${at1.length}개만 겹친다 — 여러 개가 겹쳐야 확대가 뜻을 갖는다`);
+        }
+        /* 배율을 올리면 겹치는 수가 줄어든다. 늘어나면 부호가 뒤집힌 것이다. */
+        const at8 = G.tied(0, 0, globe.p, l0, p0, r0 * MX, grab);
+        if (!(at8.length < at1.length)) {
+            bad(L, `확대했는데 겹치는 수가 ${at1.length} → ${at8.length} 로 줄지 않는다`);
+        }
+        /* 가까운 순이어야 한다 — pick 이 이 첫 칸을 그대로 쓴다 */
+        let prev = -1, ordered = true;
+        for (const i of at1) {
+            const v = G.project(globe.p[i][1], globe.p[i][2], l0, p0);
+            const d = Math.hypot(v.x * r0, v.y * r0);
+            if (d < prev - 1e-9) ordered = false;
+            prev = d;
+        }
+        if (!ordered) bad(L, 'tied 가 가까운 순이 아니다 — pick 이 엉뚱한 점을 고른다');
+        /* tied 의 첫 칸과 pick 이 같아야 한다. 둘이 갈라지면 집기와 그리기가 어긋난다. */
+        if (at1.length && G.pick(0, 0, globe.p, l0, p0, r0, grab) !== at1[0]) {
+            bad(L, 'pick 이 tied 의 첫 칸과 다르다');
+        }
+        /* 뒷면은 배율과 무관하게 안 잡힌다 */
+        if (G.tied(0, 0, globe.p, l0 + 180, -p0, r0 * MX, grab).some((i) => {
+            return G.project(globe.p[i][1], globe.p[i][2], l0 + 180, -p0).z <= 0;
+        })) bad(L, 'tied 가 뒷면 점을 잡는다');
+
+        zoomInfo = `확대 ×1~×${MX} · 카리브 겹침 ${at1.length}→${at8.length}`;
+    }
+
     if (fail.length === before) {
         console.log(`지구본 — 점 ${globe.p.length}개 · 문턱 ${inJs}px 양쪽 일치`
             + ` · 왕복 ${round}개 · project·unproject·pick·clickable 통과`
-            + ` · ${landInfo}`);
+            + ` · ${landInfo} · ${zoomInfo}`);
     }
 }
 
