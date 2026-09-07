@@ -800,18 +800,20 @@ for (const { page, lang, slug, kind, label } of ALL) {
     {
         const wantAxis = {
             home: 'country', country: 'country', rank: 'rank',
-            /* 요일 축은 탭을 새로 만들지 않고 '나라끼리 견주기' 축의 둘째 장이다 */
-            weekday: 'rank',
+            weekday: 'weekday',
             holiday: 'name', name: 'name',
             sky: 'sky', 'sky/term': 'sky', 'sky/moon': 'sky', 'sky/meteor': 'sky', 'sky/lunar': 'sky',
             'sky/calendar': 'sky',
         }[kind];
-        const wantHref = { country: `${dir}/`, rank: `${dir}/rank/`, name: `${dir}/holiday/`, sky: `${dir}/sky/` };
+        const wantHref = {
+            country: `${dir}/`, rank: `${dir}/rank/`, weekday: `${dir}/weekday/`,
+            name: `${dir}/holiday/`, sky: `${dir}/sky/`,
+        };
 
         const got = [...html.matchAll(/<a class="tab( here)?" href="([^"]+)"( aria-current="page")?>/g)]
             .map((m) => ({ here: !!m[1], href: m[2], current: !!m[3] }));
 
-        if (got.length !== 4) bad(label, `축 탭이 ${got.length}개다 — 넷이어야 한다`);
+        if (got.length !== 5) bad(label, `축 탭이 ${got.length}개다 — 다섯이어야 한다`);
         for (const [axis, href] of Object.entries(wantHref)) {
             if (!got.some((g) => g.href === href)) bad(label, `축 탭에 ${axis} 링크가 없다: ${href}`);
         }

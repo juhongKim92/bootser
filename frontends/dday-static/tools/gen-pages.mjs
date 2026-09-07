@@ -114,7 +114,7 @@ const L = {
         noCountry: '찾는 국가가 없습니다.',
         pickerLabel: '국가 선택',
         /* 머리말의 축 탭. 자리가 좁으므로 짧게 — 긴 이름은 좁은 화면에서 밀린다. */
-        axes: { country: '국가', rank: '순위', name: '공휴일 이름', sky: '하늘' },
+        axes: { country: '국가', rank: '순위', weekday: '분포', name: '공휴일 이름', sky: '하늘' },
         title: (c, y) => `${y}년 ${c.ko} 공휴일 — 날짜와 D-day`,
         /* 뒷문장이 204개 페이지에서 똑같으면 구글이 무시하고 본문에서 스니펫을
            자체 생성한다 — CTR 통제권을 잃는다. 나라마다 실제로 다른 사실을 넣는다. */
@@ -409,7 +409,7 @@ const L = {
         searchHint: 'Search — name or code',
         noCountry: 'No country matches.',
         pickerLabel: 'Country',
-        axes: { country: 'Countries', rank: 'Rankings', name: 'By name', sky: 'The sky' },
+        axes: { country: 'Countries', rank: 'Rankings', weekday: 'By weekday', name: 'By name', sky: 'The sky' },
         title: (c, y) => `${c.name} Public Holidays ${y}`,
         /* fit 을 사슬로 건다 — 국가명이 44자인 곳(SH)이 있어서 한 벌로 쓰면 넘친다.
            덜 중요한 절이 먼저 빠지고, 나라가 하나 늘어도 다시 재지 않아도 된다. */
@@ -726,7 +726,7 @@ function head(t, { title, desc, slug, card, alt }) {
 
 /* ------------------------------------------------------------------ 축 탭
 
-   축이 넷이 되면서(국가 · 순위 · 이름 · 하늘) 첫 화면에 「다른 축으로 보기」 칸을
+   축이 여럿이 되면서(국가 · 순위 · 분포 · 이름 · 하늘) 첫 화면에 「다른 축으로 보기」 칸을
    두는 것으로는 모자라졌다. 그 칸은 첫 화면에만 있어서, 국가 페이지에서 순위로
    가려면 첫 화면을 거쳐야 했다.
 
@@ -734,9 +734,16 @@ function head(t, { title, desc, slug, card, alt }) {
    달아 두므로 어느 축에 있는지가 화면과 보조기술 양쪽에서 읽힌다.
 
    순서는 자주 쓸 순이다 — 국가가 이 사이트의 본체이고, 순위는 한 장이라 값이 싸고,
-   이름 축은 60장이라 들어가면 오래 머문다. 하늘은 성격이 가장 다르니 끝이다. */
-const AXES = ['country', 'rank', 'name', 'sky'];
-const AXIS_HREF = { country: '/', rank: '/rank/', name: `/${NAME_ROOT}/`, sky: '/sky/' };
+   이름 축은 60장이라 들어가면 오래 머문다. 하늘은 성격이 가장 다르니 끝이다.
+
+   분포(`/weekday/`)는 순위 바로 옆이다. 둘 다 한 장짜리 집계이고 세는 단위가 같다
+   (「공휴일이 있는 날짜」). 2026-09-07 까지는 탭 없이 순위 축의 둘째 장으로 두었는데,
+   순위 페이지 하단의 링크 하나로만 닿을 수 있어서 페이지가 있는 줄도 모르는 상태였다.
+   자료를 하나 더 짓는 것보다 이미 지은 것을 보이게 하는 편이 쌌다. */
+const AXES = ['country', 'rank', 'weekday', 'name', 'sky'];
+const AXIS_HREF = {
+    country: '/', rank: '/rank/', weekday: '/weekday/', name: `/${NAME_ROOT}/`, sky: '/sky/',
+};
 
 function tabs(t, axis) {
     return `    <nav class="tabs">
@@ -1948,7 +1955,7 @@ function weekdayPage(t, wk, main, generated) {
     }) + `
 <body data-list="weekday">
 
-${top(t, { slug, axis: 'rank', label: esc(t.pickerLabel) })}
+${top(t, { slug, axis: 'weekday', label: esc(t.pickerLabel) })}
 
 <main class="wrap">
 
