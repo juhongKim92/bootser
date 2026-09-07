@@ -135,6 +135,7 @@ const L = {
         yearCap: (y, n) => `${y}년 · ${n}일`,
         yearH2: (c, y) => `${y}년 ${c.ko} 공휴일`,
         thDate: '날짜', thName: '공휴일',
+        calHoliday: '공휴일', calWeekend: '주말', calBridge: '징검다리', calPlain: '평일',
         breakCap: (y, n) => `${y}년 · 연휴 ${n}회`,
         breakH2: (c, y) => `${y}년 ${c.ko} 황금연휴`,
         breakNote: '주말과 공휴일이 이어져 사흘 이상 쉬는 구간입니다. 하루만 더 쓰면 이어지는 날은 징검다리로 적었습니다.',
@@ -430,6 +431,7 @@ const L = {
         yearCap: (y, n) => `${y} · ${n} days`,
         yearH2: (c, y) => `${c.name} public holidays in ${y}`,
         thDate: 'Date', thName: 'Holiday',
+        calHoliday: 'Holiday', calWeekend: 'Weekend', calBridge: 'Bridge day', calPlain: 'Workday',
         breakCap: (y, n) => `${y} · ${n} long weekends`,
         breakH2: (c, y) => `${c.name} Long Weekends ${y}`,
         breakNote: 'Stretches of three days or more where weekends and public holidays run together. Days you would have to take off to join them up are marked as bridge days.',
@@ -827,6 +829,86 @@ ${rows}
       </table>`;
 }
 
+
+/* ------------------------------------------------------------ 연간 히트맵
+
+   표에 갇혀 있던 것을 그림 하나로 접는다. 12줄(달) × 31칸(날)이고, 색이 아니라
+   **길이와 덩어리**로 읽힌다 — 2월의 연휴 블록, 9월 추석 덩어리, 3월의 공백이
+   세어 보지 않아도 보인다.
+
+   **표를 대신하지 않는다.** 구글이 색인하는 것은 글자이고, 이 그림은 표 위에
+   얹는 요약이다. 그래서 aria-hidden 을 달고 표를 접근 경로로 남긴다 — 지구본과
+   같은 논리다(닿지 못하는 위젯을 나란히 만들지 않는다).
+
+   칸을 365개 다 그린다. 특수한 칸만 그리고 나머지를 띠로 덮는 방법이 원본
+   16.9KB → 7.1KB 로 줄지만, **gzip 을 지나면 1.2KB 대 0.5KB** 다. 격자가 반복적이라
+   압축이 다 먹는다. 0.7KB 아끼려고 칸 하나하나를 잃을 이유가 없다.
+   페이지가 gzip 4.0KB 였으니 +30% 이고, 인라인이라 요청은 늘지 않는다.
+
+   ⚠ **주말은 나라마다 다르다.** 토·일로 굳혀 그리면 이집트·중동이 조용히 틀린다.
+   아래 요일 축과 같은 weekendOf() 를 쓴다. 이 기능에서 사고가 날 가장 유력한
+   자리이고, check-pages 가 Intl 로 따로 계산해 견준다.
+
+   부류가 겹칠 때의 순서 — 공휴일 > 징검다리 > 주말 > 평일. 주말에 걸린 공휴일은
+   공휴일로 읽는다(날아간 휴일이라도 공휴일인 것은 사실이고, 그 손실은 요일 축이
+   따로 센다). 징검다리는 정의상 평일이라 주말과 겹치지 않는다.
+
+   기하를 svg 의 data-* 로 내보낸다. dday.js 가 오늘 칸을 놓을 때 **같은 값**을
+   써야 하기 때문이다 — 여기서만 알고 있으면 둘이 갈라진다. */
+const CELL = 10, GAP = 1, LABEL_W = 20;
+
+function heatmap(t, data, year) {
+    const weekend = weekendOf(data.code);
+    const Y = String(year);
+
+    const holiday = new Map();
+    for (const d of data.days) if (d.d.startsWith(Y)) holiday.set(d.d, d);
+    const bridge = new Set();
+    /* 날짜로 거른다. 연휴의 시작 연도로 걸러도 화면은 같다 — 이 집합은 표지
+       연도의 날짜에만 물어보므로 다음 해 징검다리(엘살바도르 2026 연휴의
+       2027-01-01)가 섞여도 쓰이지 않는다. 그래도 날짜로 거르는 편이 낫다:
+       집합이 이 표가 보일 수 있는 것만 담게 되고, check-pages 가 기대값을
+       세는 방식과 같아진다(저쪽이 시작 연도로 세다가 걸렸다). */
+    for (const l of data.long) for (const b of (l.b || [])) if (b.startsWith(Y)) bridge.add(b);
+
+    /* 그 달의 날수. 다음 달 0일 = 이 달 마지막 날이다(윤년도 알아서 맞는다). */
+    const daysIn = (m) => new Date(year, m, 0).getDate();
+    const pad = (n) => String(n).padStart(2, '0');
+
+    let cells = '', labels = '';
+    for (let m = 1; m <= 12; m++) {
+        const top = (m - 1) * CELL;
+        labels += `<text x="${LABEL_W - 4}" y="${top + CELL - 2.5}">${m}</text>`;
+        for (let d = 1; d <= daysIn(m); d++) {
+            const iso = `${Y}-${pad(m)}-${pad(d)}`;
+            const day = holiday.get(iso);
+            const dow = new Date(year, m - 1, d).getDay();
+            const cls = day ? 'h' : bridge.has(iso) ? 'b' : weekend.has(dow) ? 'w' : '';
+            /* 제목은 알려줄 것이 있는 칸에만 — 평일·주말에 툴팁은 빈 말이다 */
+            const label = day
+                ? `<title>${m}.${d} ${esc(t.lang === 'en' ? (day.e || day.n) : day.n)}</title>`
+                : (bridge.has(iso) ? `<title>${m}.${d} ${esc(t.calBridge)}</title>` : '');
+            cells += `<rect x="${LABEL_W + (d - 1) * CELL}" y="${top}"`
+                + ` width="${CELL - GAP}" height="${CELL - GAP}"`
+                + `${cls ? ` class="${cls}"` : ''}>${label}</rect>`;
+        }
+    }
+
+    const key = ['h', 'w', 'b', 'p'].map((k, i) =>
+        `<span class="k"><i class="${k}"></i>${esc([t.calHoliday, t.calWeekend, t.calBridge, t.calPlain][i])}</span>`
+    ).join('');
+
+    return `  <figure class="cal">
+    <svg id="cal" viewBox="0 0 ${LABEL_W + 31 * CELL} ${12 * CELL}" role="presentation" aria-hidden="true"
+         data-y="${year}" data-cell="${CELL}" data-gap="${GAP}" data-x0="${LABEL_W}">
+      <g class="mon">${labels}</g>
+${'      '}${cells}
+      <rect id="today" width="${CELL - GAP}" height="${CELL - GAP}" hidden></rect>
+    </svg>
+    <figcaption>${key}</figcaption>
+  </figure>`;
+}
+
 /* ------------------------------------------------------------ 황금연휴 표
 
    공휴일 표와 나란한 모양이지만 행이 날짜 하나가 아니라 구간이라 열이 다르다.
@@ -943,9 +1025,12 @@ function countryPage(t, data) {
     const sections = years.map((y) => {
         const body = table(t, byYear.get(y));
         if (y === main) {
+            /* 히트맵은 표지 연도에만 얹는다. 세 해를 다 그리면 값이 세 배인데
+               「올해 언제 쉬나」는 올해 물음이다. 표 앞에 두어 요약이 먼저 온다. */
             return `  <section>
     <span class="cap">${esc(t.yearCap(y, byYear.get(y).length))}</span>
     <h2>${esc(t.yearH2(data, y))}</h2>
+${heatmap(t, data, y)}
 ${body}
   </section>`;
         }

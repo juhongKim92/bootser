@@ -81,7 +81,19 @@ export function makeEl(tag = 'div', { attrs: init = {}, kids = {} } = {}) {
 /* 같은 셀렉터는 같은 객체를 돌려준다 — 그래야 렌더 결과를 다시 읽을 수 있다.
    #picker 만은 안쪽 구조까지 미리 엮어 둔다. 선택기는 input · ul · .none 을 찾아
    서로 다른 갈림길로 가는데, 아무거나 돌려주면 그 갈림길이 사라진다. */
-function makeDoc(bodyAttrs, { rows, breaks, sky, ids, lang, contacts }) {
+
+/** id 가 붙은 태그마다 그 태그의 속성 전부. 배포 HTML 을 그대로 읽는다. */
+function attrsFrom(html) {
+    const out = new Map();
+    for (const tag of html.matchAll(/<([a-zA-Z][\w-]*)\s([^>]*\bid="[^"]+"[^>]*)>/g)) {
+        const attrs = {};
+        for (const at of tag[2].matchAll(/([a-zA-Z_:][\w:.-]*)="([^"]*)"/g)) attrs[at[1]] = at[2];
+        if (attrs.id && !out.has(attrs.id)) out.set(attrs.id, attrs);
+    }
+    return out;
+}
+
+function makeDoc(bodyAttrs, { rows, breaks, sky, ids, lang, contacts, attrsById }) {
     const cache = new Map();
     const body = makeEl('body', { attrs: bodyAttrs });
     /* <html lang> 은 dday.js 가 말을 고르는 유일한 근거다. 안 옮기면 영어 페이지가
@@ -113,7 +125,8 @@ function makeDoc(bodyAttrs, { rows, breaks, sky, ids, lang, contacts }) {
             if (cache.has(sel)) return cache.get(sel);
             const id = /^#([A-Za-z][\w-]*)$/.exec(sel);
             if (id && !ids.has(id[1])) return null;
-            cache.set(sel, makeEl());
+            const at = id && attrsById ? attrsById.get(id[1]) : null;
+            cache.set(sel, makeEl('div', at ? { attrs: at } : {}));
             return cache.get(sel);
         },
         querySelectorAll(sel) {
@@ -279,6 +292,10 @@ export function boot(page, { languages = ['ko-KR'], storage = {} } = {}) {
         breaks: parseBreaks(html),
         sky: parseSky(html),
         ids: new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1])),
+        /* id 가 붙은 태그의 속성. 스텁이 getAttribute 로 되읽을 수 있어야 한다 —
+           히트맵은 기하를 svg 의 data-* 로 받으므로 이것이 없으면 dday.js 가
+           그 갈림길에서 조용히 돌아선다. */
+        attrsById: attrsFrom(html),
         lang: (html.match(/<html lang="([a-z]{2})">/) || [])[1] || 'ko',
         contacts: parseContacts(html),
     });

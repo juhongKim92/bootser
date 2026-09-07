@@ -278,6 +278,39 @@
         });
     }
 
+    /* ------------------------------------------------------ 히트맵의 오늘 칸
+
+       빌드 타임에 박으면 날이 지나며 거짓말이 된다. 그래서 자리만 비워 두고
+       여기서 놓는다.
+
+       기하는 svg 의 data-* 에서 읽는다 — gen-pages 의 heatmap() 과 같은 값을
+       써야 하고, 여기 숫자를 다시 적으면 둘이 갈라진다. 달 길이도 Date 에게
+       물어 윤년을 따로 다루지 않는다.
+
+       표지 연도가 아닌 해를 보고 있으면(자료 창을 지나 해가 바뀐 뒤) 자리를
+       잡을 곳이 없으므로 감춘 채로 둔다. */
+    function paintCalendar(today) {
+        var svg = $('#cal'), mark = $('#today');
+        if (!svg || !mark) return null;
+
+        var p = parts(today);
+        if (!p) return null;
+        if (p.y !== +svg.getAttribute('data-y')) return null;
+
+        var cell = +svg.getAttribute('data-cell');
+        var gap = +svg.getAttribute('data-gap');
+        var x0 = +svg.getAttribute('data-x0');
+
+        var x = x0 + (p.d - 1) * cell;
+        var y = (p.m - 1) * cell;
+        mark.setAttribute('x', x);
+        mark.setAttribute('y', y);
+        mark.setAttribute('width', cell - gap);
+        mark.setAttribute('height', cell - gap);
+        mark.hidden = false;
+        return { x: x, y: y, d: today };
+    }
+
     function paintTables(today) {
         var rows = $$('tr[data-d]');
         var got = classify(rows.map(function (tr) {
@@ -832,6 +865,7 @@
         if (page) {
             var today = todayIso();
             paintNow(today, paintTables(today), paintBreaks(today));
+            window.DDAY.calendarToday = paintCalendar(today);
         }
         initSky();
         initList();
@@ -845,7 +879,8 @@
         lang: LANG, t: T,
         epochDay: epochDay, todayIso: todayIso, human: human, shortHuman: shortHuman,
         flag: flag, skyIcon: skyIcon, classify: classify, classifyBreaks: classifyBreaks,
-        verdictOf: verdictOf, detect: detect, searchKey: searchKey
+        verdictOf: verdictOf, detect: detect, searchKey: searchKey,
+        paintCalendar: paintCalendar
     };
 
     /* 하늘 페이지가 첫 화면·국가 페이지와 다른 갈래라는 사실을 검사기가 알아야 한다 */

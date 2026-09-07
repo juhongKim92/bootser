@@ -408,3 +408,53 @@ details.year[open] > summary::before{content:'▾ '}
 @media (min-width:1700px){
   .globe{width:300px}
 }
+
+/* ------------------------------------------------------------------ 히트맵
+
+   12줄(달) × 31칸(날). 색이 아니라 덩어리로 읽히는 것이 목적이라 색은 넷뿐이고,
+   서로 밝기 차이가 뚜렷해야 한다 — 다크 모드에서도 그렇게 되도록 기존 변수만 쓴다.
+
+   지구본과 달리 좁은 화면에서도 보인다. 긴 표를 한 그림으로 접는 것이라 작은
+   화면에서 값이 더 크다. viewBox 로 그리므로 폭에 맞춰 줄어들고, 375px 에서
+   칸이 약 11px 이다.
+
+   징검다리는 색을 하나 더 쓰지 않고 점선 테두리로 둔다. 「공휴일은 아닌데 쉴 수
+   있는 날」이 색이 아니라 결로 읽히는 편이 맞고, 색을 넷째로 늘리면 나머지 셋의
+   구별이 흐려진다. */
+.cal{margin:0 0 22px}
+.cal svg{display:block;width:100%;height:auto;overflow:visible}
+
+/* 평일이 바탕이다. 부류가 있는 칸만 아래에서 덮는다 — 마크업이 그만큼 짧아진다. */
+.cal rect{fill:var(--paper-2)}
+.cal rect.w{fill:var(--rule)}
+.cal rect.h{fill:var(--ink-2)}
+.cal rect.b{fill:var(--paper-2);stroke:var(--ink-3);stroke-width:.9;stroke-dasharray:2 1.6}
+
+/* 오늘. dday.js 가 자리를 잡아 hidden 을 푼다 — 빌드 타임에 박으면 날이 지나며
+   거짓말이 된다. 칸을 덮지 않고 테두리만 둘러 아래 부류가 그대로 읽힌다. */
+.cal rect#today{fill:none;stroke:var(--today);stroke-width:1.6}
+
+.cal .mon text{
+  fill:var(--ink-3);font-size:5.5px;text-anchor:end;
+  font-family:var(--sans);
+}
+
+.cal figcaption{
+  display:flex;flex-wrap:wrap;gap:4px 14px;
+  margin-top:10px;font-size:12px;color:var(--ink-3);
+}
+.cal figcaption .k{display:inline-flex;align-items:center;gap:5px}
+.cal figcaption i{
+  width:10px;height:10px;flex:0 0 auto;border-radius:1px;
+  background:var(--paper-2);
+}
+.cal figcaption i.w{background:var(--rule)}
+.cal figcaption i.h{background:var(--ink-2)}
+.cal figcaption i.b{
+  background:var(--paper-2);
+  box-shadow:inset 0 0 0 1px var(--ink-3);
+}
+
+@media (max-width:400px){
+  .cal figcaption{font-size:11px;gap:3px 10px}
+}

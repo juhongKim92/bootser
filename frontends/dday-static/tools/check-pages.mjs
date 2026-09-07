@@ -3051,6 +3051,167 @@ for (const [file, lang, needle] of [
     }
 }
 
+/* 히트맵 — 같은 페이지의 표와 어긋나면 실패
+
+   이 그림의 검산점은 **같은 페이지의 표**다. 두 벌이 같은 자료로 만들어지는데
+   서로 다른 말을 하는 일이 이 저장소에서 실제로 있었다(순위 페이지가 건수로,
+   국가 페이지가 날짜 수로 세던 것). 그래서 SVG 의 칸과 표의 줄을 따로 파싱해
+   **양방향으로** 견준다.
+
+   기대값은 여기서 **다시 계산한다** — gen-pages 의 heatmap() 이나 weekendOf() 를
+   가져오지 않는다. 가져오면 둘이 같이 틀릴 수 있고, 그건 아무것도 검사하지 않는
+   것과 같다. 주말은 Intl 에 직접 묻는다(ISO 1=월…7=일 → % 7 로 0=일…6=토).
+
+   ⚠ 주말이 나라마다 다른 것이 이 기능에서 사고가 날 가장 유력한 자리다.
+   토·일로 굳혀 그리면 이집트·중동 8개국이 조용히 틀린다. */
+{
+    const before = fail.length;
+    const CELL = 10, X0 = 20;
+    const RECT = /<rect x="(\d+)" y="(\d+)" width="9" height="9"(?: class="([hwb])")?>(?:<title>([^<]*)<\/title>)?<\/rect>/g;
+
+    /* 그 나라 주말. Intl 에 직접 묻는다 — 생성기의 함수를 쓰지 않는다. */
+    const weekendOf = (cc) => {
+        try {
+            const w = new Intl.Locale(`und-${cc}`).getWeekInfo();
+            if (w && Array.isArray(w.weekend) && w.weekend.length) {
+                return new Set(w.weekend.map((d) => d % 7));
+            }
+        } catch { /* 못 주는 런타임 */ }
+        return new Set([0, 6]);
+    };
+
+    const year = MID;
+    const yearDays = (Y) => {
+        let n = 0;
+        for (let m = 1; m <= 12; m++) n += new Date(Y, m, 0).getDate();
+        return n;
+    };
+    const want = yearDays(year);
+
+    /* 히트맵이 국가 페이지에만 있어야 한다 */
+    for (const { page, label, kind } of ALL) {
+        const has = readFileSync(join(PUB, page, 'index.html'), 'utf8').includes('<svg id="cal"');
+        if (kind === 'country' && !has) bad(label, '히트맵이 없다');
+        if (kind !== 'country' && has) bad(label, `국가 페이지가 아닌데 히트맵이 있다 (${kind})`);
+    }
+
+    let pages = 0, cells = 0;
+    for (const { page, label, slug, lang } of COUNTRY) {
+        const cc = slug.replace('/', '').toUpperCase();
+        const html = readFileSync(join(PUB, page, 'index.html'), 'utf8');
+        const src = JSON.parse(readFileSync(join(DATA, `${cc}.json`), 'utf8'));
+
+        /* 기대값 — 자료에서 곧바로 */
+        const holiday = new Map();
+        for (const d of src.days) if (d.d.startsWith(String(year))) holiday.set(d.d, d);
+        const bridge = new Set();
+        for (const l of src.long) {
+            /* 연휴의 시작 연도가 아니라 날짜로 거른다 — 연말 연휴가 다음 해에
+               징검다리를 두는 경우가 있다(엘살바도르 2027-01-01). */
+            for (const b of (l.b || [])) if (b.startsWith(String(year))) bridge.add(b);
+        }
+        const weekend = weekendOf(cc);
+
+        /* 그려진 것 */
+        const drawn = new Map();                       /* iso → { cls, title } */
+        let dup = 0;
+        for (const m of html.matchAll(RECT)) {
+            const x = +m[1], y = +m[2];
+            const mm = y / CELL + 1, dd = (x - X0) / CELL + 1;
+            if (!Number.isInteger(mm) || !Number.isInteger(dd) || mm < 1 || mm > 12) {
+                bad(label, `히트맵 칸이 격자를 벗어났다 x=${x} y=${y}`);
+                break;
+            }
+            const iso = `${year}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+            if (drawn.has(iso)) dup++;
+            drawn.set(iso, { cls: m[3] || '', title: m[4] || '' });
+        }
+        if (dup) bad(label, `히트맵에 같은 날짜 칸이 ${dup}개 겹쳐 있다`);
+
+        if (drawn.size !== want) {
+            bad(label, `히트맵 칸이 ${drawn.size}개 — ${year}년은 ${want}일이다`);
+            continue;
+        }
+
+        /* 달마다 그 달의 날수만큼. 2월에 31칸을 그리는 실수가 여기서 걸린다. */
+        for (let m = 1; m <= 12; m++) {
+            const n = [...drawn.keys()].filter((k) => +k.slice(5, 7) === m).length;
+            const dim = new Date(year, m, 0).getDate();
+            if (n !== dim) { bad(label, `히트맵 ${m}월이 ${n}칸 — ${dim}칸이어야 한다`); break; }
+        }
+
+        /* 부류를 양방향으로 견준다 */
+        const drawnAs = (c) => new Set([...drawn].filter(([, v]) => v.cls === c).map(([k]) => k));
+        const eq = (a, b, what) => {
+            const only = [...a].filter((k) => !b.has(k));
+            const miss = [...b].filter((k) => !a.has(k));
+            if (only.length) bad(label, `히트맵의 ${what} 칸인데 자료엔 없다: ${only.slice(0, 3).join(' ')}`);
+            if (miss.length) bad(label, `자료의 ${what}인데 칸이 아니다: ${miss.slice(0, 3).join(' ')}`);
+        };
+        eq(drawnAs('h'), new Set(holiday.keys()), '공휴일');
+        eq(drawnAs('b'), bridge, '징검다리');
+
+        /* 주말 — 공휴일·징검다리가 아니면서 그 나라 주말인 날 전부 */
+        const wantW = new Set();
+        for (const iso of drawn.keys()) {
+            if (holiday.has(iso) || bridge.has(iso)) continue;
+            const [, mm, dd] = iso.split('-').map(Number);
+            if (weekend.has(new Date(year, mm - 1, dd).getDay())) wantW.add(iso);
+        }
+        eq(drawnAs('w'), wantW, '주말');
+
+        /* 제목은 표의 이름과 같아야 한다 — 그림과 표가 다른 이름을 말하면 안 된다 */
+        /* 제목은 esc() 를 거친 값이다. 기대값도 같게 감싸지 않으면 이름에
+           & 나 " 가 든 나라가 전부 걸린다(TR·NZ·PH·VI). 감싸는 규칙은
+           여기 다시 적는다 — 생성기의 esc 를 가져오면 둘이 같이 틀릴 수 있다. */
+        const esc2 = (v) => String(v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        for (const [iso, day] of holiday) {
+            const name = esc2(lang === 'en' ? (day.e || day.n) : day.n);
+            const got = drawn.get(iso).title;
+            if (!got.includes(name)) {
+                bad(label, `히트맵 제목이 표와 다르다 ${iso} — "${got}" (기대 "${name}" 포함)`);
+                break;
+            }
+        }
+
+        pages++;
+        cells += drawn.size;
+    }
+
+    /* 오늘 칸. paintCalendar 가 날짜를 받으므로 두 갈림길을 다 때린다. */
+    {
+        const r = boot('kr');
+        const D = r.win.DDAY;
+        if (!D || !D.paintCalendar) bad('shared/dday.js', 'window.DDAY.paintCalendar 가 없다');
+        else {
+            /* 표지 연도 안 — 자리를 잡아야 한다. 기대값은 여기서 따로 센다. */
+            const iso = `${year}-09-07`;
+            const got = D.paintCalendar(iso);
+            const wantX = 20 + (7 - 1) * CELL, wantY = (9 - 1) * CELL;
+            if (!got) bad('shared/dday.js', `${iso} 인데 오늘 칸을 놓지 않았다`);
+            else if (got.x !== wantX || got.y !== wantY) {
+                bad('shared/dday.js', `오늘 칸이 (${got.x}, ${got.y}) — (${wantX}, ${wantY}) 여야 한다`);
+            }
+            /* 다른 해 — 놓을 곳이 없으므로 감춘 채로 둔다 */
+            if (D.paintCalendar(`${year + 3}-03-05`) !== null) {
+                bad('shared/dday.js', '표지 연도가 아닌 날짜인데 오늘 칸을 놓았다');
+            }
+            /* 첫 화면·하늘처럼 히트맵이 없는 페이지에서는 null 이어야 한다 */
+            const home = boot('').win.DDAY;
+            if (home.paintCalendar(iso) !== null) {
+                bad('shared/dday.js', '히트맵이 없는 페이지인데 오늘 칸을 놓았다');
+            }
+        }
+    }
+
+    if (fail.length === before) {
+        console.log(`히트맵 — ${pages}개 페이지 · 칸 ${cells}개 (${year}년 ${want}일)`
+            + ' · 공휴일·징검다리·주말 양방향 대조 · 오늘 칸');
+    }
+}
+
 /* ------------------------------------------------------------------ 결과 */
 console.log('');
 for (const w of warn) console.warn('  주의:', w);
