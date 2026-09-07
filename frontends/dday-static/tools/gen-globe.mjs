@@ -8,7 +8,8 @@
    왜 폴리곤이 아닌가. 이 사이트가 담은 204개국에는 소국이 많다. 110m 국경으로
    나라를 칠하면 몰타·싱가포르·나우루·바베이도스가 1px 이하가 되어 클릭이 안 된다.
    러시아는 쉽고 몰타는 못 고르는 지구본은 「나라 고르기」를 절반만 하는 것이다.
-   점으로 두면 204개가 전부 동등하게 잡힌다. 배포 크기도 250KB 대 1.6KB(gzip)다.
+   점으로 두면 204개가 전부 동등하게 잡힌다. 국경 폴리곤이면 gzip 250KB 인데
+   점은 1.7KB 다(대륙 윤곽 6.5KB 를 더해도 8.5KB).
    덤으로 **분쟁 국경을 그리지 않는다** — 폴리곤을 배포하지 않으니 애초에 그 문제가
    생기지 않는다.
 
@@ -43,6 +44,7 @@ const LAYERS = {
     tiny50:       'ne_50m_admin_0_tiny_countries.geojson',
     units50:      'ne_50m_admin_0_map_units.geojson',
     check50:      'ne_50m_admin_0_countries.geojson',      /* 검산 전용 — 배포 안 함 */
+    land110:      'ne_110m_land.geojson',                  /* 대륙 윤곽 */
 };
 
 /* A2 코드가 여러 필드에 흩어져 있다. ISO_A2 가 '-99' 인 feature 가 있어서
@@ -138,13 +140,101 @@ const LABEL_AT_SEA = {
 
 const EXCEPT = { ...NO_POLYGON, ...LABEL_AT_SEA };
 
+
+/* ------------------------------------------------------------------ 대륙 윤곽
+
+   점만으로는 어느 대륙인지 알기 어렵다. 그래서 해안선을 배경에 깐다.
+   칠하지 않고 선으로만 긋는다 — 채우려면 링을 지평선에서 잘라 테두리를 따라
+   이어 붙여야 하고, 그 이음이 어긋나면 대륙이 엉뚱한 모양으로 번진다.
+   격자와 같은 방식(뒷면에서 끊고 다시 시작)이면 그 위험이 아예 없다.
+
+   단순화 문턱 0.5° — 240px 지구본은 180° 를 240px 로 그리므로 1px 이 0.75° 다.
+   0.5° 는 부화소라 눈에 보이지 않는다. 잰 값(Douglas–Peucker + 소수 첫째 자리):
+     원본        링 128 · 꼭짓점 5,143
+     0.5°        링 103 · 꼭짓점 1,634 · 17.5KB · gzip 6.5KB
+   더 줄일 수도 있지만(1.0° 면 gzip 4KB) 1px 넘게 어긋나기 시작한다.
+
+   검산점 둘 —
+   1. **손으로 적은 육지·바다 검문 11개.** 서울은 육지, 남태평양은 바다처럼
+      뻔한 지점을 박아 두고 단순화된 링으로 점-다각형 판정을 한다. 링이 깨지거나
+      위경도가 맞바뀌면 여기서 걸린다. 자료를 받아 적는 검사가 아니라 자료가
+      말하는 내용을 검사하는 것이다.
+   2. **나라 점과의 대조 142/204.** 이미 검증한 점 자료를 이 링에 대 본다.
+      섬나라·소국 62개는 110m 육지에 표현되지 않아 바다로 떨어지는 것이 맞다.
+      그 수를 박아 두면 두 자료가 같은 좌표계에 있다는 것이 검사된다 —
+      한쪽이 어긋나면 142 가 무너진다.
+   ------------------------------------------------------------------ */
+
+const LAND_TOL = 0.5;
+
+/** Douglas–Peucker. 링 하나를 문턱보다 가는 굽이를 버리고 줄인다. */
+function thin(ring, tol) {
+    if (ring.length < 3) return ring;
+    const keep = new Array(ring.length).fill(false);
+    keep[0] = keep[ring.length - 1] = true;
+    const stack = [[0, ring.length - 1]];
+    while (stack.length) {
+        const [a, b] = stack.pop();
+        if (b - a < 2) continue;
+        const [x1, y1] = ring[a], [x2, y2] = ring[b];
+        const dx = x2 - x1, dy = y2 - y1, L = dx * dx + dy * dy;
+        let far = -1, fd = 0;
+        for (let i = a + 1; i < b; i++) {
+            const [x, y] = ring[i];
+            const t = L ? Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / L)) : 0;
+            const d = Math.hypot(x - (x1 + t * dx), y - (y1 + t * dy));
+            if (d > fd) { fd = d; far = i; }
+        }
+        if (fd > tol) { keep[far] = true; stack.push([a, far], [far, b]); }
+    }
+    return ring.filter((_, i) => keep[i]);
+}
+
+/** 육지 링을 줄여 [lon, lat, lon, lat, ...] 로 펴 담는다. 링마다 한 배열이다. */
+function coast(g) {
+    const rings = [];
+    for (const f of g.features) {
+        const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+        for (const poly of polys) {
+            for (const ring of poly) {
+                const s = thin(ring, LAND_TOL)
+                    .map((q) => [Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10]);
+                /* 자리를 줄이면 이웃 꼭짓점이 같은 값이 된다 — 걷어 낸다 */
+                const u = s.filter((q, i) => i === 0 || q[0] !== s[i - 1][0] || q[1] !== s[i - 1][1]);
+                if (u.length >= 4) rings.push(u);
+            }
+        }
+    }
+    return rings;
+}
+
+const inLand = (rings, lon, lat) => rings.some((r) => inRing(r, lon, lat));
+
+/* 뻔한 지점만 고른다. 해안 가까이를 박으면 단순화 문턱을 바꿀 때마다 흔들린다. */
+const PROBES = [
+    ['서울', 127.0, 37.6, true],
+    ['사하라', 10, 25, true],
+    ['아마존', -60, -5, true],
+    ['시베리아', 100, 65, true],
+    ['오스트레일리아 가운데', 134, -25, true],
+    ['그린란드 안쪽', -42, 72, true],
+    ['남극 대륙', 0, -85, true],
+    ['남태평양', -140, -30, false],
+    ['대서양 가운데', -30, 0, false],
+    ['인도양', 80, -30, false],
+    ['북극점 부근', 0, 89, false],
+];
+
+/** 나라 점 204개 중 몇 개가 단순화된 육지 위에 떨어지나. 이 수가 대조점이다. */
+const ON_LAND = 142;
+
 /* ------------------------------------------------------------------ 본체 */
 
 const mine = JSON.parse(readFileSync(join(DATA, 'countries.json'), 'utf8'));
 console.log(`나라 ${mine.length}개 · Natural Earth 를 받는다`);
 
-const [c110, tiny, units, check] = await Promise.all(
-    ['countries110', 'tiny50', 'units50', 'check50'].map(layer));
+const [c110, tiny, units, check, landGeo] = await Promise.all(
+    ['countries110', 'tiny50', 'units50', 'check50', 'land110'].map(layer));
 
 /* 겹치는 순서가 뜻을 갖는다 — 110m 라벨 점이 가장 낫고, 없으면 소국 레이어,
    그래도 없으면 50m 맵유닛이다. 뒤엣것이 앞엣것을 덮지 않는다. */
@@ -188,6 +278,26 @@ console.log(`검산 — 제 나라 폴리곤 안 ${inPoly}개 · 명단에 적�
     + ` (폴리곤 없음 ${Object.keys(NO_POLYGON).length} · 라벨이 바다 ${Object.keys(LABEL_AT_SEA).length})`);
 
 const die = [];
+
+/* 대륙 윤곽 — 줄이고 검산한다 */
+const land = coast(landGeo);
+const landPts = land.reduce((n, r) => n + r.length, 0);
+
+for (const [name, lon, lat, want] of PROBES) {
+    if (inLand(land, lon, lat) !== want) {
+        die.push(`육지 검문이 틀렸다 — ${name} [${lon}, ${lat}] 이 ${want ? '바다' : '육지'}로 나온다`);
+    }
+}
+
+const onLand = out.filter(([, lon, lat]) => inLand(land, lon, lat)).length;
+if (onLand !== ON_LAND) {
+    die.push(`나라 점 중 육지에 떨어지는 것이 ${onLand}개 — ${ON_LAND}개여야 한다`
+        + `\n      점 자료와 육지 자료가 같은 좌표계에 있는지를 이 수로 본다.`
+        + ` 단순화 문턱(${LAND_TOL}°)을 바꿨다면 ON_LAND 도 같이 고칠 것`);
+}
+
+console.log(`대륙 윤곽 — 링 ${land.length}개 · 꼭짓점 ${landPts}개`
+    + ` · 육지 검문 ${PROBES.length}개 통과 · 나라 점 ${onLand}/${out.length}개가 육지`);
 if (missing.length) die.push(`점이 없는 나라 ${missing.length}개 — ${missing.join(' ')}`);
 if (outOfRange.length) die.push(`좌표가 범위를 벗어남 — ${outOfRange.join(' · ')}`);
 if (escaped.length) {
@@ -207,6 +317,6 @@ if (die.length) {
 /* 코드순으로 굳혀 둔다 — countries.json 의 순서가 바뀌어도 이 파일은 안 바뀐다. */
 out.sort((a, b) => (a[0] < b[0] ? -1 : 1));
 const file = join(DATA, 'globe.json');
-writeFileSync(file, JSON.stringify({ g: today(), p: out }) + '\n');
+writeFileSync(file, JSON.stringify({ g: today(), p: out, l: land.map((r) => r.flat()) }) + String.fromCharCode(10));
 const bytes = readFileSync(file).length;
 console.log(`globe.json — ${bytes}B (gzip 약 ${Math.round(bytes / 2.3)}B)`);

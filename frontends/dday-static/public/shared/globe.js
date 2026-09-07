@@ -77,7 +77,24 @@
         return best;
     }
 
-    window.GLOBE = { project: project, unproject: unproject, pick: pick };
+    /* 회전하려고 끌었는데 손을 떼는 순간 점이 눌린 것으로 판정되는 일이 있었다.
+       끌린 거리가 SLOP 을 넘으면 회전으로 본다. 거리만으로는 모자라다 —
+       빈 자리를 누르고 점 위에서 놓아도 눌린 것이 되므로, 누른 곳과 놓은 곳이
+       **같은 점**인 것까지 본다. */
+    var SLOP = 6;
+
+    /**
+     * 놓은 자리를 「눌렀다」로 볼지. moved 는 누른 뒤 끌린 거리(픽셀),
+     * from 은 누를 때 잡힌 자리번호, upAt 은 놓을 때 잡힌 자리번호다.
+     */
+    function clickable(moved, from, upAt) {
+        return moved <= SLOP && from >= 0 && upAt === from;
+    }
+
+    window.GLOBE = {
+        project: project, unproject: unproject, pick: pick,
+        clickable: clickable, SLOP: SLOP
+    };
 
     /* --------------------------------------------------------------- 화면 */
 
@@ -108,8 +125,9 @@
     );
 
     var ctx = cv.getContext('2d');
-    var pts = null, l0 = 127, p0 = 18, r = 0, cx = 0, cy = 0;
+    var pts = null, land = null, l0 = 127, p0 = 18, r = 0, cx = 0, cy = 0;
     var hot = -1, held = false, spinning = true, last = 0;
+    var moved = 0, downAt = -1;
 
     var root = document.documentElement;
     function ink(name) {
@@ -139,10 +157,34 @@
         ctx.stroke();
     }
 
+    /** 링 하나(펴 담은 [lon, lat, ...])를 앞면 토막만 이어 그린다. */
+    function ring(flat) {
+        ctx.beginPath();
+        var on = false;
+        for (var i = 0; i < flat.length; i += 2) {
+            var v = project(flat[i], flat[i + 1], l0, p0);
+            if (v.z <= 0) { on = false; continue; }
+            var X = cx + v.x * r, Y = cy - v.y * r;
+            if (on) ctx.lineTo(X, Y); else { ctx.moveTo(X, Y); on = true; }
+        }
+        ctx.stroke();
+    }
+
+    /** 대륙 윤곽. 칠하지 않는다 — 까닭은 tools/gen-globe.mjs 에 적었다. */
+    function coast() {
+        if (!land) return;
+        ctx.strokeStyle = ink('--ink-3');
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.45;
+        for (var i = 0; i < land.length; i++) ring(land[i]);
+        ctx.globalAlpha = 1;
+    }
+
     /** 위선·경선 격자. 30도마다 한 줄이다. */
     function graticule() {
         ctx.strokeStyle = ink('--rule');
         ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.5;
         var k;
         for (k = -180; k < 180; k += 30) {
             arc([-90, 90, 3], (function (m) {
@@ -154,6 +196,7 @@
                 return function (t) { return project(t, m, l0, p0); };
             })(k));
         }
+        ctx.globalAlpha = 1;
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.stroke();
@@ -162,6 +205,7 @@
     function draw() {
         ctx.clearRect(0, 0, cv.width, cv.height);
         graticule();
+        coast();
         if (!pts) return;
         var dim = ink('--ink-3'), lit = ink('--ink');
         for (var i = 0; i < pts.length; i++) {
@@ -203,18 +247,25 @@
     cv.addEventListener('pointerdown', function (e) {
         held = true;
         spinning = false;
+        moved = 0;
+        var p = at(e);
+        downAt = pts ? pick(p[0], p[1], pts, l0, p0, r, GRAB) : -1;
         if (cv.setPointerCapture) cv.setPointerCapture(e.pointerId);
     });
 
     cv.addEventListener('pointerup', function (e) {
         held = false;
+        var from = downAt;
+        downAt = -1;
         if (!pts) return;
-        var p = at(e), i = pick(p[0], p[1], pts, l0, p0, r, GRAB);
-        if (i >= 0 && meta[pts[i][0]]) location.href = meta[pts[i][0]].href;
+        var p = at(e);
+        if (!clickable(moved, from, pick(p[0], p[1], pts, l0, p0, r, GRAB))) return;
+        if (meta[pts[from][0]]) location.href = meta[pts[from][0]].href;
     });
 
     cv.addEventListener('pointermove', function (e) {
         if (held) {
+            moved += Math.abs(e.movementX) + Math.abs(e.movementY);
             l0 = (l0 - e.movementX * 0.4 + 540) % 360 - 180;
             p0 = Math.max(-85, Math.min(85, p0 + e.movementY * 0.4));
             say(-1);
@@ -234,9 +285,9 @@
         return res.ok ? res.json() : null;
     }).then(function (d) {
         /* 목록에 없는 나라는 버린다 — 눌러도 갈 곳이 없다 */
-        if (d && d.p) {
-            pts = d.p.filter(function (p) { return meta[p[0]]; });
-        }
+        if (!d) return;
+        if (d.p) pts = d.p.filter(function (p) { return meta[p[0]]; });
+        if (d.l) land = d.l;
     }).catch(function () {
         /* 지구본은 덤이다. 못 받으면 격자만 돈다. */
     });

@@ -2858,7 +2858,7 @@ for (const [file, lang, needle] of [
           window.GLOBE 는 그 게이트 **앞에서** 붙으므로 여기서 잡힌다.
           붙지 않는다면 globe.js 가 게이트 뒤로 밀린 것이고, 그러면 하니스가
           계산을 영원히 못 본다 — 그것부터 실패로 잡는다. */
-    let round = 0;
+    let round = 0, landInfo = '윤곽 없음';
     const G = boot('').win.GLOBE;
     if (!G || !G.project || !G.unproject || !G.pick) {
         bad(L, 'window.GLOBE 가 없다 — 계산이 화면 게이트 뒤로 밀렸다');
@@ -2916,9 +2916,88 @@ for (const [file, lang, needle] of [
         }
     }
 
+
+    /* 6. 대륙 윤곽. 점-다각형 판정을 **여기서 다시 쓴다** — gen-globe 의 함수를
+          가져오면 둘이 같이 틀릴 수 있다. 검문 지점도 저쪽과 따로 적는다. */
+    if (!Array.isArray(globe.l) || !globe.l.length) {
+        bad('data/globe.json', '대륙 윤곽(l)이 없다 — node tools/gen-globe.mjs');
+    } else {
+        let vertices = 0;
+        for (const flat of globe.l) {
+            if (flat.length % 2) { bad('data/globe.json', `윤곽 링의 수가 짝이 아니다 (${flat.length})`); break; }
+            if (flat.length < 8) { bad('data/globe.json', `윤곽 링이 ${flat.length / 2}점 — 4점 이상이어야 한다`); break; }
+            for (let i = 0; i < flat.length; i += 2) {
+                if (!(Math.abs(flat[i]) <= 180 && Math.abs(flat[i + 1]) <= 90)) {
+                    bad('data/globe.json', `윤곽 좌표가 범위를 벗어남 [${flat[i]}, ${flat[i + 1]}]`);
+                    i = flat.length;
+                }
+            }
+            vertices += flat.length / 2;
+        }
+
+        const hit = (flat, lon, lat) => {
+            let on = false;
+            const n = flat.length / 2;
+            for (let i = 0, j = n - 1; i < n; j = i++) {
+                const xi = flat[i * 2], yi = flat[i * 2 + 1];
+                const xj = flat[j * 2], yj = flat[j * 2 + 1];
+                if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) on = !on;
+            }
+            return on;
+        };
+        const onLand = (lon, lat) => globe.l.some((f) => hit(f, lon, lat));
+
+        /* 뻔한 지점만 고른다. 해안 가까이를 박으면 단순화 문턱을 바꿀 때마다 흔들린다. */
+        const PROBE = [
+            ['광주', 126.9, 35.2, true], ['리비아 사막', 20, 26, true],
+            ['콩고 분지', 22, -2, true], ['카자흐 초원', 68, 48, true],
+            ['브라질 내륙', -55, -12, true], ['남극', 30, -80, true],
+            ['북대서양', -40, 45, false], ['벵골만', 88, 15, false],
+            ['북태평양', 180, 40, false], ['남대서양', -20, -40, false],
+        ];
+        for (const [name, lon, lat, want] of PROBE) {
+            if (onLand(lon, lat) !== want) {
+                bad('data/globe.json', `육지 검문이 틀렸다 — ${name} [${lon}, ${lat}] 이 ${want ? '바다' : '육지'}로 나온다`);
+            }
+        }
+
+        /* 두 자료 대조. 점과 윤곽이 같은 좌표계에 있지 않으면 이 수가 무너진다.
+           섬나라·소국은 110m 육지에 표현되지 않아 바다로 떨어지는 것이 맞다. */
+        const ON_LAND = 142;
+        const got = globe.p.filter(([, lon, lat]) => onLand(lon, lat)).length;
+        if (got !== ON_LAND) {
+            bad('data/globe.json', `나라 점 중 육지에 떨어지는 것이 ${got}개 — ${ON_LAND}개여야 한다`
+                + ' (gen-globe 의 ON_LAND 와 같은 값이다. 단순화 문턱을 바꿨다면 둘 다 고칠 것)');
+        }
+        landInfo = `윤곽 링 ${globe.l.length}개 · 꼭짓점 ${vertices}개 · 육지 검문 ${PROBE.length}개 · 대조 ${got}/${globe.p.length}`;
+    }
+
+    /* 7. 끌기와 누르기 가르기. 포인터 이벤트는 하니스가 못 만들지만 판정은
+          순수 함수라 직접 때린다 — 회전하려고 끌었는데 점이 눌리던 버릇을
+          고친 자리이고, 되돌아오면 여기서 걸린다. */
+    if (!G || !G.clickable) bad(L, 'window.GLOBE.clickable 이 없다 — 끌기·누르기 판정이 순수 함수가 아니다');
+    else {
+        const S = G.SLOP;
+        const cases = [
+            [[0, 5, 5], true, '가만히 눌렀다 놓으면 눌린 것이다'],
+            [[S, 5, 5], true, '문턱까지는 눌린 것이다'],
+            [[S + 1, 5, 5], false, '문턱을 넘게 끌었으면 회전이다'],
+            [[40, 5, 5], false, '많이 끌었으면 회전이다'],
+            [[0, -1, 5], false, '빈 자리를 눌렀으면 아무것도 아니다'],
+            [[0, 5, 7], false, '다른 점에서 놓았으면 아무것도 아니다'],
+            [[0, 5, -1], false, '빈 자리에서 놓았으면 아무것도 아니다'],
+        ];
+        for (const [args, want, why] of cases) {
+            if (G.clickable(args[0], args[1], args[2]) !== want) {
+                bad(L, `clickable(${args.join(', ')}) 가 ${!want} — ${why}`);
+            }
+        }
+    }
+
     if (fail.length === before) {
         console.log(`지구본 — 점 ${globe.p.length}개 · 문턱 ${inJs}px 양쪽 일치`
-            + ` · 왕복 ${round}개 · project·unproject·pick 통과`);
+            + ` · 왕복 ${round}개 · project·unproject·pick·clickable 통과`
+            + ` · ${landInfo}`);
     }
 }
 
