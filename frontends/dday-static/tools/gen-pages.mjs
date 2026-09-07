@@ -115,6 +115,7 @@ const L = {
         pickerLabel: '국가 선택',
         /* 머리말의 축 탭. 자리가 좁으므로 짧게 — 긴 이름은 좁은 화면에서 밀린다. */
         axes: { country: '국가', rank: '순위', weekday: '분포', name: '공휴일 이름', sky: '하늘' },
+        globeHint: '지구본을 돌려 나라를 고릅니다',
         title: (c, y) => `${y}년 ${c.ko} 공휴일 — 날짜와 D-day`,
         /* 뒷문장이 204개 페이지에서 똑같으면 구글이 무시하고 본문에서 스니펫을
            자체 생성한다 — CTR 통제권을 잃는다. 나라마다 실제로 다른 사실을 넣는다. */
@@ -410,6 +411,7 @@ const L = {
         noCountry: 'No country matches.',
         pickerLabel: 'Country',
         axes: { country: 'Countries', rank: 'Rankings', weekday: 'By weekday', name: 'By name', sky: 'The sky' },
+        globeHint: 'Spin the globe to pick a country',
         title: (c, y) => `${c.name} Public Holidays ${y}`,
         /* fit 을 사슬로 건다 — 국가명이 44자인 곳(SH)이 있어서 한 벌로 쓰면 넘친다.
            덜 중요한 절이 먼저 빠지고, 나라가 하나 늘어도 다시 재지 않아도 된다. */
@@ -2122,6 +2124,12 @@ ${top(t, { slug: '', home: true, axis: 'country', label: esc(t.pickerLabel) })}
   <h1>${esc(t.homeH1)}</h1>
   <p class="lede">${esc(t.homeLede)}</p>
 
+  <aside class="globe" id="globe" aria-hidden="true">
+    <canvas width="240" height="240"></canvas>
+    <p class="globe-name"></p>
+    <p class="globe-hint">${esc(t.globeHint)}</p>
+  </aside>
+
   <div class="now" id="home" hidden></div>
 
   <section id="today">
@@ -2152,6 +2160,7 @@ ${foot(t, generated)}
 </main>
 
 <script src="/shared/dday.js"></script>
+<script src="/shared/globe.js"></script>
 <script src="/shared/contact.js"></script>
 </body>
 </html>
@@ -2204,7 +2213,7 @@ function notFoundPage(t) {
 /* ------------------------------------------------------------------ 실행 */
 
 const index = JSON.parse(readFileSync(join(DATA, 'countries.json'), 'utf8'));
-const SPECIAL = new Set(['countries.json', 'sky.json']);
+const SPECIAL = new Set(['countries.json', 'sky.json', 'globe.json']);
 const files = readdirSync(DATA).filter((f) => f.endsWith('.json') && !SPECIAL.has(f));
 
 if (index.some((c) => c.code === 'EN')) {

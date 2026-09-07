@@ -57,6 +57,12 @@
   <h1>오늘은 무슨 날인가</h1>
   <p class="lede">공휴일과 황금연휴, 절기와 삭망까지. 오늘이 어떤 날인지, 다음까지 며칠 남았는지 봅니다.</p>
 
+  <aside class="globe" id="globe" aria-hidden="true">
+    <canvas width="240" height="240"></canvas>
+    <p class="globe-name"></p>
+    <p class="globe-hint">지구본을 돌려 나라를 고릅니다</p>
+  </aside>
+
   <div class="now" id="home" hidden></div>
 
   <section id="today">
@@ -294,6 +300,7 @@
 </main>
 
 <script src="/shared/dday.js"></script>
+<script src="/shared/globe.js"></script>
 <script src="/shared/contact.js"></script>
 </body>
 </html>

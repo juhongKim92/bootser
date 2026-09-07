@@ -401,9 +401,9 @@ if (!existsSync(SKY_FILE)) {
 }
 const SKY = JSON.parse(readFileSync(SKY_FILE, 'utf8'));
 
-/* data/ 안의 국가 파일만 고른다. countries.json 은 목록이고 sky.json 은 국가 축이
+/* data/ 안의 국가 파일만 고른다. countries.json 은 목록이고 sky.json · globe.json 은 국가 축이
    아니다 — 그냥 훑으면 days 가 없다며 터진다. */
-const NOT_COUNTRY = new Set(['countries.json', 'sky.json']);
+const NOT_COUNTRY = new Set(['countries.json', 'sky.json', 'globe.json']);
 const countryFiles = () => readdirSync(DATA).filter((f) => f.endsWith('.json') && !NOT_COUNTRY.has(f));
 
 const PROBE = '2026-06-15';                     /* 아무 날이나 — 재현 가능하기만 하면 된다 */
@@ -2784,6 +2784,142 @@ for (const [file, lang, needle] of [
     walk(PUB);
 
     if (fail.length === before) console.log(`유령 주소 — 스크립트의 주소꼴 리터럴 ${seen}개 전부 실제 자산`);
+}
+
+/* 지구본 — 계산 · 자료 · 문턱 짝 · 자리
+
+   하니스는 캔버스를 못 본다. 그래서 globe.js 가 계산을 window.GLOBE 로 내보내고
+   여기서 그 함수를 직접 때린다. 그리기는 검사하지 않는다 — 대신 그리기가 쓰는
+   값이 전부 이 함수들에서 나오도록 globe.js 쪽을 얇게 두었다.
+
+   문턱 짝이 이 칸의 값어치다. CSS 의 min-width 와 globe.js 의 SHOW 가 갈라지면
+   모바일이 자료 3.9KB 를 받고 안 보여 주거나, 넓은 화면에서 자리만 잡고 빈다.
+   두 값을 서로 견주는 것 말고는 그걸 잡을 방법이 없다. */
+{
+    const before = fail.length;
+    const L = 'shared/globe.js';
+    const js = readFileSync(join(PUB, 'shared', 'globe.js'), 'utf8');
+    const css = readFileSync(join(PUB, 'shared', 'dday.css'), 'utf8');
+
+    /* 1. 문턱 짝 */
+    const inJs = (js.match(/var SHOW = '\(min-width:\s*(\d+)px\)'/) || [])[1];
+    const inCss = (css.match(/@media \(min-width:(\d+)px\)\{\s*main\.wrap\{position:relative\}/) || [])[1];
+    if (!inJs) bad(L, 'SHOW 문턱을 못 읽었다 — 모양이 바뀌면 이 검사가 잠든다');
+    else if (!inCss) bad('shared/dday.css', '지구본 문턱을 못 읽었다 — @media 모양이 바뀌었다');
+    else if (inJs !== inCss) {
+        bad(L, `문턱이 갈라졌다 — globe.js 는 ${inJs}px, dday.css 는 ${inCss}px`);
+    }
+
+    /* 2. 기본이 감춰져 있어야 한다. 여기가 뚫리면 좁은 화면에 캔버스가 뜬다. */
+    if (!/\.globe\{display:none\}/.test(css)) {
+        bad('shared/dday.css', '.globe{display:none} 이 없다 — 좁은 화면에서 지구본이 뜬다');
+    }
+
+    /* 3. 자리 — 홈 두 장에만 있어야 한다 */
+    const withGlobe = ALL.filter(({ page }) => {
+        const h = readFileSync(join(PUB, page, 'index.html'), 'utf8');
+        return h.includes('id="globe"');
+    }).map(({ page }) => '/' + (page ? page + '/' : ''));
+    const wantGlobe = ['/', '/en/'];
+    if (withGlobe.join('|') !== wantGlobe.join('|')) {
+        bad('public/', `지구본이 있는 페이지가 ${withGlobe.join(' ') || '없다'} — ${wantGlobe.join(' ')} 여야 한다`);
+    }
+    /* 보조기술에는 감춘다 — 같은 링크가 아래 목록에 그대로 있다 */
+    for (const page of ['', 'en']) {
+        const h = readFileSync(join(PUB, page, 'index.html'), 'utf8');
+        if (!/<aside class="globe" id="globe" aria-hidden="true">/.test(h)) {
+            bad('/' + (page ? page + '/' : ''), '지구본에 aria-hidden="true" 가 없다');
+        }
+    }
+
+    /* 4. 자료 */
+    const globe = JSON.parse(readFileSync(join(DATA, 'globe.json'), 'utf8'));
+    const codes = new Set(JSON.parse(readFileSync(join(DATA, 'countries.json'), 'utf8')).map((c) => c.code));
+    if (globe.p.length !== codes.size) {
+        bad('data/globe.json', `점이 ${globe.p.length}개 — 나라 ${codes.size}개와 같아야 한다`);
+    }
+    const seen = new Set();
+    let sorted = true, prev = '';
+    for (const [code, lon, lat] of globe.p) {
+        if (!codes.has(code)) bad('data/globe.json', `목록에 없는 나라: ${code}`);
+        if (seen.has(code)) bad('data/globe.json', `같은 나라가 두 번: ${code}`);
+        seen.add(code);
+        if (!(Math.abs(lon) <= 180 && Math.abs(lat) <= 90)) {
+            bad('data/globe.json', `좌표가 범위를 벗어남: ${code} [${lon}, ${lat}]`);
+        }
+        if (code < prev) sorted = false;
+        prev = code;
+    }
+    for (const c of codes) if (!seen.has(c)) bad('data/globe.json', `점이 없는 나라: ${c}`);
+    /* 코드순으로 굳혀 두므로 countries.json 순서가 바뀌어도 이 파일은 안 바뀐다 */
+    if (!sorted) bad('data/globe.json', '코드순이 아니다 — node tools/gen-globe.mjs');
+
+    /* 5. 계산. 하니스의 matchMedia 는 늘 false 라 화면 칸은 돌지 않는데,
+          window.GLOBE 는 그 게이트 **앞에서** 붙으므로 여기서 잡힌다.
+          붙지 않는다면 globe.js 가 게이트 뒤로 밀린 것이고, 그러면 하니스가
+          계산을 영원히 못 본다 — 그것부터 실패로 잡는다. */
+    let round = 0;
+    const G = boot('').win.GLOBE;
+    if (!G || !G.project || !G.unproject || !G.pick) {
+        bad(L, 'window.GLOBE 가 없다 — 계산이 화면 게이트 뒤로 밀렸다');
+    } else {
+        const near = (a, b, tol, what) => {
+            if (Math.abs(a - b) > tol) bad(L, `${what} — ${a} (기대 ${b})`);
+        };
+        const l0 = 127, p0 = 18;
+
+        /* 보는 방향의 점은 원 중앙이고 앞면이다 */
+        const mid = G.project(l0, p0, l0, p0);
+        near(mid.x, 0, 1e-12, '보는 방향의 x 가 0 이 아니다');
+        near(mid.y, 0, 1e-12, '보는 방향의 y 가 0 이 아니다');
+        near(mid.z, 1, 1e-12, '보는 방향의 z 가 1 이 아니다');
+
+        /* 대척점은 뒷면이다. z 부호를 뒤집으면 지구본이 안쪽에서 보인다. */
+        const anti = G.project(l0 + 180, -p0, l0, p0);
+        if (!(anti.z < -0.999)) bad(L, `대척점의 z 가 ${anti.z} — -1 이어야 한다`);
+
+        /* 왕복. 앞면 점은 역투영해서 제자리로 돌아와야 한다.
+           경도는 ±180 을 넘길 수 있으므로 정규화해서 견준다. */
+        for (let lon = -180; lon < 180; lon += 17) {
+            for (let lat = -80; lat <= 80; lat += 13) {
+                const v = G.project(lon, lat, l0, p0);
+                if (v.z <= 0.02) continue;                 /* 지평선 바로 위는 수치가 무디다 */
+                const back = G.unproject(v.x, v.y, l0, p0);
+                if (!back) { bad(L, `앞면 점인데 역투영이 null: [${lon}, ${lat}]`); continue; }
+                const dl = ((back[0] - lon + 540) % 360) - 180;
+                if (Math.abs(dl) > 1e-6 || Math.abs(back[1] - lat) > 1e-6) {
+                    bad(L, `왕복이 어긋난다: [${lon}, ${lat}] → [${back[0].toFixed(4)}, ${back[1].toFixed(4)}]`);
+                }
+                round++;
+            }
+        }
+        if (round < 100) bad(L, `왕복 검사가 ${round}개만 돌았다 — 100개 넘게 돌아야 한다`);
+
+        /* 원판 밖은 null 이다. 여기가 뚫리면 바다를 눌러도 나라가 잡힌다. */
+        if (G.unproject(1.01, 0, l0, p0) !== null) bad(L, '원판 밖인데 역투영이 null 이 아니다');
+        if (G.unproject(0.8, 0.8, l0, p0) !== null) bad(L, '원판 밖(대각)인데 null 이 아니다');
+
+        /* pick — 아는 점을 그 점의 화면 좌표로 누르면 그 나라가 잡힌다.
+           그리고 지구 반대편 점은 앞면이 아니라 잡히지 않는다. */
+        const r = 110, grab = 11;
+        const kr = globe.p.find((p) => p[0] === 'KR');
+        const krv = G.project(kr[1], kr[2], l0, p0);
+        const hit = G.pick(krv.x * r, -krv.y * r, globe.p, l0, p0, r, grab);
+        if (hit < 0 || globe.p[hit][0] !== 'KR') {
+            bad(L, `KR 점을 눌렀는데 ${hit < 0 ? '아무것도' : globe.p[hit][0]} 가 잡혔다`);
+        }
+        /* 뒷면 점의 화면 좌표는 앞면의 다른 점과 겹칠 수 있다. 그래서 "뒷면이
+           잡히지 않는다" 는 좌표로 못 보고, z 부호로만 본다 — project 가 그것을
+           이미 검사받았으므로 여기서는 원판 밖 한 점으로 대신한다. */
+        if (G.pick(r * 2, r * 2, globe.p, l0, p0, r, grab) >= 0) {
+            bad(L, '원판 밖을 눌렀는데 나라가 잡혔다');
+        }
+    }
+
+    if (fail.length === before) {
+        console.log(`지구본 — 점 ${globe.p.length}개 · 문턱 ${inJs}px 양쪽 일치`
+            + ` · 왕복 ${round}개 · project·unproject·pick 통과`);
+    }
 }
 
 /* ------------------------------------------------------------------ 결과 */

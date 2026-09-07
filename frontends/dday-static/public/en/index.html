@@ -57,6 +57,12 @@
   <h1>What day is today?</h1>
   <p class="lede">Public holidays and long weekends, solar terms and moon phases. See what today is and how long until the next one.</p>
 
+  <aside class="globe" id="globe" aria-hidden="true">
+    <canvas width="240" height="240"></canvas>
+    <p class="globe-name"></p>
+    <p class="globe-hint">Spin the globe to pick a country</p>
+  </aside>
+
   <div class="now" id="home" hidden></div>
 
   <section id="today">
@@ -294,6 +300,7 @@
 </main>
 
 <script src="/shared/dday.js"></script>
+<script src="/shared/globe.js"></script>
 <script src="/shared/contact.js"></script>
 </body>
 </html>

@@ -1,0 +1,244 @@
+/* ============================================================
+   첫 화면 오른쪽 여백에서 도는 지구본. 나라를 고르는 또 하나의 손잡이다.
+
+   왜 라이브러리가 없나 — 정사영(orthographic) 투영은 세 줄이고 역투영도 그만큼이다.
+   클릭 판정은 역투영해서 가장 가까운 점을 찾는 것이라 색 버퍼도 레이캐스팅도
+   필요 없다. 이 저장소가 태양 위치를 172항으로 계산하는데 지구본에 600KB 를
+   받아 올 이유가 없다.
+
+   왜 점이고 국경이 아닌가 — tools/gen-globe.mjs 의 머리말에 적었다.
+   줄이면, 204개국에 소국이 많아서 국경으로 칠하면 몰타를 못 고른다.
+
+   나라 이름과 주소는 자료로 받지 않는다. 첫 화면에 이미 204개 링크가
+   li[data-cc] 로 깔려 있으므로 그것을 읽는다 — 늘어나는 바이트가 0 이고,
+   목록에서 빠진 나라가 지구본에도 저절로 없다.
+
+   보조기술에는 이 캔버스를 감춘다(aria-hidden). 같은 링크가 아래 목록에 그대로
+   있으므로, 닿지 못하는 위젯을 나란히 만드는 것보다 그게 맞다.
+
+   좁은 화면에서는 자료조차 받지 않는다. CSS 로 감추기만 하면 받고 안 보이는
+   상태가 되므로 게이트를 여기 둔다(SHOW). 지구본이 담은 것이 아래 목록과 완전히
+   겹치므로 감춰도 잃는 것이 없다.
+
+   ============================================================ */
+'use strict';
+
+(function () {
+
+    /* ----------------------------------------------------------- 순수 계산
+
+       하니스는 캔버스를 못 본다. 그래서 계산을 전부 이 칸에 두고 window.GLOBE 로
+       내보낸다 — check-pages 가 그리기를 거치지 않고 이 함수들을 직접 때린다.
+       아래 「화면」 칸은 얇은 껍데기여야 한다. */
+
+    var RAD = Math.PI / 180;
+
+    /**
+     * 정사영. 단위구 위의 (lon, lat) 을 보는 방향 (l0, p0) 기준 평면으로 옮긴다.
+     * z > 0 이 앞면이고 뒷면은 그리지 않는다.
+     * y 는 위쪽이 양수다 — 캔버스는 아래가 양수라 그릴 때 뒤집는다.
+     */
+    function project(lon, lat, l0, p0) {
+        var dl = (lon - l0) * RAD, p = lat * RAD, q = p0 * RAD;
+        var cp = Math.cos(p), sp = Math.sin(p);
+        var cq = Math.cos(q), sq = Math.sin(q), cd = Math.cos(dl);
+        return {
+            x: cp * Math.sin(dl),
+            y: cq * sp - sq * cp * cd,
+            z: sq * sp + cq * cp * cd
+        };
+    }
+
+    /** 역투영. 원판 밖(x²+y² > 1)이면 null 이다. */
+    function unproject(x, y, l0, p0) {
+        var r2 = x * x + y * y;
+        if (r2 > 1) return null;
+        var z = Math.sqrt(1 - r2), q = p0 * RAD;
+        var cq = Math.cos(q), sq = Math.sin(q);
+        return [
+            l0 + Math.atan2(x, z * cq - y * sq) / RAD,
+            Math.asin(z * sq + y * cq) / RAD
+        ];
+    }
+
+    /**
+     * 화면 좌표 (sx, sy) 에서 가장 가까운 앞면 점의 자리번호. 없으면 -1.
+     * pts 는 [code, lon, lat] 배열, 좌표는 원 중심 기준 픽셀, grab 은 잡히는 반지름.
+     */
+    function pick(sx, sy, pts, l0, p0, r, grab) {
+        var best = -1, bd = grab * grab;
+        for (var i = 0; i < pts.length; i++) {
+            var v = project(pts[i][1], pts[i][2], l0, p0);
+            if (v.z <= 0) continue;
+            var dx = v.x * r - sx, dy = -v.y * r - sy;
+            var d = dx * dx + dy * dy;
+            if (d < bd) { bd = d; best = i; }
+        }
+        return best;
+    }
+
+    window.GLOBE = { project: project, unproject: unproject, pick: pick };
+
+    /* --------------------------------------------------------------- 화면 */
+
+    var SHOW = '(min-width: 1400px)';
+    var SPIN = 5;                      /* 도/초 — 손을 대면 멈춘다 */
+    var DOT = 2.6, GRAB = 11;
+
+    var box = document.getElementById('globe');
+    if (!box) return;
+    if (!window.matchMedia || !window.matchMedia(SHOW).matches) return;
+
+    var cv = box.querySelector('canvas');
+    var out = box.querySelector('.globe-name');
+    if (!cv || !cv.getContext || !out) return;
+
+    /* 이름과 주소는 첫 화면의 국가 목록에서 읽는다 */
+    var meta = {};
+    Array.prototype.forEach.call(
+        document.querySelectorAll('#countries li[data-cc]'),
+        function (li) {
+            var a = li.querySelector('a'), n = li.querySelector('.cn');
+            if (a && n) {
+                meta[li.getAttribute('data-cc')] = {
+                    href: a.getAttribute('href'), name: n.textContent
+                };
+            }
+        }
+    );
+
+    var ctx = cv.getContext('2d');
+    var pts = null, l0 = 127, p0 = 18, r = 0, cx = 0, cy = 0;
+    var hot = -1, held = false, spinning = true, last = 0;
+
+    var root = document.documentElement;
+    function ink(name) {
+        return getComputedStyle(root).getPropertyValue(name).trim() || '#888';
+    }
+
+    function size() {
+        var dpr = window.devicePixelRatio || 1;
+        var w = box.clientWidth;
+        cv.width = Math.round(w * dpr);
+        cv.height = Math.round(w * dpr);
+        cv.style.height = w + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        cx = w / 2; cy = w / 2; r = w / 2 - DOT - 2;
+    }
+
+    /** 한 줄을 앞면 토막만 이어 그린다. 뒷면에서 끊고 다시 시작한다. */
+    function arc(step, make) {
+        ctx.beginPath();
+        var on = false;
+        for (var t = step[0]; t <= step[1]; t += step[2]) {
+            var v = make(t);
+            if (v.z <= 0) { on = false; continue; }
+            var X = cx + v.x * r, Y = cy - v.y * r;
+            if (on) ctx.lineTo(X, Y); else { ctx.moveTo(X, Y); on = true; }
+        }
+        ctx.stroke();
+    }
+
+    /** 위선·경선 격자. 30도마다 한 줄이다. */
+    function graticule() {
+        ctx.strokeStyle = ink('--rule');
+        ctx.lineWidth = 1;
+        var k;
+        for (k = -180; k < 180; k += 30) {
+            arc([-90, 90, 3], (function (m) {
+                return function (t) { return project(m, t, l0, p0); };
+            })(k));
+        }
+        for (k = -60; k <= 60; k += 30) {
+            arc([-180, 180, 3], (function (m) {
+                return function (t) { return project(t, m, l0, p0); };
+            })(k));
+        }
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, cv.width, cv.height);
+        graticule();
+        if (!pts) return;
+        var dim = ink('--ink-3'), lit = ink('--ink');
+        for (var i = 0; i < pts.length; i++) {
+            var v = project(pts[i][1], pts[i][2], l0, p0);
+            if (v.z <= 0) continue;
+            var big = i === hot;
+            ctx.beginPath();
+            ctx.arc(cx + v.x * r, cy - v.y * r, big ? DOT + 2 : DOT, 0, Math.PI * 2);
+            ctx.fillStyle = big ? lit : dim;
+            /* 지평선 가까이를 연하게 한다 — 구로 보이게 하는 것은 이 한 줄이다 */
+            ctx.globalAlpha = big ? 1 : 0.35 + 0.65 * v.z;
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    function frame(t) {
+        if (spinning) {
+            if (last) l0 = (l0 + SPIN * (t - last) / 1000 + 540) % 360 - 180;
+            last = t;
+        } else last = 0;
+        draw();
+        requestAnimationFrame(frame);
+    }
+
+    function at(e) {
+        var b = cv.getBoundingClientRect();
+        return [e.clientX - b.left - cx, e.clientY - b.top - cy];
+    }
+
+    function say(i) {
+        if (hot === i) return;
+        hot = i;
+        var m = i < 0 || !pts ? null : meta[pts[i][0]];
+        out.textContent = m ? m.name : '';
+        cv.style.cursor = m ? 'pointer' : 'grab';
+    }
+
+    cv.addEventListener('pointerdown', function (e) {
+        held = true;
+        spinning = false;
+        if (cv.setPointerCapture) cv.setPointerCapture(e.pointerId);
+    });
+
+    cv.addEventListener('pointerup', function (e) {
+        held = false;
+        if (!pts) return;
+        var p = at(e), i = pick(p[0], p[1], pts, l0, p0, r, GRAB);
+        if (i >= 0 && meta[pts[i][0]]) location.href = meta[pts[i][0]].href;
+    });
+
+    cv.addEventListener('pointermove', function (e) {
+        if (held) {
+            l0 = (l0 - e.movementX * 0.4 + 540) % 360 - 180;
+            p0 = Math.max(-85, Math.min(85, p0 + e.movementY * 0.4));
+            say(-1);
+            return;
+        }
+        var p = at(e);
+        say(pts ? pick(p[0], p[1], pts, l0, p0, r, GRAB) : -1);
+    });
+
+    cv.addEventListener('pointerleave', function () { say(-1); });
+    window.addEventListener('resize', size);
+
+    size();
+    requestAnimationFrame(frame);
+
+    fetch('/data/globe.json').then(function (res) {
+        return res.ok ? res.json() : null;
+    }).then(function (d) {
+        /* 목록에 없는 나라는 버린다 — 눌러도 갈 곳이 없다 */
+        if (d && d.p) {
+            pts = d.p.filter(function (p) { return meta[p[0]]; });
+        }
+    }).catch(function () {
+        /* 지구본은 덤이다. 못 받으면 격자만 돈다. */
+    });
+
+})();
