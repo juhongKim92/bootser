@@ -105,6 +105,29 @@
        거칠어진다. */
     var MAX_ZOOM = 8;
 
+    /* 오늘 공휴일인 나라. **지구본이 자료를 또 받지 않는다** — 첫 화면의
+       「오늘 공휴일인 나라」 절을 채우는 dday.js 가 이미 계산하므로 그것을
+       넘겨받는다. 같은 규칙을 두 벌 두면 같은 날에 두 화면이 다른 말을 한다.
+
+       화면 게이트 앞에 두는 것이 중요하다. 좁은 화면에서는 그리기가 아예 돌지
+       않는데, mark() 는 그때도 불린다(dday.js 는 화면 폭을 모른다). */
+    var holidays = null;
+
+    /** 코드 목록을 받아 둔다. 몇 나라가 잡혔는지 돌려준다. */
+    function mark(codes) {
+        holidays = null;
+        if (codes && codes.length) {
+            holidays = {};
+            for (var i = 0; i < codes.length; i++) holidays[codes[i]] = 1;
+        }
+        return holidays ? Object.keys(holidays).length : 0;
+    }
+
+    /** 받아 둔 코드. 검사기가 되읽는다. */
+    function marked() {
+        return holidays ? Object.keys(holidays).sort() : [];
+    }
+
     /** 휠 한 번을 배율로. 범위를 벗어나지 않게 자른다. */
     function rezoom(zoom, deltaY) {
         var next = zoom * Math.exp(-deltaY * 0.0015);
@@ -113,7 +136,8 @@
 
     window.GLOBE = {
         project: project, unproject: unproject, pick: pick, tied: tied,
-        clickable: clickable, SLOP: SLOP, rezoom: rezoom, MAX_ZOOM: MAX_ZOOM
+        clickable: clickable, SLOP: SLOP, rezoom: rezoom, MAX_ZOOM: MAX_ZOOM,
+        mark: mark, marked: marked
     };
 
     /* --------------------------------------------------------------- 화면 */
@@ -233,14 +257,18 @@
         graticule();
         coast();
         if (!pts) return;
-        var dim = ink('--ink-3'), lit = ink('--ink');
+        var dim = ink('--ink-3'), lit = ink('--ink'), red = ink('--today');
         for (var i = 0; i < pts.length; i++) {
             var v = project(pts[i][1], pts[i][2], l0, p0);
             if (v.z <= 0) continue;
             var big = i === hot;
+            /* 오늘 쉬는 나라. 손이 얹힌 점은 크기로 알리고 색은 빨강을 지킨다 —
+               가리키는 동안 「오늘 쉰다」는 사실이 사라지면 안 된다. */
+            var off = !!(holidays && holidays[pts[i][0]]);
             ctx.beginPath();
-            ctx.arc(cx + v.x * R(), cy - v.y * R(), big ? DOT + 2 : DOT, 0, Math.PI * 2);
-            ctx.fillStyle = big ? lit : dim;
+            ctx.arc(cx + v.x * R(), cy - v.y * R(),
+                big ? DOT + 2 : (off ? DOT + 0.8 : DOT), 0, Math.PI * 2);
+            ctx.fillStyle = off ? red : (big ? lit : dim);
             /* 지평선 가까이를 연하게 한다 — 구로 보이게 하는 것은 이 한 줄이다 */
             ctx.globalAlpha = big ? 1 : 0.35 + 0.65 * v.z;
             ctx.fill();

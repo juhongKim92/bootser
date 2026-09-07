@@ -777,6 +777,15 @@
         function fail(msg) {
             list.innerHTML = '';
             if (note) { note.hidden = false; note.textContent = msg; }
+            tell([]);
+        }
+
+        /* 지구본에 넘긴다. 지구본이 같은 자료를 또 받아 같은 규칙을 두 벌 두면
+           같은 날에 두 화면이 다른 말을 한다. 여기가 유일한 계산 자리다.
+           지구본이 없는 화면 폭에서도 부른다 — 화면 폭은 저쪽이 안다. */
+        function tell(codes) {
+            window.DDAY.todayCodes = codes;
+            if (window.GLOBE && window.GLOBE.mark) window.GLOBE.mark(codes);
         }
 
         Promise.all([
@@ -802,6 +811,8 @@
             }).sort(function (a, b) {
                 return a.label.localeCompare(b.label, LANG);
             });
+
+            tell(items.map(function (it) { return it.c.code; }));
 
             list.innerHTML = items.map(function (it) {
                 var sub = T.holidaySub(it.h);

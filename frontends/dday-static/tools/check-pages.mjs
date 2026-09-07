@@ -2017,6 +2017,36 @@ for (const [page, lang, langs, wantCc] of [
         const note = r.doc.querySelector('#tnote');
         const cap = r.doc.querySelector('#tcap');
 
+        /* 오늘 쉬는 나라를 지구본이 빨갛게 찍는다. 지구본은 자료를 따로 받지
+           않고 dday.js 가 계산한 것을 넘겨받으므로, 자료 → dday.js → 목록 →
+           지구본 네 지점이 한 집합이어야 한다. 하나라도 어긋나면 같은 날에
+           두 화면이 다른 말을 한다. 기대값(rows)은 위에서 month 파일에서 곧바로
+           뽑은 것이라 dday.js 의 계산을 되풀이하지 않는다. */
+        {
+            const want = [...new Set(rows.map((h) => h.c))].sort();
+            const told = [...new Set(r.win.DDAY.todayCodes || [])].sort();
+            const drew = r.win.GLOBE ? r.win.GLOBE.marked() : null;
+
+            if (!r.win.DDAY.todayCodes) bad(label, 'DDAY.todayCodes 가 없다 — 지구본에 넘길 것이 없다');
+            else if (told.join(',') !== want.join(',')) {
+                bad(label, `오늘 쉬는 나라를 ${told.length}곳으로 넘겼다 — 자료는 ${want.length}곳이다`
+                    + ` (${told.slice(0, 5).join(' ')} / ${want.slice(0, 5).join(' ')})`);
+            }
+            if (!drew) bad(label, '첫 화면에 window.GLOBE 가 없다 — globe.js 가 안 돌았다');
+            else if (drew.join(',') !== want.join(',')) {
+                bad(label, `지구본이 ${drew.length}곳을 빨갛게 잡았다 — 자료는 ${want.length}곳이다`);
+            }
+
+            /* 목록의 링크와도 견준다 — dday.js 가 목록과 지구본에 서로 다른
+               집합을 줄 수도 있으므로 그려진 것에서 되읽는다. */
+            const LINK = new RegExp(String.raw`href="(?:/en)?/([a-z]{2})/`, 'g');
+            const inList = [...new Set([...drawnList.matchAll(LINK)]
+                .map((m) => m[1].toUpperCase()))].sort();
+            if (inList.join(',') !== want.join(',')) {
+                bad(label, `목록에 그려진 나라가 ${inList.length}곳 — 자료는 ${want.length}곳이다`);
+            }
+        }
+
         if (!rows.length) {
             if (drawnList) bad(label, '오늘 공휴일인 나라가 없는데 목록을 그렸다');
             if (note.hidden) bad(label, '빈 날인데 안내 문구를 숨겼다');
